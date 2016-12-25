@@ -2,8 +2,9 @@ package sparkboost
 
 import scala.collection.mutable.ListBuffer
 
-class SplitterNode(index: Int, cond: Condition,
-                   prtValidCheck: ((Instance, Boolean) => Boolean), onLeft: Boolean) {
+class SplitterNode(val index: Int, val cond: Condition,
+                   val prtValidCheck: ((Instance, Boolean) => Boolean),
+                   val onLeft: Boolean) {
     var leftPredict = 0.0
     var rightPredict = 0.0
     val leftChild = ListBuffer[Int]()
