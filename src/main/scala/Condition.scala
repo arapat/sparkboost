@@ -3,14 +3,14 @@ package sparkboost
 import sparkboost.utils.Comparison
 
 trait Condition {
-    def apply(instance: Instance) = check(instance)
-    def check(instance: Instance): Boolean
+    def apply(instance: Vector[Double]) = check(instance)
+    def check(instance: Vector[Double]): Boolean
 }
 
 class ThresholdCondition(val index: Int, val splitVal: Double) extends Condition with Comparison {
     var result: Option[Boolean] = None
 
-    def check(instance: Instance) = {
+    def check(instance: Vector[Double]) = {
         compare(instance(index), splitVal) <= 0
     }
 }
@@ -20,5 +20,5 @@ object ThresholdCondition {
 }
 
 class TrueCondition extends Condition {
-    def check(instance: Instance) = true
+    def check(instance: Vector[Double]) = true
 }

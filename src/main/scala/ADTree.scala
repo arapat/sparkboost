@@ -1,20 +1,20 @@
 package sparkboost
 
-import scala.collection.mutable.ListBuffer
+import collection.mutable.ListBuffer
 
 class SplitterNode(val index: Int, val cond: Condition,
-                   val prtValidCheck: ((Instance, Boolean) => Boolean),
+                   val prtValidCheck: (Vector[Double] => Boolean),
                    val onLeft: Boolean) {
     var leftPredict = 0.0
     var rightPredict = 0.0
     val leftChild = ListBuffer[Int]()
     val rightChild = ListBuffer[Int]()
 
-    def validCheck(instance: Instance) = {
-        prtValidCheck(instance, onLeft)
+    def validCheck(instance: Vector[Double]) = {
+        prtValidCheck(instance)
     }
 
-    def check(instance: Instance, preChecked: Boolean = true) = {
+    def check(instance: Vector[Double], preChecked: Boolean = true) = {
         if (!preChecked && !validCheck(instance)) {
             None
         } else {
@@ -22,7 +22,7 @@ class SplitterNode(val index: Int, val cond: Condition,
         }
     }
 
-    def predict(instance: Instance, preChecked: Boolean = true) = {
+    def predict(instance: Vector[Double], preChecked: Boolean = true) = {
         if (!preChecked && !validCheck(instance)) {
             0.0
         } else if (cond.check(instance)) {
@@ -46,7 +46,12 @@ class SplitterNode(val index: Int, val cond: Condition,
 }
 
 object SplitterNode {
-    def getScore(curIndex: Int, nodes: List[SplitterNode], instance: Instance,
+    def apply(index: Int, cond: Condition,
+              prtValidCheck: (Vector[Double] => Boolean), onLeft: Boolean) = {
+        new SplitterNode(index, cond, prtValidCheck, onLeft)
+    }
+
+    def getScore(curIndex: Int, nodes: List[SplitterNode], instance: Vector[Double],
                  maxIndex: Int = 0, quiet: Boolean = true): Double = {
         if (maxIndex > 0 && curIndex >= maxIndex) {
             0.0
