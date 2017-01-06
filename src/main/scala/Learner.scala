@@ -18,9 +18,9 @@ object Learner extends Comparison {
             var minScore = MaxValue
             var splitVal = 0.0
 
-            val posInsts = curInsts.filter(t => compare(t._1, 0.0) > 0)
+            val posInsts = curInsts.filter(t => t._1 > 0)
             val totPos = if (posInsts.size > 0) posInsts.map(_._3).reduce(_ + _) else 0.0
-            val negInsts = curInsts.filter(t => compare(t._1, 0.0) < 0)
+            val negInsts = curInsts.filter(t => t._1 < 0)
             val totNeg = if (negInsts.size > 0) negInsts.map(_._3).reduce(_ + _) else 0.0
             val rej = totWeight - totPos - totNeg
             var leftPos = 0.0
@@ -59,7 +59,7 @@ object Learner extends Comparison {
             val node = nodes(nodeIndex)
 
             // find a best split value on this node
-            val leftInstances = data.filter {t => node.check(t._2) == true}
+            val leftInstances = data.filter {t => node.check(t._2) > 0}
             val leftRes = search(leftInstances, totWeight)
             val leftScore = leftRes._1
             val leftSplitVal = leftRes._2
@@ -70,7 +70,7 @@ object Learner extends Comparison {
                 onLeft = true
             }
 
-            val rightInstances = data.filter {t => node.check(t._2) == false}
+            val rightInstances = data.filter {t => node.check(t._2) < 0}
             val rightRes = search(rightInstances, totWeight)
             val rightScore = rightRes._1
             val rightSplitVal = rightRes._2
@@ -94,7 +94,7 @@ object Learner extends Comparison {
     def partitionedGreedySplit(
             instances: RDD[Instance], nodes: ListBuffer[SplitterNode],
             lossFunc: (Double, Double, Double, Double, Double) => Double,
-            repartition: Boolean = false, rootIndex: Int = 0) = {
+            repartition: Boolean = true, rootIndex: Int = 0) = {
         val inst = instances.first
         val featureSize = inst._2.size
         val shift = Random.nextInt(featureSize)
@@ -108,8 +108,9 @@ object Learner extends Comparison {
         }
 
         val insts = if (repartition) instances.repartition(featureSize) else instances
-        val splits = instances.glom().zipWithIndex().map(callFindBestSplit)
+        val splits = insts.glom().zipWithIndex().map(callFindBestSplit)
         val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
+        println("Min score is " + bestSplit._1)
         bestSplit._2
     }
 }

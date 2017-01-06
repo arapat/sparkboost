@@ -4,14 +4,22 @@ import sparkboost.utils.Comparison
 
 trait Condition extends java.io.Serializable {
     def apply(instance: Vector[Double]) = check(instance)
-    def check(instance: Vector[Double]): Boolean
+    def check(instance: Vector[Double]): Int
 }
 
 class ThresholdCondition(val index: Int, val splitVal: Double) extends Condition with Comparison {
     var result: Option[Boolean] = None
 
     def check(instance: Vector[Double]) = {
-        compare(instance(index), splitVal) <= 0
+        if (compare(instance(index), splitVal) <= 0) {
+            1
+        } else {
+            -1
+        }
+    }
+
+    override def toString() = {
+        "Index " + index + " <= " + splitVal
     }
 }
 
@@ -20,5 +28,6 @@ object ThresholdCondition {
 }
 
 class TrueCondition extends Condition {
-    def check(instance: Vector[Double]) = true
+    def check(instance: Vector[Double]) = 1
+    override def toString() = "Always True"
 }

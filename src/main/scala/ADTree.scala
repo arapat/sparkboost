@@ -16,7 +16,7 @@ class SplitterNode(val index: Int, val cond: Condition,
 
     def check(instance: Vector[Double], preChecked: Boolean = true) = {
         if (!preChecked && !validCheck(instance)) {
-            None
+            0
         } else {
             cond.check(instance)
         }
@@ -25,7 +25,7 @@ class SplitterNode(val index: Int, val cond: Condition,
     def predict(instance: Vector[Double], preChecked: Boolean = true) = {
         if (!preChecked && !validCheck(instance)) {
             0.0
-        } else if (cond.check(instance)) {
+        } else if (cond.check(instance) > 0) {
             leftPredict
         }
         rightPredict
@@ -43,6 +43,12 @@ class SplitterNode(val index: Int, val cond: Condition,
             rightChild.append(childIndex)
         }
     }
+
+    override def toString() = {
+        "Node " + index + ": " + cond + " (" + leftPredict + ", " + rightPredict + "), " +
+        "position on " + (if (onLeft) "left" else "right") + ", " +
+        "number of childs " + leftChild.size + "/" + rightChild.size
+    }
 }
 
 object SplitterNode {
@@ -52,25 +58,26 @@ object SplitterNode {
     }
 
     def getScore(curIndex: Int, nodes: List[SplitterNode], instance: Vector[Double],
-                 maxIndex: Int = 0, quiet: Boolean = true): Double = {
+                 maxIndex: Int = 0): Double = {
         if (maxIndex > 0 && curIndex >= maxIndex) {
             0.0
         } else {
             var score = 0.0
             val node = nodes(curIndex)
             node.check(instance) match {
-                case Some(true) => {
+                case 1 => {
                     score += node.leftPredict
                     for (c <- node.leftChild) {
-                        score += getScore(c, nodes, instance, maxIndex, quiet)
+                        score += getScore(c, nodes, instance, maxIndex)
                     }
                 }
-                case Some(false) => {
+                case -1 => {
                     score += node.rightPredict
-                    for (c<- node.rightChild) {
-                        score += getScore(c, nodes, instance, maxIndex, quiet)
+                    for (c <- node.rightChild) {
+                        score += getScore(c, nodes, instance, maxIndex)
                     }
                 }
+                case _ => {}
             }
             score
         }

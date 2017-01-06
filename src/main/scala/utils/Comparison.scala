@@ -6,7 +6,8 @@ trait Comparison {
             -1
         } else if (a - b > precision) {
             1
+        } else {
+            0
         }
-        0
     }
 }

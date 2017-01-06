@@ -5,9 +5,7 @@ import math.log
 
 import org.apache.spark.rdd.RDD
 
-import utils.Comparison
-
-object Controller extends Comparison {
+object Controller {
     type Instance = (Int, Vector[Double], Double)
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (SplitterNode, Boolean, Condition)
@@ -18,8 +16,8 @@ object Controller extends Comparison {
                   learnerFunc: LearnerFunc, updateFunc: UpdateFunc, lossFunc: LossFunc,
                   T: Int, repartition: Boolean) = {
         // Set up the root of the ADTree
-        val posCount = instances filter {t => compare(t._1) > 0} count
-        val negCount = instances filter {t => compare(t._1) < 0} count
+        val posCount = instances filter {t => t._1 > 0} count
+        val negCount = instances filter {t => t._1 < 0} count
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, new TrueCondition(),
                                     {_ : Vector[Double] => true}, true)
@@ -30,7 +28,7 @@ object Controller extends Comparison {
 
         // Iteratively grow the ADTree
         var nodes = ListBuffer(rootNode)
-        for (iteration <- 1 to T) {
+        for (iteration <- 1 until T) {
             // TODO: check if prtNode is returned by reference
             val bestSplit = learnerFunc(data, nodes, lossFunc, false, 0)
             val prtNode = bestSplit._1
@@ -38,35 +36,35 @@ object Controller extends Comparison {
             val condition = bestSplit._3
             val newNode = SplitterNode(
                     nodes.size, condition,
-                    {(t: Vector[Double]) => (prtNode.check(t, false) == Some(onLeft))},
+                    {(t: Vector[Double]) => !((prtNode.check(t, false) > 0) ^ onLeft)},
                     onLeft
             )
 
             // compute the predictions of the new node
             val predicts = (
                 instances.map {
-                    t: Instance => ((newNode.check(t._2, false), compare(t._1) > 0), t._3)
+                    t: Instance => ((newNode.check(t._2, false), t._1), t._3)
                 }.filter {
-                    t => t._1._1 != None
+                    t => t._1._1 != 0
                 }.reduceByKey {
                     (a: Double, b: Double) => a + b
                 }.collectAsMap()
             )
             val minVal = predicts.size * 0.001
-            val leftPos = predicts.getOrElse((true, true), minVal)
-            val leftNeg = predicts.getOrElse((true, false), minVal)
-            val rightPos = predicts.getOrElse((false, true), minVal)
-            val rightNeg = predicts.getOrElse((false, false), minVal)
+            val leftPos = predicts.getOrElse((1, 1), minVal)
+            val leftNeg = predicts.getOrElse((1, -1), minVal)
+            val rightPos = predicts.getOrElse((-1, 1), minVal)
+            val rightNeg = predicts.getOrElse((-1, -1), minVal)
             val leftPred = 0.5 * log(leftPos.toDouble / leftNeg)
             val rightPred = 0.5 * log(rightPos.toDouble / rightNeg)
             newNode.setPredict(leftPred, rightPred)
 
             // add the new node to the nodes list
-            prtNode.addChild(onLeft, nodes.size)
+            nodes(prtNode.index).addChild(onLeft, nodes.size)
             nodes += newNode
 
             // adjust the weights of the instances
-            data = updateFunc(data, newNode)
+            data = updateFunc(data, newNode).cache()
             if (iteration % 10 == 0) {
                 data.checkpoint()
             }
