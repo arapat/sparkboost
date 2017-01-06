@@ -2,7 +2,7 @@ package sparkboost
 
 import sparkboost.utils.Comparison
 
-trait Condition {
+trait Condition extends java.io.Serializable {
     def apply(instance: Vector[Double]) = check(instance)
     def check(instance: Vector[Double]): Boolean
 }

@@ -18,8 +18,10 @@ object Learner extends Comparison {
             var minScore = MaxValue
             var splitVal = 0.0
 
-            val totPos = curInsts.filter(t => compare(t._1, 0.0) > 0).map(_._3).reduce(_ + _)
-            val totNeg = curInsts.filter(t => compare(t._1, 0.0) < 0).map(_._3).reduce(_ + _)
+            val posInsts = curInsts.filter(t => compare(t._1, 0.0) > 0)
+            val totPos = if (posInsts.size > 0) posInsts.map(_._3).reduce(_ + _) else 0.0
+            val negInsts = curInsts.filter(t => compare(t._1, 0.0) < 0)
+            val totNeg = if (negInsts.size > 0) negInsts.map(_._3).reduce(_ + _) else 0.0
             val rej = totWeight - totPos - totNeg
             var leftPos = 0.0
             var leftNeg = 0.0

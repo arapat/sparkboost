@@ -4,7 +4,7 @@ import collection.mutable.ListBuffer
 
 class SplitterNode(val index: Int, val cond: Condition,
                    val prtValidCheck: (Vector[Double] => Boolean),
-                   val onLeft: Boolean) {
+                   val onLeft: Boolean) extends java.io.Serializable {
     var leftPredict = 0.0
     var rightPredict = 0.0
     val leftChild = ListBuffer[Int]()
