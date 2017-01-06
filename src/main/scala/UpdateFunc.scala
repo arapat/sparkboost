@@ -14,7 +14,7 @@ object UpdateFunc {
     }
 
     def logitboostUpdate(instances: RDD[Instance], node: SplitterNode) = {
-        instances.map(
+        instances.map {
             t => (t._1, t._2, t._3 / (1.0 + exp(t._1 * node.predict(t._2, preChecked=false))))
         }
     }

@@ -14,15 +14,15 @@ object Controller extends Comparison {
     type LearnerFunc = (RDD[Instance], ListBuffer[SplitterNode], LossFunc, Boolean, Int) => LearnerObj
     type UpdateFunc = (RDD[Instance], SplitterNode) => RDD[Instance]
 
-    def runADTree(instances: List[Instance],
+    def runADTree(instances: RDD[Instance],
                   learnerFunc: LearnerFunc, updateFunc: UpdateFunc, lossFunc: LossFunc,
                   T: Int, repartition: Boolean) = {
         // Set up the root of the ADTree
-        val posCount = instances.filter(t => compare(t.y) > 0).count
-        val negCount = instances.filter(t => compare(t.y) < 0).count
+        val posCount = instances filter {t => compare(t._1) > 0} count
+        val negCount = instances filter {t => compare(t._1) < 0} count
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, new TrueCondition(),
-                                    (_ : Instance => true), true)
+                                    {_ : Vector[Double] => true}, true)
         rootNode.setPredict(predVal, 0.0)
 
         // Set up instances RDD
@@ -32,16 +32,25 @@ object Controller extends Comparison {
         var nodes = ListBuffer(rootNode)
         for (iteration <- 1 to T) {
             // TODO: check if prtNode is returned by reference
-            val List(prtNode, onLeft, condition) = learnerFunc(data, nodes, lossFunc, false, 0)
-            val newNode = SplitterNode(nodes.size, condition,
-                                       (t: Instance) => (prtNode.check(t, false) == Some(onLeft)),
-                                       onLeft)
+            val bestSplit = learnerFunc(data, nodes, lossFunc, false, 0)
+            val prtNode = bestSplit._1
+            val onLeft = bestSplit._2
+            val condition = bestSplit._3
+            val newNode = SplitterNode(
+                    nodes.size, condition,
+                    {(t: Vector[Double]) => (prtNode.check(t, false) == Some(onLeft))},
+                    onLeft
+            )
 
             // compute the predictions of the new node
             val predicts = (
-                instances.map(
+                instances.map {
                     t: Instance => ((newNode.check(t._2, false), compare(t._1) > 0), t._3)
-                ).filter(t => t._1._1 != None).reduceByKey((_, _) => _ + _).collectAsMap()
+                }.filter {
+                    t => t._1._1 != None
+                }.reduceByKey {
+                    (a: Double, b: Double) => a + b
+                }.collectAsMap()
             )
             val minVal = predicts.size * 0.001
             val leftPos = predicts.getOrElse((true, true), minVal)
@@ -65,12 +74,12 @@ object Controller extends Comparison {
         nodes
     }
 
-    def runADTreeWithAdaBoost(instances: List[Instance], T: Int, repartition: Boolean) = {
+    def runADTreeWithAdaBoost(instances: RDD[Instance], T: Int, repartition: Boolean) = {
         runADTree(instances, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, T, repartition)
     }
 
-    def runADTreeWithLogitBoost(instances: List[Instance], T: Int, repartition: Boolean) = {
+    def runADTreeWithLogitBoost(instances: RDD[Instance], T: Int, repartition: Boolean) = {
         runADTree(instances, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
                   LossFunc.lossfunc, T, repartition)
     }

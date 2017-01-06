@@ -57,7 +57,7 @@ object Learner extends Comparison {
             val node = nodes(nodeIndex)
 
             // find a best split value on this node
-            val leftInstances = data.filter(node.check(_._2) == true)
+            val leftInstances = data.filter {t => node.check(t._2) == true}
             val leftRes = search(leftInstances, totWeight)
             val leftScore = leftRes._1
             val leftSplitVal = leftRes._2
@@ -68,7 +68,7 @@ object Learner extends Comparison {
                 onLeft = true
             }
 
-            val rightInstances = data.filter(node.check(_._2) == false)
+            val rightInstances = data.filter {t => node.check(t._2) == false}
             val rightRes = search(rightInstances, totWeight)
             val rightScore = rightRes._1
             val rightSplitVal = rightRes._2
@@ -97,21 +97,17 @@ object Learner extends Comparison {
         val featureSize = inst._2.size
         val shift = Random.nextInt(featureSize)
 
-        def sortData(index, insts) = {
-            val splitIndex = (index + shift) % featureSize
-            yield (splitIndex,
-                   insts.toList.sortWith(_._2(splitIndex) < _._2(splitIndex)))
-        }
-
-        def callFindBestSplit(data) = {
-            val List(index, insts) = data
-            findBestSplit(insts, index, nodes, rootIndex, lossFunc)
+        def callFindBestSplit(data: (Array[Instance], Long)) = {
+            val insts = data._1
+            val index = data._2
+            val splitIndex: Int = ((index + shift) % featureSize).toInt
+            val sortedInsts = insts.toList.sortWith(_._2(splitIndex) < _._2(splitIndex))
+            findBestSplit(sortedInsts, splitIndex, nodes, rootIndex, lossFunc)
         }
 
         val insts = if (repartition) instances.repartition(featureSize) else instances
-        val splits = instances.mapPartitionsWithIndex(sortData)
-                              .map(callFindBestSplit)
-        val List(minScore, r) = splits.min(key=_._1)
-        r
+        val splits = instances.glom().zipWithIndex().map(callFindBestSplit)
+        val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
+        bestSplit._2
     }
 }
