@@ -27,8 +27,9 @@ class SplitterNode(val index: Int, val cond: Condition,
             0.0
         } else if (cond.check(instance) > 0) {
             leftPredict
+        } else {
+            rightPredict
         }
-        rightPredict
     }
 
     def setPredict(predict1: Double, predict2: Double) {
@@ -47,7 +48,7 @@ class SplitterNode(val index: Int, val cond: Condition,
     override def toString() = {
         "Node " + index + ": " + cond + " (" + leftPredict + ", " + rightPredict + "), " +
         "position on " + (if (onLeft) "left" else "right") + ", " +
-        "number of childs " + leftChild.size + "/" + rightChild.size
+        "number of childs (left) " + leftChild.size + " (right) " + rightChild.size
     }
 }
 

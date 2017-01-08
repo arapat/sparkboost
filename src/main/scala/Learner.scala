@@ -11,6 +11,7 @@ import utils.Comparison
 
 object Learner extends Comparison {
     type Instance = (Int, Vector[Double], Double)
+    @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
 
     def findBestSplit(instances: List[Instance], index: Int, nodes: ListBuffer[SplitterNode], root: Int,
                       lossFunc: (Double, Double, Double, Double, Double) => Double) = {
@@ -25,22 +26,26 @@ object Learner extends Comparison {
             val rej = totWeight - totPos - totNeg
             var leftPos = 0.0
             var leftNeg = 0.0
-            for (i <- 0 until (curInsts.size - 1)) {
-                if (curInsts(i)._1 > 0) {
-                    leftPos += curInsts(i)._3
+            log.info("Processing " + curInsts.size + " instances on the index " + index + ".")
+            var lastVal = if (curInsts.size > 0) curInsts(0)._2(index) else 0.0
+            for (t <- curInsts) {
+                if (t._1 > 0) {
+                    leftPos += t._3
                 } else {
-                    leftNeg += curInsts(i)._3
+                    leftNeg += t._3
                 }
-                if (compare(curInsts(i)._2(index), curInsts(i + 1)._2(index)) != 0) {
+                if (compare(t._2(index), lastVal) != 0) {
                     val rightPos = totPos - leftPos
                     val rightNeg = totNeg - leftNeg
                     val score = lossFunc(rej, leftPos, leftNeg, rightPos, rightNeg)
                     if (compare(score, minScore) < 0) {
                         minScore = score
-                        splitVal = 0.5 * (curInsts(i)._2(index) + curInsts(i + 1)._2(index))
+                        splitVal = 0.5 * (t._2(index) + lastVal)
                     }
                 }
+                lastVal = t._2(index)
             }
+            log.info("Index " + index + " is processed.")
             (minScore, splitVal)
         }
 
@@ -107,8 +112,8 @@ object Learner extends Comparison {
             findBestSplit(sortedInsts, splitIndex, nodes, rootIndex, lossFunc)
         }
 
-        val insts = if (repartition) instances.repartition(featureSize) else instances
-        val splits = insts.glom().zipWithIndex().map(callFindBestSplit)
+        // val insts = if (repartition) instances.repartition(featureSize) else instances
+        val splits = instances.glom().zipWithIndex().map(callFindBestSplit)
         val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
         println("Min score is " + bestSplit._1)
         bestSplit._2

@@ -9,6 +9,10 @@ import org.apache.spark.SparkConf
 object Higgs {
     type Instance = (Int, Vector[Double], Double)
 
+    /*
+    args(0) - file path to the training data
+    args(1) - number of iterations
+    */
     def main(args: Array[String]) {
         val conf = new SparkConf().setMaster("local[2]")
         val sc = new SparkContext(conf)
@@ -16,12 +20,12 @@ object Higgs {
 
         // training
         val featureSize = Source.fromFile(args(0)).getLines().next().split(",").size - 1
-        val data = sc.textFile(args(0))
+        val data = sc.textFile(args(0), minPartitions=featureSize)
                      .map {line => line.split(",").map(_.trim.toDouble)}
-        val rdd = data.map {t => (t.head, t.tail.toVector)}
-                      .map {t => ((t._1 + t._1 - 1.0).toInt, t._2, 1.0)}
-                      .repartition(featureSize)
+        // TODO: does this RDD need to be repartitioned?
+        val rdd = data.map {t => ((t.head + t.head - 1.0).toInt, t.tail.toVector, 1.0)}
                       .cache()
+        println("Training data size: " + rdd.count)
         val nodes = Controller.runADTreeWithAdaBoost(rdd, args(1).toInt, false)
         for (t <- nodes) {
             println(t)

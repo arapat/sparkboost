@@ -17,7 +17,7 @@ object Controller {
                   T: Int, repartition: Boolean) = {
         // Set up the root of the ADTree
         val posCount = instances filter {t => t._1 > 0} count
-        val negCount = instances filter {t => t._1 < 0} count
+        val negCount = instances.count - posCount
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, new TrueCondition(),
                                     {_ : Vector[Double] => true}, true)
@@ -29,7 +29,6 @@ object Controller {
         // Iteratively grow the ADTree
         var nodes = ListBuffer(rootNode)
         for (iteration <- 1 until T) {
-            // TODO: check if prtNode is returned by reference
             val bestSplit = learnerFunc(data, nodes, lossFunc, false, 0)
             val prtNode = bestSplit._1
             val onLeft = bestSplit._2
