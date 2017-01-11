@@ -7,8 +7,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 
 object Higgs {
-    type Instance = (Int, Vector[Double], Double)
-
     /*
     args(0) - file path to the training data
     args(1) - number of iterations
@@ -23,7 +21,7 @@ object Higgs {
         val data = sc.textFile(args(0), minPartitions=featureSize)
                      .map {line => line.split(",").map(_.trim.toDouble)}
         // TODO: does this RDD need to be repartitioned?
-        val rdd = data.map {t => ((t.head + t.head - 1.0).toInt, t.tail.toVector, 1.0)}
+        val rdd = data.map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
                       .cache()
         println("Training data size: " + rdd.count)
         val nodes = Controller.runADTreeWithAdaBoost(rdd, args(1).toInt, false)
@@ -32,7 +30,7 @@ object Higgs {
         }
 
         // evaluation
-        val trainMargin = rdd.map {t => (SplitterNode.getScore(0, nodes.toList, t._2) * t._1)}
+        val trainMargin = rdd.map {t => (SplitterNode.getScore(0, nodes.toList, t.X) * t.y)}
                              .cache()
         val trainError = (trainMargin.filter{_ <= 0}.count).toDouble / trainMargin.count()
         println("Margin " + trainMargin.take(10).toList)

@@ -3,32 +3,29 @@ package sparkboost
 import collection.mutable.ListBuffer
 
 class SplitterNode(val index: Int, val cond: Condition,
-                   val prtValidCheck: (Vector[Double] => Boolean),
+                   val validChecks: List[Vector[Double] => Boolean],
                    val onLeft: Boolean) extends java.io.Serializable {
     var leftPredict = 0.0
     var rightPredict = 0.0
     val leftChild = ListBuffer[Int]()
     val rightChild = ListBuffer[Int]()
 
-    def validCheck(instance: Vector[Double]) = {
-        prtValidCheck(instance)
-    }
-
-    def check(instance: Vector[Double], preChecked: Boolean = true) = {
-        if (!preChecked && !validCheck(instance)) {
-            0
-        } else {
-            cond.check(instance)
+    def check(instance: Vector[Double], preChecked: Boolean = true): Int = {
+        if (!preChecked) {
+            for (f <- validChecks) {
+                if (!f(instance)) {
+                    return 0
+                }
+            }
         }
+        cond.check(instance)
     }
 
     def predict(instance: Vector[Double], preChecked: Boolean = true) = {
-        if (!preChecked && !validCheck(instance)) {
-            0.0
-        } else if (cond.check(instance) > 0) {
-            leftPredict
-        } else {
-            rightPredict
+        check(instance, preChecked) match {
+            case 0 => 0
+            case 1 => leftPredict
+            case -1 => rightPredict
         }
     }
 
@@ -54,8 +51,8 @@ class SplitterNode(val index: Int, val cond: Condition,
 
 object SplitterNode {
     def apply(index: Int, cond: Condition,
-              prtValidCheck: (Vector[Double] => Boolean), onLeft: Boolean) = {
-        new SplitterNode(index, cond, prtValidCheck, onLeft)
+              validChecks: List[Vector[Double] => Boolean], onLeft: Boolean) = {
+        new SplitterNode(index, cond, validChecks, onLeft)
     }
 
     def getScore(curIndex: Int, nodes: List[SplitterNode], instance: Vector[Double],

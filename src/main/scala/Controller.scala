@@ -6,9 +6,8 @@ import math.log
 import org.apache.spark.rdd.RDD
 
 object Controller {
-    type Instance = (Int, Vector[Double], Double)
     type LossFunc = (Double, Double, Double, Double, Double) => Double
-    type LearnerObj = (SplitterNode, Boolean, Condition)
+    type LearnerObj = (Int, Boolean, Condition)
     type LearnerFunc = (RDD[Instance], ListBuffer[SplitterNode], LossFunc, Boolean, Int) => LearnerObj
     type UpdateFunc = (RDD[Instance], SplitterNode) => RDD[Instance]
 
@@ -16,11 +15,11 @@ object Controller {
                   learnerFunc: LearnerFunc, updateFunc: UpdateFunc, lossFunc: LossFunc,
                   T: Int, repartition: Boolean) = {
         // Set up the root of the ADTree
-        val posCount = instances filter {t => t._1 > 0} count
+        val posCount = instances filter {t => t.y > 0} count
         val negCount = instances.count - posCount
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, new TrueCondition(),
-                                    {_ : Vector[Double] => true}, true)
+                                    List({_ : Vector[Double] => true}), true)
         rootNode.setPredict(predVal, 0.0)
 
         // Set up instances RDD
@@ -30,19 +29,19 @@ object Controller {
         var nodes = ListBuffer(rootNode)
         for (iteration <- 1 until T) {
             val bestSplit = learnerFunc(data, nodes, lossFunc, false, 0)
-            val prtNode = bestSplit._1
+            val prtNodeIndex = bestSplit._1
             val onLeft = bestSplit._2
             val condition = bestSplit._3
             val newNode = SplitterNode(
                     nodes.size, condition,
-                    {(t: Vector[Double]) => !((prtNode.check(t, false) > 0) ^ onLeft)},
+                    nodes(prtNodeIndex).validChecks :+ {(t: Vector[Double]) => !((nodes(prtNodeIndex).cond.check(t) > 0) ^ onLeft)},
                     onLeft
             )
 
             // compute the predictions of the new node
             val predicts = (
                 instances.map {
-                    t: Instance => ((newNode.check(t._2, false), t._1), t._3)
+                    t: Instance => ((newNode.check(t.X, false), t.y), t.w)
                 }.filter {
                     t => t._1._1 != 0
                 }.reduceByKey {
@@ -59,7 +58,7 @@ object Controller {
             newNode.setPredict(leftPred, rightPred)
 
             // add the new node to the nodes list
-            nodes(prtNode.index).addChild(onLeft, nodes.size)
+            nodes(prtNodeIndex).addChild(onLeft, nodes.size)
             nodes += newNode
 
             // adjust the weights of the instances
