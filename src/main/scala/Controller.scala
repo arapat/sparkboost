@@ -5,7 +5,9 @@ import math.log
 
 import org.apache.spark.rdd.RDD
 
-object Controller {
+import sparkboost.utils.Comparison
+
+object Controller extends Comparison {
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Condition)
     type LearnerFunc = (RDD[Instance], ListBuffer[SplitterNode], LossFunc, Boolean, Int) => LearnerObj
@@ -48,7 +50,7 @@ object Controller {
                     (a: Double, b: Double) => a + b
                 }.collectAsMap()
             )
-            val minVal = predicts.size * 0.001
+            val minVal = predicts.values.filter(compare(_) > 0).min * 0.001
             val leftPos = predicts.getOrElse((1, 1), minVal)
             val leftNeg = predicts.getOrElse((1, -1), minVal)
             val rightPos = predicts.getOrElse((-1, 1), minVal)

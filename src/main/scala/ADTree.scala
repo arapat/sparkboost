@@ -61,24 +61,23 @@ object SplitterNode {
         if (maxIndex > 0 && curIndex >= maxIndex) {
             0.0
         } else {
-            var score = 0.0
             val node = nodes(curIndex)
             node.check(instance) match {
                 case 1 => {
-                    score += node.leftPredict
-                    for (c <- node.leftChild) {
-                        score += getScore(c, nodes, instance, maxIndex)
-                    }
+                    if (node.leftChild.nonEmpty) {
+                        node.leftChild.map(getScore(_, nodes, instance, maxIndex)).reduce(_ + _)
+                    } else {
+                        0.0
+                    } + node.leftPredict
                 }
                 case -1 => {
-                    score += node.rightPredict
-                    for (c <- node.rightChild) {
-                        score += getScore(c, nodes, instance, maxIndex)
-                    }
+                    if (node.rightChild.nonEmpty) {
+                        node.rightChild.map(getScore(_, nodes, instance, maxIndex)).reduce(_ + _)
+                    } else {
+                        0.0
+                    } + node.rightPredict
                 }
-                case _ => {}
             }
-            score
         }
     }
 }
