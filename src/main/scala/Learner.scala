@@ -84,12 +84,8 @@ object Learner extends Comparison {
                 onLeft = false
             }
 
-            for (c <- nodes(nodeIndex).leftChild) {
-                queue += ((c, leftInstances))
-            }
-            for (c <- nodes(nodeIndex).rightChild) {
-                queue += ((c, rightInstances))
-            }
+            queue ++= nodes(nodeIndex).leftChild.map((_, leftInstances))
+            queue ++= nodes(nodeIndex).rightChild.map((_, rightInstances))
         }
         (minScore, (bestNodeIndex, onLeft, ThresholdCondition(index, splitVal)))
     }
@@ -112,6 +108,21 @@ object Learner extends Comparison {
 
         // val insts = if (repartition) instances.repartition(featureSize) else instances
         val splits = instances.glom().zipWithIndex().map(callFindBestSplit)
+        val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
+        println("Min score is " + bestSplit._1)
+        bestSplit._2
+    }
+
+    def bulkGreedySplit(
+            instances: RDD[Instance], nodes: ListBuffer[SplitterNode],
+            lossFunc: (Double, Double, Double, Double, Double) => Double,
+            repartition: Boolean = false, rootIndex: Int = 0) = {
+        val inst = instances.first
+        val featureSize = inst.X.size
+        val insts = instances.collect()
+        val splits = (0 until featureSize) map (i => {
+            findBestSplit(insts.sortWith(_.X(i) < _.X(i)).toList, i, nodes, rootIndex, lossFunc)
+        })
         val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
         println("Min score is " + bestSplit._1)
         bestSplit._2

@@ -79,4 +79,9 @@ object Controller {
         runADTree(instances, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
                   LossFunc.lossfunc, T, repartition)
     }
+
+    def runADTreeWithBulkAdaboost(instances: RDD[Instance], T: Int) = {
+        runADTree(instances, Learner.bulkGreedySplit, UpdateFunc.adaboostUpdate,
+                  LossFunc.lossfunc, T, false)
+    }
 }

@@ -8,23 +8,30 @@ import org.apache.spark.SparkConf
 
 object Higgs {
     /*
-    args(0) - file path to the training data
-    args(1) - number of iterations
+    args(0) - master node URL
+    args(1) - file path to the training data
+    args(2) - number of iterations
+    args(3) - Boolean flag for using the partitioned algorithm
     */
     def main(args: Array[String]) {
-        val conf = new SparkConf().setMaster("local[2]")
+        val conf = new SparkConf().setMaster(args(0))
         val sc = new SparkContext(conf)
         sc.setCheckpointDir("checkpoint/")
 
         // training
-        val featureSize = Source.fromFile(args(0)).getLines().next().split(",").size - 1
-        val data = sc.textFile(args(0), minPartitions=featureSize)
+        val featureSize = Source.fromFile(args(1)).getLines().next().split(",").size - 1
+        val data = sc.textFile(args(1), minPartitions=featureSize)
                      .map {line => line.split(",").map(_.trim.toDouble)}
         // TODO: does this RDD need to be repartitioned?
         val rdd = data.map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
                       .cache()
         println("Training data size: " + rdd.count)
-        val nodes = Controller.runADTreeWithAdaBoost(rdd, args(1).toInt, false)
+        val nodes =
+            if (args(3).toBoolean) {
+                Controller.runADTreeWithAdaBoost(rdd, args(2).toInt, false)
+            } else {
+                Controller.runADTreeWithBulkAdaboost(rdd, args(2).toInt)
+            }
         for (t <- nodes) {
             println(t)
         }
