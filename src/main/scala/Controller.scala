@@ -18,7 +18,7 @@ object Controller {
         val posCount = instances filter {t => t.y > 0} count
         val negCount = instances.count - posCount
         val predVal = 0.5 * log(posCount.toDouble / negCount)
-        val rootNode = SplitterNode(0, new TrueCondition(),
+        val rootNode = SplitterNode(0, new TrueCondition(), -1,
                                     List({_ : Vector[Double] => true}), true)
         rootNode.setPredict(predVal, 0.0)
 
@@ -33,14 +33,14 @@ object Controller {
             val onLeft = bestSplit._2
             val condition = bestSplit._3
             val newNode = SplitterNode(
-                    nodes.size, condition,
+                    nodes.size, condition, prtNodeIndex,
                     nodes(prtNodeIndex).validChecks :+ {(t: Vector[Double]) => !((nodes(prtNodeIndex).cond.check(t) > 0) ^ onLeft)},
                     onLeft
             )
 
             // compute the predictions of the new node
             val predicts = (
-                instances.map {
+                data.map {
                     t: Instance => ((newNode.check(t.X, false), t.y), t.w)
                 }.filter {
                     t => t._1._1 != 0

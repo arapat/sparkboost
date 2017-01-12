@@ -9,18 +9,18 @@ object UpdateFunc {
 
     def logitboostUpdateFunc(y: Int, w: Double, pred: Double) = w / (1.0 + exp(y * pred))
 
-    def updateFunc(inst: Instance, pred: Double, updateFunc: (Int, Double, Double) => Double) = {
+    def updateFunc(inst: Instance, node: SplitterNode, updateFunc: (Int, Double, Double) => Double) = {
+        val c = node.check(inst.X, preChecked=false)
+        val pred = if (c > 0) node.leftPredict else if (c < 0) node.rightPredict else 0.0
         val y = inst.y
-        Instance(y, inst.X, updateFunc(y, inst.w, pred), inst.scores :+ pred)
+        Instance(y, inst.X, updateFunc(y, inst.w, pred), inst.scores :+ c)
     }
 
     def adaboostUpdate(instances: RDD[Instance], node: SplitterNode) = {
-        instances.map {t => (t, node.predict(t.X, preChecked=false))}
-                 .map {tp => updateFunc(tp._1, tp._2, adaboostUpdateFunc)}
+        instances.map(updateFunc(_, node, adaboostUpdateFunc))
     }
 
     def logitboostUpdate(instances: RDD[Instance], node: SplitterNode) = {
-        instances.map {t => (t, node.predict(t.X, preChecked=false))}
-                 .map {tp => updateFunc(tp._1, tp._2, logitboostUpdateFunc)}
+        instances.map(updateFunc(_, node, logitboostUpdateFunc))
     }
 }

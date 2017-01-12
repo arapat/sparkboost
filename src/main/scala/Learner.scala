@@ -62,7 +62,9 @@ object Learner extends Comparison {
             val data = curObj._2
 
             // find a best split value on this node
-            val leftInstances = data.filter {t => compare(t.scores(nodeIndex)) > 0}
+            log.info("Running on the left of node " + nodeIndex)
+            val leftInstances = data.filter {_.scores(nodeIndex) > 0}
+            log.info("Left instances size: " + leftInstances.size)
             val leftRes = search(leftInstances, totWeight)
             val leftScore = leftRes._1
             val leftSplitVal = leftRes._2
@@ -73,7 +75,9 @@ object Learner extends Comparison {
                 onLeft = true
             }
 
-            val rightInstances = data.filter {t => compare(t.scores(nodeIndex)) < 0}
+            log.info("Running on the right of node " + nodeIndex)
+            val rightInstances = data.filter {_.scores(nodeIndex) < 0}
+            log.info("Right instances size: " + rightInstances.size)
             val rightRes = search(rightInstances, totWeight)
             val rightScore = rightRes._1
             val rightSplitVal = rightRes._2
