@@ -3,7 +3,7 @@ package sparkboost
 import collection.mutable.ListBuffer
 
 class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
-                   val validChecks: List[Vector[Double] => Boolean],
+                   val validChecks: List[(Condition, Int)],
                    val onLeft: Boolean) extends java.io.Serializable {
     var leftPredict = 0.0
     var rightPredict = 0.0
@@ -12,8 +12,8 @@ class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
 
     def check(instance: Vector[Double], preChecked: Boolean = true): Int = {
         if (!preChecked) {
-            for (f <- validChecks) {
-                if (!f(instance)) {
+            for (cr <- validChecks) {
+                if (cr._1.check(instance) != cr._2) {
                     return 0
                 }
             }
@@ -52,7 +52,7 @@ class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
 
 object SplitterNode {
     def apply(index: Int, cond: Condition, prtIndex: Int,
-              validChecks: List[Vector[Double] => Boolean], onLeft: Boolean) = {
+              validChecks: List[(Condition, Int)], onLeft: Boolean) = {
         new SplitterNode(index, cond, prtIndex, validChecks, onLeft)
     }
 

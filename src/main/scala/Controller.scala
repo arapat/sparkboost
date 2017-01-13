@@ -21,7 +21,7 @@ object Controller extends Comparison {
         val negCount = instances.count - posCount
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, new TrueCondition(), -1,
-                                    List({_ : Vector[Double] => true}), true)
+                                    List((new TrueCondition, 1)), true)
         rootNode.setPredict(predVal, 0.0)
 
         // Set up instances RDD
@@ -36,7 +36,8 @@ object Controller extends Comparison {
             val condition = bestSplit._3
             val newNode = SplitterNode(
                     nodes.size, condition, prtNodeIndex,
-                    nodes(prtNodeIndex).validChecks :+ {(t: Vector[Double]) => !((nodes(prtNodeIndex).cond.check(t) > 0) ^ onLeft)},
+                    nodes(prtNodeIndex).validChecks :+
+                    (nodes(prtNodeIndex).cond, if (onLeft) 1 else -1),
                     onLeft
             )
 
