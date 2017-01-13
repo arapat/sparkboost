@@ -16,7 +16,7 @@ object Higgs {
     def main(args: Array[String]) {
         val conf = new SparkConf().setMaster(args(0))
         val sc = new SparkContext(conf)
-        sc.setCheckpointDir("checkpoint/")
+        sc.setCheckpointDir("checkpoints/")
 
         // training
         val featureSize = Source.fromFile(args(1)).getLines().next().split(",").size - 1
