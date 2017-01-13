@@ -10,7 +10,7 @@ import org.apache.spark.rdd.RDD
 import utils.Comparison
 
 object Learner extends Comparison {
-    @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
+    // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
 
     def findBestSplit(instances: List[Instance], index: Int, nodes: ListBuffer[SplitterNode], root: Int,
                       lossFunc: (Double, Double, Double, Double, Double) => Double) = {
@@ -25,26 +25,23 @@ object Learner extends Comparison {
             val rej = totWeight - totPos - totNeg
             var leftPos = 0.0
             var leftNeg = 0.0
-            log.info("Processing " + curInsts.size + " instances on the index " + index + ".")
             var lastVal = if (curInsts.size > 0) curInsts(0).X(index) else 0.0
             for (t <- curInsts) {
-                if (t.y > 0) {
-                    leftPos += t.w
-                } else {
-                    leftNeg += t.w
-                }
                 if (compare(t.X(index), lastVal) != 0) {
-                    val rightPos = totPos - leftPos
-                    val rightNeg = totNeg - leftNeg
-                    val score = lossFunc(rej, leftPos, leftNeg, rightPos, rightNeg)
+                    val score = lossFunc(rej, leftPos, leftNeg,
+                                         totPos - leftPos, totNeg - leftNeg)
                     if (compare(score, minScore) < 0) {
                         minScore = score
                         splitVal = 0.5 * (t.X(index) + lastVal)
                     }
                 }
+                if (t.y > 0) {
+                    leftPos += t.w
+                } else {
+                    leftNeg += t.w
+                }
                 lastVal = t.X(index)
             }
-            log.info("Index " + index + " is processed.")
             (minScore, splitVal)
         }
 
@@ -62,9 +59,7 @@ object Learner extends Comparison {
             val data = curObj._2
 
             // find a best split value on this node
-            log.info("Running on the left of node " + nodeIndex)
             val leftInstances = data.filter {_.scores(nodeIndex) > 0}
-            log.info("Left instances size: " + leftInstances.size)
             val leftRes = search(leftInstances, totWeight)
             val leftScore = leftRes._1
             val leftSplitVal = leftRes._2
@@ -75,9 +70,7 @@ object Learner extends Comparison {
                 onLeft = true
             }
 
-            log.info("Running on the right of node " + nodeIndex)
             val rightInstances = data.filter {_.scores(nodeIndex) < 0}
-            log.info("Right instances size: " + rightInstances.size)
             val rightRes = search(rightInstances, totWeight)
             val rightScore = rightRes._1
             val rightSplitVal = rightRes._2
@@ -113,7 +106,7 @@ object Learner extends Comparison {
         // val insts = if (repartition) instances.repartition(featureSize) else instances
         val splits = instances.glom().zipWithIndex().map(callFindBestSplit)
         val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
-        println("Min score is " + bestSplit._1)
+        println("Node " + nodes.size + " min score is " + bestSplit._1)
         bestSplit._2
     }
 
@@ -128,7 +121,7 @@ object Learner extends Comparison {
             findBestSplit(insts.sortWith(_.X(i) < _.X(i)).toList, i, nodes, rootIndex, lossFunc)
         })
         val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
-        println("Min score is " + bestSplit._1)
+        println("Node " + nodes.size + " min score is " + bestSplit._1)
         bestSplit._2
     }
 }
