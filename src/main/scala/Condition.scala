@@ -19,7 +19,7 @@ class ThresholdCondition(val index: Int, val splitVal: Double) extends Condition
     }
 
     override def toString() = {
-        "Index " + index + " <= " + splitVal
+        s"Index $index <= $splitVal"
     }
 }
 

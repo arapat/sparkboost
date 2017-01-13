@@ -3,7 +3,7 @@ package sparkboost
 class Instance(val y: Int, val X: Vector[Double], val w: Double,
                val scores: Vector[Int]) extends java.io.Serializable {
     override def toString() = {
-        "Instance(" + y + ", X, " + w + ", " + scores + ")"
+        s"Instance($y, X, $w, $scores)"
     }
 }
 

@@ -43,10 +43,15 @@ class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
     }
 
     override def toString() = {
-        "Node " + index + ": " + cond + " (" + leftPredict + ", " + rightPredict + "), " +
-        "position under the " + (if (onLeft) "left" else "right") + " side of the node " +
-        prtIndex + ", " + "number of childs (left) " + leftChild.size +
-        " (right) " + rightChild.size
+        val nLeftChild = leftChild.size
+        val nRightChild = rightChild.size
+        val position = if (prtIndex >= 0) {
+            ", positioned under the " + (if (onLeft) "left" else "right") +
+            s" side of the node $prtIndex,"
+        } else ""
+
+        s"Node $index: $cond ($leftPredict, $rightPredict)" + position +
+        s" has $nLeftChild left and $nRightChild right children."
     }
 }
 
