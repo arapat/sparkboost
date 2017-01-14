@@ -66,7 +66,7 @@ object Controller extends Comparison {
 
             // adjust the weights of the instances
             data = updateFunc(data, newNode).cache()
-            if (iteration % 10 == 0) {
+            if (iteration % 25 == 0) {
                 data.checkpoint()
             }
         }

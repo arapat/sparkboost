@@ -1,10 +1,12 @@
-package sparkboost
+package sparkboost.examples
 
 import scala.io.Source
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
+
+import sparkboost._
 
 object Higgs {
     /*
@@ -17,7 +19,7 @@ object Higgs {
     def main(args: Array[String]) {
         if (args.size != 5) {
             println(
-                "Please provide four arguments: master url, training data path, " +
+                "Please provide five arguments: master url, training data path, " +
                 "number of iterations, boolean flag, model file path."
             )
             return
