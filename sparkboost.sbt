@@ -6,4 +6,6 @@ scalaVersion := "2.11.7"
 
 scalacOptions += "-optimize"
 
-libraryDependencies += "org.apache.spark" %% "spark-core" % "2.0.2"
+libraryDependencies ++= Seq(
+    "org.apache.spark" %% "spark-core" % "2.0.2"
+)

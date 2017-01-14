@@ -12,8 +12,17 @@ object Higgs {
     args(1) - file path to the training data
     args(2) - number of iterations
     args(3) - Boolean flag for using the partitioned algorithm
+    args(4) - File path to save the model
     */
     def main(args: Array[String]) {
+        if (args.size != 5) {
+            println(
+                "Please provide four arguments: master url, training data path, " +
+                "number of iterations, boolean flag, model file path."
+            )
+            return
+        }
+
         val conf = new SparkConf().setMaster(args(0))
         val sc = new SparkContext(conf)
         sc.setCheckpointDir("checkpoints/")
@@ -43,5 +52,7 @@ object Higgs {
         println("Margin: " + trainMargin.sum)
         println("Training error is " + trainError)
         sc.stop()
+
+        SplitterNode.save(nodes.toList, args(4))
     }
 }

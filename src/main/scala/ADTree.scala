@@ -1,5 +1,7 @@
 package sparkboost
 
+import java.io._
+
 import collection.mutable.ListBuffer
 
 class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
@@ -59,6 +61,29 @@ object SplitterNode {
     def apply(index: Int, cond: Condition, prtIndex: Int,
               validChecks: List[(Condition, Int)], onLeft: Boolean) = {
         new SplitterNode(index, cond, prtIndex, validChecks, onLeft)
+    }
+
+    def save(nodes: List[SplitterNode], filepath: String) {
+        val oos = new ObjectOutputStream(new FileOutputStream(filepath))
+        oos.writeObject(nodes)
+        oos.close()
+    }
+
+    def load(filepath: String) = {
+        class NodesInputStream(f: FileInputStream) extends ObjectInputStream(f) {
+            override def resolveClass(desc: java.io.ObjectStreamClass): Class[_] = {
+                try {
+                    Class.forName(desc.getName, false, getClass.getClassLoader)
+                } catch {
+                    case ex: ClassNotFoundException => super.resolveClass(desc)
+                }
+            }
+        }
+
+        val ois = new NodesInputStream(new FileInputStream(filepath))
+        val nodes = ois.readObject.asInstanceOf[List[SplitterNode]]
+        ois.close
+        nodes
     }
 
     def getScore(curIndex: Int, nodes: List[SplitterNode], instance: Vector[Double],
