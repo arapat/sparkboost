@@ -50,7 +50,7 @@ object Higgs {
         // evaluation
         val trainMargin = rdd.map {t => (SplitterNode.getScore(0, nodes.toList, t.X) * t.y)}
                              .cache()
-        val trainError = (trainMargin.filter{_ <= 0}.count).toDouble / trainMargin.count()
+        val trainError = (trainMargin.filter{_ <= 1e-8}.count).toDouble / trainMargin.count()
         println("Margin: " + trainMargin.sum)
         println("Training error is " + trainError)
         sc.stop()

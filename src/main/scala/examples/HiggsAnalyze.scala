@@ -27,6 +27,7 @@ object HiggsAdaboostAnalyze extends Comparison {
 
         val conf = new SparkConf().setMaster(args(0))
         val sc = new SparkContext(conf)
+        sc.setCheckpointDir("checkpoints/")
         var train = sc.textFile(args(1))
                       .map {line => line.split(",").map(_.trim.toDouble)}
                       .map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
@@ -42,9 +43,16 @@ object HiggsAdaboostAnalyze extends Comparison {
         var trainError = ListBuffer[Double]()
         var testError = ListBuffer[Double]()
         var ec = ListBuffer(train.count.toDouble)
+        var iters = 0
         for (node <- nodes) {
+            iters = iters + 1
             train = UpdateFunc.adaboostUpdate(train, node).cache()
             test = UpdateFunc.adaboostUpdate(test, node).cache()
+            if (iters % 25 == 0) {
+                train.checkpoint()
+                test.checkpoint()
+            }
+
             trainError += train.filter(t => compare(t.w, 1.0) >= 0).count.toDouble / trainSize
             testError += test.filter(t => compare(t.w, 1.0) >= 0).count.toDouble / testSize
             val weights = train.map(_.w)

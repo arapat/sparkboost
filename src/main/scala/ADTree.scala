@@ -94,18 +94,24 @@ object SplitterNode {
             val node = nodes(curIndex)
             node.check(instance) match {
                 case 1 => {
-                    if (node.leftChild.nonEmpty) {
-                        node.leftChild.map(getScore(_, nodes, instance, maxIndex)).reduce(_ + _)
-                    } else {
-                        0.0
-                    } + node.leftPredict
+                    node.leftPredict + (
+                        if (node.leftChild.nonEmpty) {
+                            node.leftChild.map(t => getScore(t, nodes, instance, maxIndex))
+                                          .reduce(_ + _)
+                        } else {
+                            0.0
+                        }
+                    )
                 }
                 case -1 => {
-                    if (node.rightChild.nonEmpty) {
-                        node.rightChild.map(getScore(_, nodes, instance, maxIndex)).reduce(_ + _)
-                    } else {
-                        0.0
-                    } + node.rightPredict
+                    node.rightPredict + (
+                        if (node.rightChild.nonEmpty) {
+                            node.rightChild.map(t => getScore(t, nodes, instance, maxIndex))
+                                           .reduce(_ + _)
+                        } else {
+                            0.0
+                        }
+                    )
                 }
             }
         }
