@@ -15,12 +15,22 @@ object HiggsAdaboostAnalyze extends Comparison {
     args(1) - file path to the training data
     args(2) - file path to the testing data
     args(3) - File path where the model is saved
+    args(4) - which algorithm to use - 1 for AdaBoost, 2 for LogitBoost
     */
     def main(args: Array[String]) {
-        if (args.size != 4) {
+        def getNewPredict(inst: Instance, node: SplitterNode) = {
+            val s = inst.scores.last
+            inst.y * (s match {
+                case 1  => node.leftPredict
+                case -1 => node.rightPredict
+                case _  => 0.0
+            })
+        }
+
+        if (args.size != 5) {
             println(
                 "Please provide four arguments: master url, training data path, " +
-                "testing data path, model file path."
+                "testing data path, model file path, algorithm ID."
             )
             return
         }
@@ -39,22 +49,31 @@ object HiggsAdaboostAnalyze extends Comparison {
                      .cache()
         val testSize = test.count
 
+        val updateFunc = if (args(4).toInt == 1) UpdateFunc.adaboostUpdate _
+                         else                    UpdateFunc.logitboostUpdate _
         val nodes = SplitterNode.load(args(3))
+        var trainPredicts = (0 until train.count.toInt).map(t => 0.0).toList
+        var testPredicts = (0 until test.count.toInt).map(t => 0.0).toList
         var trainError = ListBuffer[Double]()
         var testError = ListBuffer[Double]()
         var ec = ListBuffer(train.count.toDouble)
         var iters = 0
         for (node <- nodes) {
             iters = iters + 1
-            train = UpdateFunc.adaboostUpdate(train, node).cache()
-            test = UpdateFunc.adaboostUpdate(test, node).cache()
+            train = updateFunc(train, node).cache()
+            test = updateFunc(test, node).cache()
             if (iters % 25 == 0) {
                 train.checkpoint()
                 test.checkpoint()
             }
 
-            trainError += train.filter(t => compare(t.w, 1.0) >= 0).count.toDouble / trainSize
-            testError += test.filter(t => compare(t.w, 1.0) >= 0).count.toDouble / testSize
+            val newTrainPredicts = train.map(t => getNewPredict(t, node)).collect
+            trainPredicts = trainPredicts.zip(newTrainPredicts).map(t => t._1 + t._2)
+            val newTestPredicts = test.map(t => getNewPredict(t, node)).collect
+            testPredicts = testPredicts.zip(newTestPredicts).map(t => t._1 + t._2)
+
+            trainError += trainPredicts.filter(t => compare(t) <= 0).size.toDouble / trainSize
+            testError += testPredicts.filter(t => compare(t) <= 0).size.toDouble / testSize
             val weights = train.map(_.w)
             val wsum: Double = weights.reduce(_ + _)
             val wsq: Double = weights.map {x => x * x}
