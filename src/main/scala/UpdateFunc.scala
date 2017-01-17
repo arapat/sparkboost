@@ -21,6 +21,8 @@ object UpdateFunc {
     }
 
     def logitboostUpdate(instances: RDD[Instance], node: SplitterNode) = {
-        instances.map(updateFunc(_, node, logitboostUpdateFunc))
+        val raw = instances.map(updateFunc(_, node, logitboostUpdateFunc)).cache()
+        val wsum = raw.map(_.w).reduce(_ + _)
+        raw.map(t => Instance(t.y, t.X, t.w / wsum, t.scores))
     }
 }

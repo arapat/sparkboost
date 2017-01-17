@@ -13,7 +13,10 @@ object Higgs {
     args(0) - master node URL
     args(1) - file path to the training data
     args(2) - number of iterations
-    args(3) - Boolean flag for using the partitioned algorithm
+    args(3) - algorithm selection
+        1 -> AdaBoost partitioned
+        2 -> AdaBoost non-partitioned
+        3 -> LogitBoost partitioned
     args(4) - File path to save the model
     */
     def main(args: Array[String]) {
@@ -37,12 +40,11 @@ object Higgs {
         val rdd = data.map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
                       .cache()
         println("Training data size: " + rdd.count)
-        val nodes =
-            if (args(3).toBoolean) {
-                Controller.runADTreeWithAdaBoost(rdd, args(2).toInt, false)
-            } else {
-                Controller.runADTreeWithBulkAdaboost(rdd, args(2).toInt)
-            }
+        val nodes = args(3).toInt match {
+            case 1 => Controller.runADTreeWithAdaBoost(rdd, args(2).toInt, false)
+            case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(2).toInt)
+            case 3 => Controller.runADTreeWithLogitBoost(rdd, args(2).toInt, false)
+        }
         for (t <- nodes) {
             println(t)
         }
