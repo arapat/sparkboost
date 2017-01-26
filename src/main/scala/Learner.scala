@@ -2,7 +2,6 @@ package sparkboost
 
 import collection.mutable.ListBuffer
 import collection.mutable.Queue
-import util.Random
 import Double.MaxValue
 
 import org.apache.spark.rdd.RDD
@@ -88,35 +87,26 @@ object Learner extends Comparison {
     }
 
     def partitionedGreedySplit(
-            instances: RDD[Instance], nodes: ListBuffer[SplitterNode],
+            instsGroup: RDD[(List[Instance], Int)], nodes: ListBuffer[SplitterNode],
             lossFunc: (Double, Double, Double, Double, Double) => Double,
-            repartition: Boolean = true, rootIndex: Int = 0) = {
-        val inst = instances.first
-        val featureSize = inst.X.size
-        val shift = Random.nextInt(featureSize)
-
-        def callFindBestSplit(data: (Array[Instance], Long)) = {
-            val insts = data._1
-            val index = data._2
-            val splitIndex: Int = ((index + shift) % featureSize).toInt
-            val sortedInsts = insts.toList.sortWith(_.X(splitIndex) < _.X(splitIndex))
-            findBestSplit(sortedInsts, splitIndex, nodes, rootIndex, lossFunc)
+            rootIndex: Int = 0) = {
+        def callFindBestSplit(data: (List[Instance], Int)) = {
+            findBestSplit(data._1, data._2, nodes, rootIndex, lossFunc)
         }
 
-        // val insts = if (repartition) instances.repartition(featureSize) else instances
-        val splits = instances.glom().zipWithIndex().map(callFindBestSplit)
-        val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
+        val bestSplit = instsGroup.map(callFindBestSplit)
+                                  .reduce {(a, b) => if (a._1 < b._1) a else b}
         println("Node " + nodes.size + " min score is " + bestSplit._1)
         bestSplit._2
     }
 
     def bulkGreedySplit(
-            instances: RDD[Instance], nodes: ListBuffer[SplitterNode],
+            instsGroup: RDD[(List[Instance], Int)], nodes: ListBuffer[SplitterNode],
             lossFunc: (Double, Double, Double, Double, Double) => Double,
-            repartition: Boolean = false, rootIndex: Int = 0) = {
-        val inst = instances.first
+            rootIndex: Int = 0) = {
+        val insts = instsGroup.map(_._1).reduce((a, b) => List.concat(a, b))
+        val inst = insts.head
         val featureSize = inst.X.size
-        val insts = instances.collect()
         val splits = (0 until featureSize) map (i => {
             findBestSplit(insts.sortWith(_.X(i) < _.X(i)).toList, i, nodes, rootIndex, lossFunc)
         })

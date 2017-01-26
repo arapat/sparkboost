@@ -10,12 +10,14 @@ import sparkboost.utils.Comparison
 object Controller extends Comparison {
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Condition)
-    type LearnerFunc = (RDD[Instance], ListBuffer[SplitterNode], LossFunc, Boolean, Int) => LearnerObj
-    type UpdateFunc = (RDD[Instance], SplitterNode) => RDD[Instance]
+    type LearnerFunc = (RDD[(List[Instance], Int)], ListBuffer[SplitterNode], LossFunc, Int) => LearnerObj
+    type UpdateFunc = (RDD[(List[Instance], Int)], SplitterNode) => RDD[(List[Instance], Int)]
 
     def runADTree(instances: RDD[Instance],
-                  learnerFunc: LearnerFunc, updateFunc: UpdateFunc, lossFunc: LossFunc,
-                  T: Int, repartition: Boolean) = {
+                  learnerFunc: LearnerFunc,
+                  updateFunc: UpdateFunc,
+                  lossFunc: LossFunc,
+                  T: Int) = {
         // Set up the root of the ADTree
         val posCount = instances filter {t => t.y > 0} count
         val negCount = instances.count - posCount
@@ -25,12 +27,18 @@ object Controller extends Comparison {
         rootNode.setPredict(predVal, 0.0)
 
         // Set up instances RDD
-        var data = updateFunc(instances, rootNode).cache()
+        val instsGroup = instances.glom().zipWithIndex().map(t => {
+            val insts = t._1
+            val index = t._2.toInt
+            val sortedInsts = insts.toList.sortWith(_.X(index) < _.X(index))
+            (sortedInsts, index)
+        })
+        var data = updateFunc(instsGroup, rootNode).cache()
 
         // Iteratively grow the ADTree
         var nodes = ListBuffer(rootNode)
         for (iteration <- 1 until T) {
-            val bestSplit = learnerFunc(data, nodes, lossFunc, false, 0)
+            val bestSplit = learnerFunc(data, nodes, lossFunc, 0)
             val prtNodeIndex = bestSplit._1
             val onLeft = bestSplit._2
             val condition = bestSplit._3
@@ -43,7 +51,9 @@ object Controller extends Comparison {
 
             // compute the predictions of the new node
             val predicts = (
-                data.map {
+                data.flatMap(
+                    _._1
+                ).map {
                     t: Instance => ((newNode.check(t.X, false), t.y), t.w)
                 }.filter {
                     t => t._1._1 != 0
@@ -74,17 +84,31 @@ object Controller extends Comparison {
     }
 
     def runADTreeWithAdaBoost(instances: RDD[Instance], T: Int, repartition: Boolean) = {
-        runADTree(instances, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
-                  LossFunc.lossfunc, T, repartition)
+        val data =
+            if (repartition) {
+                val featureSize = instances.first.X.size
+                instances.repartition(featureSize)
+            } else {
+                instances
+            }
+        runADTree(data, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
+                  LossFunc.lossfunc, T)
     }
 
     def runADTreeWithLogitBoost(instances: RDD[Instance], T: Int, repartition: Boolean) = {
+        val data =
+            if (repartition) {
+                val featureSize = instances.first.X.size
+                instances.repartition(featureSize)
+            } else {
+                instances
+            }
         runADTree(instances, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
-                  LossFunc.lossfunc, T, repartition)
+                  LossFunc.lossfunc, T)
     }
 
     def runADTreeWithBulkAdaboost(instances: RDD[Instance], T: Int) = {
         runADTree(instances, Learner.bulkGreedySplit, UpdateFunc.adaboostUpdate,
-                  LossFunc.lossfunc, T, false)
+                  LossFunc.lossfunc, T)
     }
 }

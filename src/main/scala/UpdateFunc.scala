@@ -16,13 +16,20 @@ object UpdateFunc {
         Instance(y, inst.X, updateFunc(y, inst.w, pred), inst.scores :+ c)
     }
 
-    def adaboostUpdate(instances: RDD[Instance], node: SplitterNode) = {
-        instances.map(updateFunc(_, node, adaboostUpdateFunc))
+    def adaboostUpdate(instances: RDD[(List[Instance], Int)], node: SplitterNode) = {
+        instances.map(t => (t._1.map(updateFunc(_, node, adaboostUpdateFunc)).toList,
+                            t._2))
     }
 
-    def logitboostUpdate(instances: RDD[Instance], node: SplitterNode) = {
-        val raw = instances.map(updateFunc(_, node, logitboostUpdateFunc)).cache()
-        val wsum = raw.map(_.w).reduce(_ + _)
-        raw.map(t => Instance(t.y, t.X, t.w / wsum, t.scores))
+    def logitboostUpdate(instances: RDD[(List[Instance], Int)], node: SplitterNode) = {
+        val raw = instances.map(
+            t => (t._1.map(updateFunc(_, node, logitboostUpdateFunc)).toList,
+                  t._2)
+        ).cache()
+        val wsum = raw.map(_._1.map(_.w).reduce(_ + _)).reduce(_ + _)
+        raw.map(
+            t => (t._1.map(s => Instance(s.y, s.X, s.w / wsum, s.scores)).toList,
+                  t._2)
+        )
     }
 }

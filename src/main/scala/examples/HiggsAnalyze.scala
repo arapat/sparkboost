@@ -20,6 +20,7 @@ object HiggsAdaboostAnalyze extends Comparison {
     args(4) - which algorithm to use: 1 for AdaBoost, 2 for LogitBoost
     args(5) - early stop: 0 for no early stop, k for processing first k nodes only
     */
+    /*
     def main(args: Array[String]) {
         def getNewPredict(inst: Instance, node: SplitterNode) = {
             val s = inst.scores.last
@@ -91,7 +92,7 @@ object HiggsAdaboostAnalyze extends Comparison {
         def join(array : List[Double]) = {
             array.tail.foldLeft(array.head.toString)((s, k) => s + ", " + k)
         }
-        /*
+
         println("Training error:")
         println(join(trainError.toList))
         println("Test error:")
@@ -102,11 +103,12 @@ object HiggsAdaboostAnalyze extends Comparison {
         for (ws <- trainWeights) {
             println(join(ws))
         }
-        */
+
         val oos = new ObjectOutputStream(new FileOutputStream("./result.bin"))
         oos.writeObject((trainError.toList, testError.toList,
                          ec.toList, trainWeights.toList))
         oos.close()
         println("Done.")
     }
+    */
 }
