@@ -5,26 +5,23 @@ import java.io._
 import collection.mutable.ListBuffer
 
 class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
-                   val validChecks: List[(Condition, Int)],
                    val onLeft: Boolean) extends java.io.Serializable {
     var leftPredict = 0.0
     var rightPredict = 0.0
     val leftChild = ListBuffer[Int]()
     val rightChild = ListBuffer[Int]()
 
-    def check(instance: Vector[Double], preChecked: Boolean = true): Int = {
-        if (!preChecked) {
-            for (cr <- validChecks) {
-                if (cr._1.check(instance) != cr._2) {
-                    return 0
-                }
-            }
+    def check(instance: Instance) = {
+        if ((onLeft && instance.scores(prtIndex) > 0) ||
+                (!onLeft && instance.scores(prtIndex) < 0)) {
+            cond.check(instance.X)
+        } else {
+            0
         }
-        cond.check(instance)
     }
 
-    def predict(instance: Vector[Double], preChecked: Boolean = true) = {
-        check(instance, preChecked) match {
+    def predict(instance: Instance) = {
+        check(instance) match {
             case 0 => 0
             case 1 => leftPredict
             case -1 => rightPredict
@@ -58,9 +55,8 @@ class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
 }
 
 object SplitterNode {
-    def apply(index: Int, cond: Condition, prtIndex: Int,
-              validChecks: List[(Condition, Int)], onLeft: Boolean) = {
-        new SplitterNode(index, cond, prtIndex, validChecks, onLeft)
+    def apply(index: Int, cond: Condition, prtIndex: Int, onLeft: Boolean) = {
+        new SplitterNode(index, cond, prtIndex, onLeft)
     }
 
     def save(nodes: List[SplitterNode], filepath: String) {
@@ -86,7 +82,7 @@ object SplitterNode {
         nodes
     }
 
-    def getScore(curIndex: Int, nodes: List[SplitterNode], instance: Vector[Double],
+    def getScore(curIndex: Int, nodes: List[SplitterNode], instance: Instance,
                  maxIndex: Int = 0): Double = {
         if (maxIndex > 0 && curIndex >= maxIndex) {
             0.0

@@ -10,10 +10,13 @@ import utils.Comparison
 
 object Learner extends Comparison {
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
+    // RDDElement: Instances, feature index, split points
+    type RDDElementType = (List[Instance], Int, List[Double])
+    type RDDType = RDD[RDDElementType]
 
-    def findBestSplit(instances: List[Instance], index: Int, nodes: ListBuffer[SplitterNode], root: Int,
+    def findBestSplit(data: RDDElementType, nodes: ListBuffer[SplitterNode], root: Int,
                       lossFunc: (Double, Double, Double, Double, Double) => Double) = {
-        def search(curInsts: List[Instance], totWeight: Double) = {
+        def search(curInsts: List[Instance], index: Int, totWeight: Double, splits: List[Double]) = {
             var minScore = MaxValue
             var splitVal = 0.0
 
@@ -24,14 +27,15 @@ object Learner extends Comparison {
             val rej = totWeight - totPos - totNeg
             var leftPos = 0.0
             var leftNeg = 0.0
-            var lastVal = if (curInsts.size > 0) curInsts(0).X(index) else 0.0
+            var splitIndex = 1
+            var lastSplitVal = splits(splitIndex)
             for (t <- curInsts) {
-                if (compare(t.X(index), lastVal) != 0) {
+                if (compare(t.X(index), lastSplitVal) > 0) {
                     val score = lossFunc(rej, leftPos, leftNeg,
                                          totPos - leftPos, totNeg - leftNeg)
                     if (compare(score, minScore) < 0) {
                         minScore = score
-                        splitVal = 0.5 * (t.X(index) + lastVal)
+                        splitVal = lastSplitVal
                     }
                 }
                 if (t.y > 0) {
@@ -39,10 +43,13 @@ object Learner extends Comparison {
                 } else {
                     leftNeg += t.w
                 }
-                lastVal = t.X(index)
             }
             (minScore, splitVal)
         }
+
+        val instances = data._1
+        val index = data._2
+        val splits = data._3
 
         var minScore = MaxValue
         var bestNodeIndex = root
@@ -59,7 +66,7 @@ object Learner extends Comparison {
 
             // find a best split value on this node
             val leftInstances = data.filter {_.scores(nodeIndex) > 0}
-            val leftRes = search(leftInstances, totWeight)
+            val leftRes = search(leftInstances, index, totWeight, splits)
             val leftScore = leftRes._1
             val leftSplitVal = leftRes._2
             if (compare(leftScore, minScore) < 0) {
@@ -70,7 +77,7 @@ object Learner extends Comparison {
             }
 
             val rightInstances = data.filter {_.scores(nodeIndex) < 0}
-            val rightRes = search(rightInstances, totWeight)
+            val rightRes = search(rightInstances, index, totWeight, splits)
             val rightScore = rightRes._1
             val rightSplitVal = rightRes._2
             if (compare(rightScore, minScore) < 0) {
@@ -87,31 +94,31 @@ object Learner extends Comparison {
     }
 
     def partitionedGreedySplit(
-            instsGroup: RDD[(List[Instance], Int)], nodes: ListBuffer[SplitterNode],
+            instsGroup: RDDType, nodes: ListBuffer[SplitterNode],
             lossFunc: (Double, Double, Double, Double, Double) => Double,
             rootIndex: Int = 0) = {
-        def callFindBestSplit(data: (List[Instance], Int)) = {
-            findBestSplit(data._1, data._2, nodes, rootIndex, lossFunc)
-        }
-
-        val bestSplit = instsGroup.map(callFindBestSplit)
+        val bestSplit = instsGroup.map(findBestSplit(_, nodes, rootIndex, lossFunc))
                                   .reduce {(a, b) => if (a._1 < b._1) a else b}
         println("Node " + nodes.size + " min score is " + bestSplit._1)
         bestSplit._2
     }
 
+    /*
     def bulkGreedySplit(
-            instsGroup: RDD[(List[Instance], Int)], nodes: ListBuffer[SplitterNode],
+            instsGroup: RDDType, nodes: ListBuffer[SplitterNode],
             lossFunc: (Double, Double, Double, Double, Double) => Double,
             rootIndex: Int = 0) = {
         val insts = instsGroup.map(_._1).reduce((a, b) => List.concat(a, b))
+        val splits = instsGroup.map(_._2 -> _._3).toMap
         val inst = insts.head
         val featureSize = inst.X.size
         val splits = (0 until featureSize) map (i => {
-            findBestSplit(insts.sortWith(_.X(i) < _.X(i)).toList, i, nodes, rootIndex, lossFunc)
+            findBestSplit(insts.sortWith(_.X(i) < _.X(i)).toList, i, splits(i),
+                          nodes, rootIndex, lossFunc)
         })
         val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
         println("Node " + nodes.size + " min score is " + bestSplit._1)
         bestSplit._2
     }
+    */
 }
