@@ -41,20 +41,24 @@ object Higgs {
                       .cache()
         println("Training data size: " + rdd.count)
         val nodes = args(3).toInt match {
-            case 1 => Controller.runADTreeWithAdaBoost(rdd, args(2).toInt, false)
-            case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(2).toInt)
-            case 3 => Controller.runADTreeWithLogitBoost(rdd, args(2).toInt, false)
+            case 1 => Controller.runADTreeWithAdaBoost(rdd, 0.05, args(2).toInt, false)
+            // TODO: added bulk learning option
+            // case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(2).toInt)
+            case 3 => Controller.runADTreeWithLogitBoost(rdd, 0.05, args(2).toInt, false)
         }
         for (t <- nodes) {
             println(t)
         }
 
         // evaluation
-        val trainMargin = rdd.map {t => (SplitterNode.getScore(0, nodes.toList, t.X) * t.y)}
+        val trainMargin = rdd.coalesce(20).glom()
+                             .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
                              .cache()
-        val trainError = (trainMargin.filter{_ <= 1e-8}.count).toDouble / trainMargin.count()
-        println("Margin: " + trainMargin.sum)
-        println("Training error is " + trainError)
+        val trainError = trainMargin.map(_.filter(_ <= 1e-8).size).reduce(_ + _)
+        val trainTotal = trainMargin.map(_.size).reduce(_ + _)
+        val trainErrorRate = trainError.toDouble / trainTotal
+        // println("Margin: " + trainMargin.sum)
+        println("Training error is " + trainErrorRate)
         sc.stop()
 
         SplitterNode.save(nodes.toList, args(4))
