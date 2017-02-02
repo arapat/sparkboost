@@ -52,7 +52,7 @@ object Controller extends Comparison {
 
         // Set up instances RDD
         val instsGroup = instances.glom().zipWithIndex().map(preprocess)
-        var data = updateFunc(instsGroup, rootNode).cache()
+        var data = updateFunc(instsGroup, rootNode)
 
         // Iteratively grow the ADTree
         val nodes = ListBuffer(rootNode)
@@ -89,7 +89,7 @@ object Controller extends Comparison {
             nodes.append(newNode)
 
             // adjust the weights of the instances
-            data = updateFunc(data, newNode).cache()
+            data = updateFunc(data, newNode)
             if (iteration % 25 == 0) {
                 data.checkpoint()
             }

@@ -5,6 +5,7 @@ import math.exp
 import org.apache.spark.rdd.RDD
 
 object UpdateFunc {
+    // @transient lazy val log = org.apache.log4j.LogManager.getLogger("UpdateFunc")
     type RDDElementType = (List[Instance], Int, List[Double])
     type RDDType = RDD[RDDElementType]
 
