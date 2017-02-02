@@ -47,7 +47,7 @@ object Controller extends Comparison {
         val posCount = instances filter {t => t.y > 0} count
         val negCount = instances.count - posCount
         val predVal = 0.5 * log(posCount.toDouble / negCount)
-        val rootNode = SplitterNode(0, new TrueCondition(), 0, true)
+        val rootNode = SplitterNode(0, new TrueCondition(), -1, true)
         rootNode.setPredict(predVal, 0.0)
 
         // Set up instances RDD

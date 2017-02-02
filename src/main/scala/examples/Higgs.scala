@@ -51,11 +51,14 @@ object Higgs {
         }
 
         // evaluation
-        val trainMargin = rdd.map {t => (SplitterNode.getScore(0, nodes.toList, t) * t.y)}
+        val trainMargin = rdd.coalesce(20).glom()
+                             .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
                              .cache()
-        val trainError = (trainMargin.filter{_ <= 1e-8}.count).toDouble / trainMargin.count()
-        println("Margin: " + trainMargin.sum)
-        println("Training error is " + trainError)
+        val trainError = trainMargin.map(_.filter(_ <= 1e-8).size).reduce(_ + _)
+        val trainTotal = trainMargin.map(_.size).reduce(_ + _)
+        val trainErrorRate = trainError.toDouble / trainTotal
+        // println("Margin: " + trainMargin.sum)
+        println("Training error is " + trainErrorRate)
         sc.stop()
 
         SplitterNode.save(nodes.toList, args(4))

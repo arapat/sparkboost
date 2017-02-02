@@ -11,8 +11,9 @@ class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
     val leftChild = ListBuffer[Int]()
     val rightChild = ListBuffer[Int]()
 
-    def check(instance: Instance) = {
-        if ((onLeft && instance.scores(prtIndex) > 0) ||
+    def check(instance: Instance, preChecked: Boolean = false) = {
+        if (preChecked || prtIndex < 0 ||
+                (onLeft && instance.scores(prtIndex) > 0) ||
                 (!onLeft && instance.scores(prtIndex) < 0)) {
             cond.check(instance.X)
         } else {
@@ -20,8 +21,8 @@ class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
         }
     }
 
-    def predict(instance: Instance) = {
-        check(instance) match {
+    def predict(instance: Instance, preChecked: Boolean = false) = {
+        check(instance, preChecked) match {
             case 0 => 0
             case 1 => leftPredict
             case -1 => rightPredict
@@ -88,7 +89,7 @@ object SplitterNode {
             0.0
         } else {
             val node = nodes(curIndex)
-            node.check(instance) match {
+            node.check(instance, preChecked=true) match {
                 case 1 => {
                     node.leftPredict + (
                         if (node.leftChild.nonEmpty) {
