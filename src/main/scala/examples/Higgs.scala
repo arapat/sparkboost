@@ -12,18 +12,21 @@ object Higgs {
     /*
     args(0) - master node URL
     args(1) - file path to the training data
-    args(2) - number of iterations
-    args(3) - algorithm selection
+    args(2) - file path to the test data
+    args(3) - number of batches
+    args(4) - number of iterations
+    args(5) - algorithm selection
         1 -> AdaBoost partitioned
         2 -> AdaBoost non-partitioned
         3 -> LogitBoost partitioned
-    args(4) - File path to save the model
+    args(6) - File path to save the model
     */
     def main(args: Array[String]) {
-        if (args.size != 5) {
+        if (args.size != 7) {
             println(
                 "Please provide five arguments: master url, training data path, " +
-                "number of iterations, boolean flag, model file path."
+                "test data path, number of batches, number of iterations, " +
+                "boolean flag, model file path."
             )
             return
         }
@@ -37,30 +40,38 @@ object Higgs {
         val data = sc.textFile(args(1), minPartitions=featureSize)
                      .map {line => line.split(",").map(_.trim.toDouble)}
         // TODO: does this RDD need to be repartitioned?
-        val rdd = data.map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
-                      .cache()
-        println("Training data size: " + rdd.count)
-        val nodes = args(3).toInt match {
-            case 1 => Controller.runADTreeWithAdaBoost(rdd, 0.05, args(2).toInt, false)
+        val train = data.map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
+                        .cache()
+        var test = sc.textFile(args(2))
+                     .sample(false, 0.1)
+                     .map {line => line.split(",").map(_.trim.toDouble)}
+                     .map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
+                     .cache()
+        println("Training data size: " + train.count)
+        println("Test data size: " + test.count)
+        val nodes = args(5).toInt match {
+            case 1 => Controller.runADTreeWithAdaBoost(train, test, 0.05, args(3).toInt, args(4).toInt, false)
             // TODO: added bulk learning option
-            // case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(2).toInt)
-            case 3 => Controller.runADTreeWithLogitBoost(rdd, 0.05, args(2).toInt, false)
+            // case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(3).toInt)
+            case 3 => Controller.runADTreeWithLogitBoost(train, test, 0.05, args(3).toInt, args(4).toInt, false)
         }
         for (t <- nodes) {
             println(t)
         }
 
         // evaluation
-        val trainMargin = rdd.coalesce(20).glom()
-                             .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
-                             .cache()
+        /*
+        val trainMargin = train.coalesce(20).glom()
+                               .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
+                               .cache()
         val trainError = trainMargin.map(_.filter(_ <= 1e-8).size).reduce(_ + _)
         val trainTotal = trainMargin.map(_.size).reduce(_ + _)
         val trainErrorRate = trainError.toDouble / trainTotal
         // println("Margin: " + trainMargin.sum)
         println("Training error is " + trainErrorRate)
+        */
         sc.stop()
 
-        SplitterNode.save(nodes.toList, args(4))
+        SplitterNode.save(nodes.toList, args(6))
     }
 }
