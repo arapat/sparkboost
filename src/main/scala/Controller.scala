@@ -37,24 +37,32 @@ object Controller extends Comparison {
         println("Effective count ratio is " + effectCnt)
     }
 
-    def sample(data: RDD[Array[Instance]],
+    def sample(data: RDDType,
                fraction: Double,
-               nodes: List[SplitterNode]): RDD[Instance] = {
+               nodes: List[SplitterNode]): RDDType = {
         println("Resampling...")
-        // TODO: added a weight function parameter to this
-        val sampleSize = fraction * data.map(_.size).reduce(_ + _)
-        val weights = data.map(
-            _.map(t => (t, exp(-t.y * SplitterNode.getScore(0, nodes, t))))
-        ).cache()
-        val wsum: Double = weights.map(_.map(t => t._2).reduce(_ + _ )).reduce(_ + _)
-        val ret = weights.flatMap(input => {
-            val d = input.filter(t => rand() <= t._2 * sampleSize / wsum)
-                         .map(t => t._1)
-            d.foreach(_.updateScores(nodes))
-            d
+        // TODO: extends the cost functions to other forms
+        val sampleData = data.map(datum => {
+            val array = datum._1
+            val sampleList = ListBuffer[Instance]()
+            val size = (array.size * fraction).ceil.toInt
+            val weights = array.map(t => exp(-t.y * SplitterNode.getScore(0, nodes, t)))
+            val weightSum = weights.reduce(_ + _)
+            val segsize = weightSum.toDouble / size
+
+            var curWeight = rand() * segsize // first sample point
+            var accumWeight = 0.0
+            for (iw <- array.zip(weights)) {
+                while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
+                    sampleList.append(iw._1)
+                    curWeight += segsize
+                }
+                accumWeight += iw._2
+            }
+            (sampleList.toList, datum._2, datum._3)
         }).cache()
-        println("Resampling done. Sample size: " + ret.count)
-        ret
+        println("Resampling done. Sample size: " + sampleData.map(_._1.size).reduce(_ + _))
+        sampleData
     }
 
     def runADTree(instances: RDD[Instance],
@@ -87,8 +95,11 @@ object Controller extends Comparison {
             (sortedInsts, index, slices.toList)
         }
 
+        // assure the feature size is equal to the partition size
+        require(instances.partitions.size == instances.first.X.size)
+
         // Glom data
-        val glomTrain = instances.coalesce(10).glom().cache()
+        val glomTrain = instances.glom().zipWithIndex().map(preprocess).cache()
         val glomTest = test.coalesce(10).glom().cache()
 
         // Set up the root of the ADTree
@@ -102,9 +113,7 @@ object Controller extends Comparison {
         // Iteratively grow the ADTree
         for (batch <- 0 until T / K) {
             // Set up instances RDD
-            val instsGroup = (
-                sample(glomTrain, K.toDouble / T, nodes.toList).glom().zipWithIndex().map(preprocess)
-            ).cache()
+            val instsGroup = sample(glomTrain, K.toDouble / T, nodes.toList)
             var data = updateFunc(instsGroup, rootNode).persist(StorageLevel.MEMORY_ONLY)
 
             for (iteration <- 1 to K) {
