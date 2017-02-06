@@ -59,6 +59,10 @@ object Controller extends Comparison {
                 }
                 accumWeight += iw._2
             }
+            for (s <- sampleList) {
+                s.setWeight(1.0)
+                s.setScores(nodes)
+            }
             (sampleList.toList, datum._2, datum._3)
         }).cache()
         println("Resampling done. Sample size: " + sampleData.map(_._1.size).reduce(_ + _))
@@ -114,8 +118,7 @@ object Controller extends Comparison {
         // Iteratively grow the ADTree
         for (batch <- 0 until T / K) {
             // Set up instances RDD
-            val instsGroup = sample(glomTrain, sampleFrac, nodes.toList)
-            var data = updateFunc(instsGroup, rootNode).persist(StorageLevel.MEMORY_ONLY)
+            var data = sample(glomTrain, sampleFrac, nodes.toList)
 
             for (iteration <- 1 to K) {
                 val bestSplit = learnerFunc(data, nodes, lossFunc, 0)

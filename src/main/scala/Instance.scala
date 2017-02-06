@@ -1,15 +1,22 @@
 package sparkboost
 
-import collection.mutable.ListBuffer
+import collection.mutable.ArrayBuffer
 
-class Instance(val y: Int, val X: Vector[Double], val w: Double,
-               var scores: Vector[Int]) extends java.io.Serializable {
-    def updateScores(nodes: List[SplitterNode]) {
-        val s = ListBuffer[Int]()
+class Instance(val y: Int, val X: Vector[Double], var w: Double,
+               var scores: ArrayBuffer[Int]) extends java.io.Serializable {
+    def appendScore(score: Int) {
+        scores.append(score)
+    }
+
+    def setScores(nodes: List[SplitterNode]) {
+        scores = ArrayBuffer[Int]()
         for (node <- nodes) {
-            s.append(node.check(this))
-            scores = s.toVector
+            scores.append(node.check(this))
         }
+    }
+
+    def setWeight(weight: Double) {
+        w = weight
     }
 
     override def toString() = {
@@ -19,7 +26,7 @@ class Instance(val y: Int, val X: Vector[Double], val w: Double,
 
 object Instance {
     def apply(y: Int, X: Vector[Double], w: Double = 1.0,
-              scores: Vector[Int] = Vector[Int]()) = {
+              scores: ArrayBuffer[Int] = ArrayBuffer[Int]()) = {
         new Instance(y, X, w, scores)
     }
 }
