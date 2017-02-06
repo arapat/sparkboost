@@ -10,9 +10,9 @@ import sparkboost._
 
 object Higgs {
     /*
-    args(0) - master node URL
-    args(1) - file path to the training data
-    args(2) - file path to the test data
+    args(0) - file path to the training data
+    args(1) - file path to the test data
+    args(2) - fraction for sampling
     args(3) - number of batches
     args(4) - number of iterations
     args(5) - algorithm selection
@@ -24,25 +24,25 @@ object Higgs {
     def main(args: Array[String]) {
         if (args.size != 7) {
             println(
-                "Please provide five arguments: master url, training data path, " +
-                "test data path, number of batches, number of iterations, " +
-                "boolean flag, model file path."
+                "Please provide five arguments: training data path, " +
+                "test data path, sampling fraction, number of batches, " +
+                "number of iterations, boolean flag, model file path."
             )
             return
         }
 
-        val conf = new SparkConf().setMaster(args(0))
+        val conf = new SparkConf()
         val sc = new SparkContext(conf)
         sc.setCheckpointDir("checkpoints/")
 
         // training
-        val featureSize = Source.fromFile(args(1)).getLines().next().split(",").size - 1
-        val data = sc.textFile(args(1), minPartitions=featureSize)
+        val featureSize = Source.fromFile(args(0)).getLines().next().split(",").size - 1
+        val data = sc.textFile(args(0), minPartitions=featureSize)
                      .map {line => line.split(",").map(_.trim.toDouble)}
         // TODO: does this RDD need to be repartitioned?
         val train = data.map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
                         .cache()
-        var test = sc.textFile(args(2))
+        var test = sc.textFile(args(1))
                      .sample(false, 0.1)
                      .map {line => line.split(",").map(_.trim.toDouble)}
                      .map {t => Instance((t.head + t.head - 1.0).toInt, t.tail.toVector)}
@@ -50,10 +50,10 @@ object Higgs {
         println("Training data size: " + train.count)
         println("Test data size: " + test.count)
         val nodes = args(5).toInt match {
-            case 1 => Controller.runADTreeWithAdaBoost(train, test, 0.05, args(3).toInt, args(4).toInt, false)
+            case 1 => Controller.runADTreeWithAdaBoost(train, test, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
             // TODO: added bulk learning option
             // case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(3).toInt)
-            case 3 => Controller.runADTreeWithLogitBoost(train, test, 0.05, args(3).toInt, args(4).toInt, false)
+            case 3 => Controller.runADTreeWithLogitBoost(train, test, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
         }
         for (t <- nodes) {
             println(t)

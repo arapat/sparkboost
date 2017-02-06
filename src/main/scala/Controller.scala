@@ -71,6 +71,7 @@ object Controller extends Comparison {
                   updateFunc: UpdateFunc,
                   lossFunc: LossFunc,
                   sliceFrac: Double,
+                  sampleFrac: Double,
                   K: Int, T: Int) = {
         def preprocess(data: (Array[Instance], Long)) = {
             val insts = data._1
@@ -113,7 +114,7 @@ object Controller extends Comparison {
         // Iteratively grow the ADTree
         for (batch <- 0 until T / K) {
             // Set up instances RDD
-            val instsGroup = sample(glomTrain, K.toDouble / T, nodes.toList)
+            val instsGroup = sample(glomTrain, sampleFrac, nodes.toList)
             var data = updateFunc(instsGroup, rootNode).persist(StorageLevel.MEMORY_ONLY)
 
             for (iteration <- 1 to K) {
@@ -163,7 +164,7 @@ object Controller extends Comparison {
     }
 
     def runADTreeWithAdaBoost(instances: RDD[Instance], test: RDD[Instance], sliceFrac: Double,
-                              K: Int, T: Int, repartition: Boolean) = {
+                              sampleFrac: Double, K: Int, T: Int, repartition: Boolean) = {
         val data =
             if (repartition) {
                 val featureSize = instances.first.X.size
@@ -172,11 +173,11 @@ object Controller extends Comparison {
                 instances
             }
         runADTree(data, test, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
-                  LossFunc.lossfunc, sliceFrac, K, T)
+                  LossFunc.lossfunc, sliceFrac, sampleFrac, K, T)
     }
 
     def runADTreeWithLogitBoost(instances: RDD[Instance], test: RDD[Instance], sliceFrac: Double,
-                                K: Int, T: Int, repartition: Boolean) = {
+                                sampleFrac: Double, K: Int, T: Int, repartition: Boolean) = {
         val data =
             if (repartition) {
                 val featureSize = instances.first.X.size
@@ -185,7 +186,7 @@ object Controller extends Comparison {
                 instances
             }
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
-                  LossFunc.lossfunc, sliceFrac, K, T)
+                  LossFunc.lossfunc, sliceFrac, sampleFrac, K, T)
     }
 
     /*
