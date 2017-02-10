@@ -1,12 +1,12 @@
 package sparkboost
 
 import collection.mutable.ListBuffer
-import math.exp
 import math.log
 import util.Random.{nextDouble => rand}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 
 import sparkboost.utils.Comparison
 
@@ -16,37 +16,53 @@ object Controller extends Comparison {
     type LearnerObj = (Int, Boolean, Condition)
     type LearnerFunc = (RDDType, ListBuffer[SplitterNode], LossFunc, Int) => LearnerObj
     type UpdateFunc = (RDDType, SplitterNode) => RDDType
+    type WeightFunc = (Int, Double, Double) => Double
 
     def printStats(train: RDDType, test: RDD[Array[Instance]], nodes: List[SplitterNode],
                    iter: Int) {
-        val trainError = train.map(_._1.filter(t => t.w >= 1.0).size).reduce(_ + _)
-        val trainTotal = train.map(_._1.size).reduce(_ + _)
-        val trainErrorRate = trainError.toDouble / trainTotal
+        val trainPredictionAndLabels = train.flatMap(_._1.map(t => {
+            val predict = if (t.w >= 1.0) {
+                -t.y
+            } else {
+                t.y
+            }
+            (predict.toDouble, t.y.toDouble)
+        })).cache()
+        val trainCount = trainPredictionAndLabels.count()
+        val testPredictAndLabels = test.flatMap(_.map(t => {
+            val predict = if (SplitterNode.getScore(0, nodes, t) > 1e-8) {
+                1
+            } else {
+                -1
+            }
+            (predict.toDouble, t.y.toDouble)
+        }))
         val trainWSum = train.map(_._1.map(t => t.w).reduce(_ + _)).reduce(_ + _)
         val trainWSqSum = train.map(_._1.map(t => t.w * t.w).reduce(_ + _)).reduce(_ + _)
-        val effectCnt = (trainWSum.toDouble * trainWSum / trainWSqSum) / trainTotal
-        val testError = test.map(
-                            _.filter(t => SplitterNode.getScore(0, nodes, t) * t.y <= 1e-8)
-                             .size
-                        ).reduce(_ + _)
-        val testTotal = test.map(_.size).reduce(_ + _)
-        val testErrorRate = testError.toDouble / testTotal
+        val effectCnt = (trainWSum.toDouble * trainWSum / trainWSqSum) / trainCount
+
+        // Instantiate metrics object
+        val trainMetrics = new BinaryClassificationMetrics(trainPredictionAndLabels)
+        val train_auPRC = trainMetrics.areaUnderPR
+        val testMetrics = new BinaryClassificationMetrics(testPredictAndLabels)
+        val test_auPRC = testMetrics.areaUnderPR
+
         println("Iteration " + iter)
-        println("Training error is " + trainErrorRate)
-        println("Test error is " + testErrorRate)
+        println("(Training) auPRC = " + train_auPRC)
+        println("(Test) auPRC = " + test_auPRC)
         println("Effective count ratio is " + effectCnt)
     }
 
     def sample(data: RDDType,
                fraction: Double,
-               nodes: List[SplitterNode]): RDDType = {
+               nodes: List[SplitterNode],
+               wfunc: (Int, Double, Double) => Double): RDDType = {
         println("Resampling...")
-        // TODO: extends the cost functions to other forms
         val sampleData = data.map(datum => {
             val array = datum._1
             val sampleList = ListBuffer[Instance]()
             val size = (array.size * fraction).ceil.toInt
-            val weights = array.map(t => exp(-t.y * SplitterNode.getScore(0, nodes, t)))
+            val weights = array.map(t => wfunc(t.y, 1.0, SplitterNode.getScore(0, nodes, t)))
             val weightSum = weights.reduce(_ + _)
             val segsize = weightSum.toDouble / size
 
@@ -74,9 +90,22 @@ object Controller extends Comparison {
                   learnerFunc: LearnerFunc,
                   updateFunc: UpdateFunc,
                   lossFunc: LossFunc,
+                  weightFunc: WeightFunc,
                   sliceFrac: Double,
                   sampleFrac: Double,
                   K: Int, T: Int) = {
+        def safeLogRatio(a: Double, b: Double) = {
+            if (compare(a) == 0 && compare(b) == 0) {
+                0.0
+            } else if (compare(a) == 0) {
+                Double.MinValue
+            } else if (compare(b) == 0) {
+                Double.MaxValue
+            } else {
+                log(a / b)
+            }
+        }
+
         def preprocess(data: (Array[Instance], Long)) = {
             val insts = data._1
             val index = data._2.toInt
@@ -118,7 +147,7 @@ object Controller extends Comparison {
         // Iteratively grow the ADTree
         for (batch <- 0 until T / K) {
             // Set up instances RDD
-            var data = sample(glomTrain, sampleFrac, nodes.toList)
+            var data = sample(glomTrain, sampleFrac, nodes.toList, weightFunc)
 
             for (iteration <- 1 to K) {
                 val bestSplit = learnerFunc(data, nodes, lossFunc, 0)
@@ -139,13 +168,13 @@ object Controller extends Comparison {
                         (a: Double, b: Double) => a + b
                     }.collectAsMap()
                 )
-                val minVal = predicts.values.filter(compare(_) > 0).min * 0.001
-                val leftPos = predicts.getOrElse((1, 1), minVal)
-                val leftNeg = predicts.getOrElse((1, -1), minVal)
-                val rightPos = predicts.getOrElse((-1, 1), minVal)
-                val rightNeg = predicts.getOrElse((-1, -1), minVal)
-                val leftPred = 0.5 * log(leftPos.toDouble / leftNeg)
-                val rightPred = 0.5 * log(rightPos.toDouble / rightNeg)
+                println("predicts:" + predicts)
+                val leftPos = predicts.getOrElse((1, 1), 0.0)
+                val leftNeg = predicts.getOrElse((1, -1), 0.0)
+                val rightPos = predicts.getOrElse((-1, 1), 0.0)
+                val rightNeg = predicts.getOrElse((-1, -1), 0.0)
+                val leftPred = 0.5 * safeLogRatio(leftPos.toDouble, leftNeg.toDouble)
+                val rightPred = 0.5 * safeLogRatio(rightPos.toDouble, rightNeg.toDouble)
                 newNode.setPredict(leftPred, rightPred)
 
                 // add the new node to the nodes list
@@ -176,7 +205,7 @@ object Controller extends Comparison {
                 instances
             }
         runADTree(data, test, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
-                  LossFunc.lossfunc, sliceFrac, sampleFrac, K, T)
+                  LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc, sliceFrac, sampleFrac, K, T)
     }
 
     def runADTreeWithLogitBoost(instances: RDD[Instance], test: RDD[Instance], sliceFrac: Double,
@@ -189,7 +218,7 @@ object Controller extends Comparison {
                 instances
             }
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
-                  LossFunc.lossfunc, sliceFrac, sampleFrac, K, T)
+                  LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc, sliceFrac, sampleFrac, K, T)
     }
 
     /*

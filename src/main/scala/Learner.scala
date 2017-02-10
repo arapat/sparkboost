@@ -36,6 +36,15 @@ object Learner extends Comparison {
                     if (compare(score, minScore) < 0) {
                         minScore = score
                         splitVal = lastSplitVal
+                        /*
+                        if (minScore < 1e-8) {
+                            val rightPos = totPos - leftPos
+                            val rightNeg = totNeg - leftNeg
+                            val iter = nodes.size
+                            val size = curInsts.size
+                            log.info(s"debug: $iter, $size, $rej, $leftPos, $leftNeg, $rightPos, $rightNeg")
+                        }
+                        */
                     }
                     splitIndex += 1
                     lastSplitVal = splits(splitIndex)
@@ -58,7 +67,7 @@ object Learner extends Comparison {
         var splitVal = 0.0
         var onLeft = false
 
-        val totWeight = instances.map(_.w).reduce(_ + _)
+        val totWeight = if (instances.size > 0) instances.map(_.w).reduce(_ + _) else 0.0
         val queue = Queue((root, instances))
         while (!queue.isEmpty) {
             val curObj = queue.dequeue()
