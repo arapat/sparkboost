@@ -32,16 +32,15 @@ object UpdateFunc {
     }
 
     def logitboostUpdate(instances: RDDType, node: SplitterNode) = {
-        def normalize(data: RDDElementType, wsum: Double) = {
+        def normalize(wsum: Double)(data: RDDElementType) = {
             (data._1.map(s => {
                 s.setWeight(s.w / wsum)
                 s
-             }).toList,
-             data._2, data._3)
+             }).toList, data._2, data._3)
         }
 
         val raw = instances.map(updateFunc(_, node, logitboostUpdateFunc)).cache()
         val wsum = raw.map(_._1.map(_.w).reduce(_ + _)).reduce(_ + _)
-        raw.map(normalize(_, wsum))
+        raw.map(normalize(wsum))
     }
 }

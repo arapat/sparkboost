@@ -17,7 +17,7 @@ object Learner extends Comparison {
     def findBestSplit(data: RDDElementType, nodes: ListBuffer[SplitterNode], root: Int,
                       lossFunc: (Double, Double, Double, Double, Double) => Double) = {
         def search(curInsts: List[Instance], index: Int, totWeight: Double, splits: List[Double]) = {
-            var minScore = MaxValue
+            var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
             var splitVal = 0.0
 
             val posInsts = curInsts.filter(t => t.y > 0)
@@ -33,8 +33,10 @@ object Learner extends Comparison {
                 if (compare(t.X(index), lastSplitVal) > 0) {
                     val score = lossFunc(rej, leftPos, leftNeg,
                                          totPos - leftPos, totNeg - leftNeg)
-                    if (compare(score, minScore) < 0) {
-                        minScore = score
+                    if (compare(score, minScore._1) < 0) {
+                        minScore = (score, rej, leftPos, leftNeg,
+                                    totPos - leftPos, totNeg - leftNeg,
+                                    totWeight, curInsts.size)
                         splitVal = lastSplitVal
                         /*
                         if (minScore < 1e-8) {
@@ -62,7 +64,7 @@ object Learner extends Comparison {
         val index = data._2
         val splits = data._3
 
-        var minScore = MaxValue
+        var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
         var bestNodeIndex = root
         var splitVal = 0.0
         var onLeft = false
@@ -79,7 +81,7 @@ object Learner extends Comparison {
             val leftRes = search(leftInstances, index, totWeight, splits)
             val leftScore = leftRes._1
             val leftSplitVal = leftRes._2
-            if (compare(leftScore, minScore) < 0) {
+            if (compare(leftScore._1, minScore._1) < 0) {
                 minScore = leftScore
                 bestNodeIndex = nodeIndex
                 splitVal = leftSplitVal
@@ -90,7 +92,7 @@ object Learner extends Comparison {
             val rightRes = search(rightInstances, index, totWeight, splits)
             val rightScore = rightRes._1
             val rightSplitVal = rightRes._2
-            if (compare(rightScore, minScore) < 0) {
+            if (compare(rightScore._1, minScore._1) < 0) {
                 minScore = rightScore
                 bestNodeIndex = nodeIndex
                 splitVal = rightSplitVal
@@ -108,7 +110,7 @@ object Learner extends Comparison {
             lossFunc: (Double, Double, Double, Double, Double) => Double,
             rootIndex: Int = 0) = {
         val bestSplit = instsGroup.map(findBestSplit(_, nodes, rootIndex, lossFunc))
-                                  .reduce {(a, b) => if (a._1 < b._1) a else b}
+                                  .reduce {(a, b) => if (a._1._1 < b._1._1) a else b}
         println("Node " + nodes.size + " min score is " + bestSplit._1)
         bestSplit._2
     }

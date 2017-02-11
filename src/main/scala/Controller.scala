@@ -21,20 +21,12 @@ object Controller extends Comparison {
     def printStats(train: RDDType, test: RDD[Array[Instance]], nodes: List[SplitterNode],
                    iter: Int) {
         val trainPredictionAndLabels = train.flatMap(_._1.map(t => {
-            val predict = if (t.w >= 1.0) {
-                -t.y
-            } else {
-                t.y
-            }
+            val predict = SplitterNode.getScore(0, nodes, t)
             (predict.toDouble, t.y.toDouble)
         })).cache()
         val trainCount = trainPredictionAndLabels.count()
         val testPredictAndLabels = test.flatMap(_.map(t => {
-            val predict = if (SplitterNode.getScore(0, nodes, t) > 1e-8) {
-                1
-            } else {
-                -1
-            }
+            val predict = SplitterNode.getScore(0, nodes, t)
             (predict.toDouble, t.y.toDouble)
         }))
         val trainWSum = train.map(_._1.map(t => t.w).reduce(_ + _)).reduce(_ + _)
@@ -50,6 +42,8 @@ object Controller extends Comparison {
         println("Iteration " + iter)
         println("(Training) auPRC = " + train_auPRC)
         println("(Test) auPRC = " + test_auPRC)
+        println("Train PR = " + trainMetrics.pr.take(20).toList)
+        println("Test PR = " + testMetrics.pr.take(20).toList)
         println("Effective count ratio is " + effectCnt)
     }
 
@@ -80,12 +74,13 @@ object Controller extends Comparison {
                 s.setScores(nodes)
             }
             (sampleList.toList, datum._2, datum._3)
-        }).cache()
+        })
+        sampleData.checkpoint()
         println("Resampling done. Sample size: " + sampleData.map(_._1.size).reduce(_ + _))
         sampleData
     }
 
-    def runADTree(instances: RDD[Instance],
+    def runADTree(train: RDD[Instance],
                   test: RDD[Instance],
                   learnerFunc: LearnerFunc,
                   updateFunc: UpdateFunc,
@@ -106,9 +101,9 @@ object Controller extends Comparison {
             }
         }
 
-        def preprocess(data: (Array[Instance], Long)) = {
-            val insts = data._1
-            val index = data._2.toInt
+        def preprocess(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
+            val insts = data.toList
+            val index = partIndex % featureSize
             val sortedInsts = insts.toList.sortWith(_.X(index) < _.X(index))
 
             // Generate the slices
@@ -126,19 +121,32 @@ object Controller extends Comparison {
                 curPos = curPos + 1
             }
             slices.append(Double.MaxValue)
-            (sortedInsts, index, slices.toList)
+            Iterator((sortedInsts, index, slices.toList))
+        }
+
+        def getMetaInfo(insts: List[Instance]) = {
+            val posInsts = insts.filter(_.y > 0).size
+            (insts.size, posInsts, insts.size - posInsts)
         }
 
         // assure the feature size is equal to the partition size
-        require(instances.partitions.size == instances.first.X.size)
+        val featureSize = train.first.X.size
+        require(train.partitions.size >= featureSize)
 
         // Glom data
-        val glomTrain = instances.glom().zipWithIndex().map(preprocess).cache()
+        val glomTrain = train.mapPartitionsWithIndex(preprocess(featureSize)).cache()
         val glomTest = test.coalesce(10).glom().cache()
 
+        // print meta info about partitions
+        val metas = glomTrain.map(_._1).map(getMetaInfo).collect
+        println("Number of partitions: " + metas.size)
+        metas.foreach(println)
+
         // Set up the root of the ADTree
-        val posCount = instances filter {t => t.y > 0} count
-        val negCount = instances.count - posCount
+        val posCount = glomTrain map {t => t._1.filter(_.y > 0).size} reduce(_ + _)
+        val negCount = glomTrain.map(_._1.size).reduce(_ + _) - posCount
+        println(s"Positive examples: $posCount")
+        println(s"Negative examples: $negCount")
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, new TrueCondition(), -1, true)
         rootNode.setPredict(predVal, 0.0)

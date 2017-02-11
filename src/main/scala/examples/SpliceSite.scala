@@ -23,6 +23,9 @@ object SpliceSite {
         2 -> AdaBoost non-partitioned
         3 -> LogitBoost partitioned
     args(6) - File path to save the model
+    args(7) - data format
+        1 -> raw data
+        2 -> objects
     */
     def main(args: Array[String]) {
         // Feature: P1 + P2
@@ -61,11 +64,12 @@ object SpliceSite {
             Instance(t.getInt(0), feature.toVector)
         }
 
-        if (args.size != 7) {
+        if (args.size != 8) {
             println(
                 "Please provide five arguments: training data path, " +
                 "test data path, sampling fraction, number of batches, " +
-                "number of iterations, boolean flag, model file path."
+                "number of iterations, boolean flag, model file path, " +
+                "data source type."
             )
             return
         }
@@ -76,20 +80,29 @@ object SpliceSite {
         sc.setCheckpointDir("checkpoints/")
 
         // training
-        /*
-        val data = sqlContext.read.parquet(args(0)).rdd.repartition(featureSize)
-        val train = data.map(rowToInstance).cache()
-        var test = sqlContext.read.parquet(args(1)).rdd
-                             .sample(false, 0.1)
-                             .map(rowToInstance)
-                             .cache()
-        train.saveAsObjectFile("train-pickle/")
-        test.saveAsObjectFile("test-pickle/")
-        */
-        val train = sc.objectFile[Instance]("/user/ec2-user/train-pickle/")
-        val test = sc.objectFile[Instance]("/user/ec2-user/test-pickle/")
-        println("Training data size: " + train.count)
-        println("Test data size: " + test.count)
+        val train = (
+            if (args(7).toInt == 1) {
+                val data = sqlContext.read.parquet(args(0)).rdd.repartition(featureSize)
+                data.map(rowToInstance)
+            } else {
+                sc.objectFile[Instance]("/user/ec2-user/train-pickle-50m/")
+            }
+        ) // .cache()
+        val test = (
+            if (args(7).toInt == 1) {
+                sqlContext.read.parquet(args(1)).rdd
+                          .sample(false, 0.1)
+                          .map(rowToInstance)
+            } else {
+                sc.objectFile[Instance]("/user/ec2-user/test-pickle/")
+            }
+        ) // .cache()
+        if (args(7).toInt == 1) {
+            train.saveAsObjectFile("train-pickle-50m/")
+            test.saveAsObjectFile("test-pickle/")
+        }
+        // println("Training data size: " + train.count)
+        // println("Test data size: " + test.count)
         val nodes = args(5).toInt match {
             case 1 => Controller.runADTreeWithAdaBoost(train, test, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
             // TODO: added bulk learning option
