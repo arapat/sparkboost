@@ -20,6 +20,14 @@ object Controller extends Comparison {
 
     def printStats(train: RDDType, test: RDD[Array[Instance]], nodes: List[SplitterNode],
                    iter: Int) {
+        // manual fix the auPRC computation bug in MLlib
+        def adjust(points: Array[(Double, Double)]) = {
+            require(points.length == 2)
+            require(points.head == (0.0, 1.0))
+            val y = points.last
+            y._1 * (y._2 - 1.0) / 2.0
+        }
+
         val trainPredictionAndLabels = train.flatMap(_._1.map(t => {
             val predict = SplitterNode.getScore(0, nodes, t)
             (predict.toDouble, t.y.toDouble)
@@ -35,9 +43,9 @@ object Controller extends Comparison {
 
         // Instantiate metrics object
         val trainMetrics = new BinaryClassificationMetrics(trainPredictionAndLabels)
-        val train_auPRC = trainMetrics.areaUnderPR
+        val train_auPRC = trainMetrics.areaUnderPR + adjust(trainMetrics.pr.take(2))
         val testMetrics = new BinaryClassificationMetrics(testPredictAndLabels)
-        val test_auPRC = testMetrics.areaUnderPR
+        val test_auPRC = testMetrics.areaUnderPR + adjust(testMetrics.pr.take(2))
 
         println("Iteration " + iter)
         println("(Training) auPRC = " + train_auPRC)
