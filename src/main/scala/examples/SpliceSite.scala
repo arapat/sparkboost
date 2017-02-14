@@ -85,7 +85,7 @@ object SpliceSite {
                 val data = sqlContext.read.parquet(args(0)).rdd.repartition(featureSize)
                 data.map(rowToInstance)
             } else {
-                sc.objectFile[Instance]("/user/ec2-user/train-pickle-50m/")
+                sc.objectFile[Instance]("/user/ec2-user/train-pickle-mid/")
             }
         ) // .cache()
         val test = (
@@ -103,6 +103,8 @@ object SpliceSite {
         }
         // println("Training data size: " + train.count)
         // println("Test data size: " + test.count)
+        // println("Positive: " + test.filter(_.y > 0).count)
+        // println("Negative: " + test.filter(_.y < 0).count)
         val nodes = args(5).toInt match {
             case 1 => Controller.runADTreeWithAdaBoost(train, test, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
             // TODO: added bulk learning option
@@ -118,7 +120,7 @@ object SpliceSite {
         val trainMargin = train.coalesce(20).glom()
                                .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
                                .cache()
-        val trainError = trainMargin.map(_.filter(_ <= 1e-8).size).reduce(_ + _)
+        val trainError = trainMargin.map(_.count(_ <= 1e-8)).reduce(_ + _)
         val trainTotal = trainMargin.map(_.size).reduce(_ + _)
         val trainErrorRate = trainError.toDouble / trainTotal
         // println("Margin: " + trainMargin.sum)

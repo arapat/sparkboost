@@ -102,30 +102,20 @@ object Controller extends Comparison {
         }
 
         def preprocess(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
-            val insts = data.toList
             val index = partIndex % featureSize
-            val sortedInsts = insts.toList.sortWith(_.X(index) < _.X(index))
+            val sortedInsts = data.toList.sortWith(_.X(index) < _.X(index))
 
             // Generate the slices
-            val slices = ListBuffer(Double.MinValue)
-            val sliceSize = (insts.size * sliceFrac).floor.toInt
-            var lastValue = Double.MinValue
-            var lastPos = 0
-            var curPos = 0
-            for (t <- sortedInsts) {
-                if (curPos - lastPos >= sliceSize && compare(lastValue, t.X(index)) != 0) {
-                    lastPos = curPos
-                    slices.append(0.5 * (lastValue + t.X(index)))
-                }
-                lastValue = t.X(index)
-                curPos = curPos + 1
-            }
-            slices.append(Double.MaxValue)
-            Iterator((sortedInsts, index, slices.toList))
+            val sliceSize = (sortedInsts.size * sliceFrac).floor.toInt
+            val slices =
+                (sliceSize until sortedInsts.size by sliceSize).map(
+                    idx => 0.5 * (sortedInsts(idx - 1).X(index) + sortedInsts(idx).X(index))
+                ).distinct.toList :+ Double.MaxValue
+            Iterator((sortedInsts, index, slices))
         }
 
         def getMetaInfo(insts: List[Instance]) = {
-            val posInsts = insts.filter(_.y > 0).size
+            val posInsts = insts.count(_.y > 0)
             (insts.size, posInsts, insts.size - posInsts)
         }
 
@@ -134,16 +124,17 @@ object Controller extends Comparison {
         require(train.partitions.size >= featureSize)
 
         // Glom data
-        val glomTrain = train.mapPartitionsWithIndex(preprocess(featureSize)).cache()
+        val glomTrain = train.mapPartitionsWithIndex(preprocess(featureSize))
+                             .cache()
         val glomTest = test.coalesce(10).glom().cache()
 
         // print meta info about partitions
         val metas = glomTrain.map(_._1).map(getMetaInfo).collect
         println("Number of partitions: " + metas.size)
-        metas.foreach(println)
+        println(metas.reduce((a, b) => if (a._2 < b._2) a else b))
 
         // Set up the root of the ADTree
-        val posCount = glomTrain map {t => t._1.filter(_.y > 0).size} reduce(_ + _)
+        val posCount = glomTrain map {t => t._1.count(_.y > 0)} reduce(_ + _)
         val negCount = glomTrain.map(_._1.size).reduce(_ + _) - posCount
         println(s"Positive examples: $posCount")
         println(s"Negative examples: $negCount")
@@ -151,6 +142,10 @@ object Controller extends Comparison {
         val rootNode = SplitterNode(0, new TrueCondition(), -1, true)
         rootNode.setPredict(predVal, 0.0)
         val nodes = ListBuffer(rootNode)
+
+        printStats(sample(glomTrain, sampleFrac, nodes.toList, weightFunc),
+                   glomTest, nodes.toList, 0)
+        println()
 
         // Iteratively grow the ADTree
         for (batch <- 0 until T / K) {
@@ -184,6 +179,7 @@ object Controller extends Comparison {
                 val leftPred = 0.5 * safeLogRatio(leftPos.toDouble, leftNeg.toDouble)
                 val rightPred = 0.5 * safeLogRatio(rightPos.toDouble, rightNeg.toDouble)
                 newNode.setPredict(leftPred, rightPred)
+                println(s"Predicts ($leftPred, $rightPred)")
 
                 // add the new node to the nodes list
                 nodes(prtNodeIndex).addChild(onLeft, nodes.size)
@@ -198,6 +194,7 @@ object Controller extends Comparison {
                 }
                 */
                 printStats(data, glomTest, nodes.toList, batch * K + iteration)
+                println
             }
         }
         nodes

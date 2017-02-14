@@ -27,7 +27,7 @@ object Learner extends Comparison {
             val rej = totWeight - totPos - totNeg
             var leftPos = 0.0
             var leftNeg = 0.0
-            var splitIndex = 1
+            var splitIndex = 0
             var lastSplitVal = splits(splitIndex)
             for (t <- curInsts) {
                 if (compare(t.X(index), lastSplitVal) > 0) {

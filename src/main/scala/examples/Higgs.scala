@@ -64,7 +64,7 @@ object Higgs {
         val trainMargin = train.coalesce(20).glom()
                                .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
                                .cache()
-        val trainError = trainMargin.map(_.filter(_ <= 1e-8).size).reduce(_ + _)
+        val trainError = trainMargin.map(_.count(_ <= 1e-8)).reduce(_ + _)
         val trainTotal = trainMargin.map(_.size).reduce(_ + _)
         val trainErrorRate = trainError.toDouble / trainTotal
         // println("Margin: " + trainMargin.sum)
