@@ -47,11 +47,8 @@ object Controller extends Comparison {
         val testMetrics = new BinaryClassificationMetrics(testPredictAndLabels)
         val test_auPRC = testMetrics.areaUnderPR + adjust(testMetrics.pr.take(2))
 
-        println("Iteration " + iter)
         println("(Training) auPRC = " + train_auPRC)
         println("(Test) auPRC = " + test_auPRC)
-        println("Train PR = " + trainMetrics.pr.take(20).toList)
-        println("Test PR = " + testMetrics.pr.take(20).toList)
         println("Effective count ratio is " + effectCnt)
     }
 
@@ -96,16 +93,13 @@ object Controller extends Comparison {
                   weightFunc: WeightFunc,
                   sliceFrac: Double,
                   sampleFrac: Double,
-                  K: Int, T: Int) = {
+                  K: Int, T: Int): ListBuffer[SplitterNode] = {
         def safeLogRatio(a: Double, b: Double) = {
             if (compare(a) == 0 && compare(b) == 0) {
                 0.0
-            } else if (compare(a) == 0) {
-                Double.MinValue
-            } else if (compare(b) == 0) {
-                Double.MaxValue
             } else {
-                log(a / b)
+                val ratio = math.min(10.0, math.max(a / b, 0.1))
+                log(ratio)
             }
         }
 
@@ -146,11 +140,13 @@ object Controller extends Comparison {
         val negCount = glomTrain.map(_._1.size).reduce(_ + _) - posCount
         println(s"Positive examples: $posCount")
         println(s"Negative examples: $negCount")
+        println()
+
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, new TrueCondition(), -1, true)
         rootNode.setPredict(predVal, 0.0)
         val nodes = ListBuffer(rootNode)
-
+        println(s"Predict ($predVal, 0.0)")
         printStats(sample(glomTrain, sampleFrac, nodes.toList, weightFunc),
                    glomTest, nodes.toList, 0)
         println()
@@ -159,6 +155,9 @@ object Controller extends Comparison {
         for (batch <- 0 until T / K) {
             // Set up instances RDD
             var data = sample(glomTrain, sampleFrac, nodes.toList, weightFunc)
+            // println("New positive sample weight:")
+            // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
+            // println("New negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
 
             for (iteration <- 1 to K) {
                 val bestSplit = learnerFunc(data, nodes, lossFunc, 0)
@@ -195,7 +194,13 @@ object Controller extends Comparison {
 
                 // adjust the weights of the instances
                 // TODO: why caching will slow the program down?
+                // println("(before) Positive sample weight:")
+                // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
                 data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY)
+                // println("(after) Positive sample weight:")
+                // println(data.map(_._1.filter(_.y > 0)).reduce(_ ::: _).foreach(t => println("%.2f ".format(t.w) + t.X)))
+                // return nodes
+                // println("Negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
                 /*
                 if (iteration % 25 == 0) {
                     data.checkpoint()

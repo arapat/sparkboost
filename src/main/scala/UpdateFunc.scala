@@ -13,18 +13,18 @@ object UpdateFunc {
 
     def logitboostUpdateFunc(y: Int, w: Double, pred: Double) = w / (1.0 + exp(y * pred))
 
+    def singleUpdate(node: SplitterNode, update: (Int, Double, Double) => Double)(inst: Instance) = {
+        val c = node.check(inst)
+        val pred = if (c > 0) node.leftPredict else if (c < 0) node.rightPredict else 0.0
+        val updatedw = update(inst.y, inst.w, pred)
+        Instance(inst.y, inst.X, updatedw, inst.scores :+ c)
+    }
+
     def updateFunc(data: RDDElementType, node: SplitterNode,
                    update: (Int, Double, Double) => Double): RDDElementType = {
         val leftPredict = node.leftPredict
         val rightPredict = node.rightPredict
-        def singleUpdate(inst: Instance) = {
-            val c = node.check(inst)
-            val pred = if (c > 0) leftPredict else if (c < 0) rightPredict else 0.0
-            inst.appendScore(c)
-            inst.setWeight(update(inst.y, inst.w, pred))
-            inst
-        }
-        (data._1.map(singleUpdate), data._2, data._3)
+        (data._1.map(singleUpdate(node, update)), data._2, data._3)
     }
 
     def adaboostUpdate(rdd: RDDType, node: SplitterNode) = {

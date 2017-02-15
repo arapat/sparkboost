@@ -17,16 +17,20 @@ object Learner extends Comparison {
     def findBestSplit(data: RDDElementType, nodes: ListBuffer[SplitterNode], root: Int,
                       lossFunc: (Double, Double, Double, Double, Double) => Double) = {
         def search(curInsts: List[Instance], index: Int, totWeight: Double, splits: List[Double]) = {
-            var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
+            var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0)
             var splitVal = 0.0
 
             val posInsts = curInsts.filter(t => t.y > 0)
+            val posCount = posInsts.size
             val totPos = if (posInsts.size > 0) posInsts.map(_.w).reduce(_ + _) else 0.0
             val negInsts = curInsts.filter(t => t.y < 0)
+            val negCount = negInsts.size
             val totNeg = if (negInsts.size > 0) negInsts.map(_.w).reduce(_ + _) else 0.0
             val rej = totWeight - totPos - totNeg
             var leftPos = 0.0
+            var leftPosCount = 0
             var leftNeg = 0.0
+            var leftNegCount = 0
             var splitIndex = 0
             var lastSplitVal = splits(splitIndex)
             for (t <- curInsts) {
@@ -36,7 +40,8 @@ object Learner extends Comparison {
                     if (compare(score, minScore._1) < 0) {
                         minScore = (score, rej, leftPos, leftNeg,
                                     totPos - leftPos, totNeg - leftNeg,
-                                    totWeight, curInsts.size)
+                                    leftPosCount, leftNegCount,
+                                    posCount - leftPosCount, negCount - leftNegCount)
                         splitVal = lastSplitVal
                         /*
                         if (minScore < 1e-8) {
@@ -53,8 +58,10 @@ object Learner extends Comparison {
                 }
                 if (t.y > 0) {
                     leftPos += t.w
+                    leftPosCount += 1
                 } else {
                     leftNeg += t.w
+                    leftNegCount += 1
                 }
             }
             (minScore, splitVal)
@@ -64,7 +71,7 @@ object Learner extends Comparison {
         val index = data._2
         val splits = data._3
 
-        var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
+        var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0)
         var bestNodeIndex = root
         var splitVal = 0.0
         var onLeft = false
@@ -111,7 +118,13 @@ object Learner extends Comparison {
             rootIndex: Int = 0) = {
         val bestSplit = instsGroup.map(findBestSplit(_, nodes, rootIndex, lossFunc))
                                   .reduce {(a, b) => if (a._1._1 < b._1._1) a else b}
-        println("Node " + nodes.size + " min score is " + bestSplit._1)
+        println("Node " + nodes.size + " min score")
+        println("Min score: " + "%.2f".format(bestSplit._1._1))
+        println("Rej: " + "%.2f".format(bestSplit._1._2))
+        println("Left pos weight/count: " + "%.2f".format(bestSplit._1._3) + " / " + bestSplit._1._7)
+        println("Left neg weight/count: " + "%.2f".format(bestSplit._1._4) + " / " + bestSplit._1._8)
+        println("Right pos weight/count: " + "%.2f".format(bestSplit._1._5) + " / " + bestSplit._1._9)
+        println("Right neg weight/count: " + "%.2f".format(bestSplit._1._6) + " / " + bestSplit._1._10)
         bestSplit._2
     }
 
