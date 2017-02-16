@@ -1,11 +1,12 @@
 package sparkboost
 
 import java.io._
-
 import collection.mutable.ListBuffer
 
-class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
-                   val onLeft: Boolean) extends java.io.Serializable {
+import sparkboost.utils.Comparison
+
+class SplitterNode(val index: Int, val splitIndex: Int, val splitVal: Double,
+                   val prtIndex: Int, val onLeft: Boolean) extends java.io.Serializable with Comparison {
     var leftPredict = 0.0
     var rightPredict = 0.0
     val leftChild = ListBuffer[Int]()
@@ -15,7 +16,11 @@ class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
         if (preChecked || prtIndex < 0 ||
                 (onLeft && instance.scores(prtIndex) > 0) ||
                 (!onLeft && instance.scores(prtIndex) < 0)) {
-            cond.check(instance.X)
+            if (splitIndex < 0 || compare(instance.X(index), splitVal) <= 0) {
+                1
+            } else {
+                -1
+            }
         } else {
             0
         }
@@ -50,14 +55,14 @@ class SplitterNode(val index: Int, val cond: Condition, val prtIndex: Int,
             s" side of the node $prtIndex,"
         } else ""
 
-        s"Node $index: $cond ($leftPredict, $rightPredict)" + position +
+        s"Node $index: Index $index <= $splitVal ($leftPredict, $rightPredict)" + position +
         s" has $nLeftChild left and $nRightChild right children."
     }
 }
 
 object SplitterNode {
-    def apply(index: Int, cond: Condition, prtIndex: Int, onLeft: Boolean) = {
-        new SplitterNode(index, cond, prtIndex, onLeft)
+    def apply(index: Int, splitIndex: Int, splitVal: Double, prtIndex: Int, onLeft: Boolean) = {
+        new SplitterNode(index, splitIndex, splitVal, prtIndex, onLeft)
     }
 
     def save(nodes: List[SplitterNode], filepath: String) {

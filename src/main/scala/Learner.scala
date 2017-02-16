@@ -129,7 +129,7 @@ object Learner extends Comparison {
             queue ++= nodes(nodeIndex).leftChild.map((_, leftInstances))
             queue ++= nodes(nodeIndex).rightChild.map((_, rightInstances))
         }
-        (minScore, (bestNodeIndex, onLeft, ThresholdCondition(index, splitVal), preds))
+        (minScore, (bestNodeIndex, onLeft, index, splitVal, preds._1, preds._2))
     }
 
     def partitionedGreedySplit(

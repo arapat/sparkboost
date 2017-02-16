@@ -13,7 +13,7 @@ import sparkboost.utils.Comparison
 object Controller extends Comparison {
     type RDDType = RDD[(List[Instance], Int, List[Double])]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
-    type LearnerObj = (Int, Boolean, Condition, (Double, Double))
+    type LearnerObj = (Int, Boolean, Int, Double, Double, Double)
     type LearnerFunc = (RDDType, ListBuffer[SplitterNode], LossFunc, Int) => LearnerObj
     type UpdateFunc = (RDDType, SplitterNode) => RDDType
     type WeightFunc = (Int, Double, Double) => Double
@@ -149,7 +149,7 @@ object Controller extends Comparison {
         println(s"Test negative examples: $testNegCount")
 
         val predVal = 0.5 * log(posCount.toDouble / negCount)
-        val rootNode = SplitterNode(0, new TrueCondition(), -1, true)
+        val rootNode = SplitterNode(0, -1, 0, -1, true)
         rootNode.setPredict(predVal, 0.0)
         val nodes = ListBuffer(rootNode)
         println(s"Predict ($predVal, 0.0)")
@@ -174,8 +174,9 @@ object Controller extends Comparison {
                 val bestSplit = learnerFunc(data, nodes, lossFunc, 0)
                 val prtNodeIndex = bestSplit._1
                 val onLeft = bestSplit._2
-                val condition = bestSplit._3
-                val newNode = SplitterNode(nodes.size, condition, prtNodeIndex, onLeft)
+                val splitIndex = bestSplit._3
+                val splitVal = bestSplit._4
+                val newNode = SplitterNode(nodes.size, splitIndex, splitVal, prtNodeIndex, onLeft)
 
                 // compute the predictions of the new node
                 val predicts = (
