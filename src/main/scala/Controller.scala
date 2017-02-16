@@ -8,6 +8,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 
+import java.io._
+
 import sparkboost.utils.Comparison
 
 object Controller extends Comparison {
@@ -236,6 +238,51 @@ object Controller extends Comparison {
             }
             batch = batch + 1
         }
+
+        // print visualization meta data for JBoost
+        val posTrain = glomTrain.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
+        val negTrain = glomTrain.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
+        val posTest = glomTest.flatMap(t => t).filter(_.y > 0).takeSample(true, 3000)
+        val negTest = glomTest.flatMap(t => t).filter(_.y < 0).takeSample(true, 3000)
+        val esize = 6000
+
+        val trainFile = new File("trial0.train.boosting.info")
+        val trainWrite = new BufferedWriter(new FileWriter(trainFile))
+        val testFile = new File("trial0.test.boosting.info")
+        val testWrite = new BufferedWriter(new FileWriter(testFile))
+        val lnodes = nodes.toList
+
+        for (i <- 1 to nodes.size) {
+            trainWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
+            testWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
+            var id = 0
+            for (t <- posTrain) {
+                val score = SplitterNode.getScore(0, lnodes, t, i)
+                trainWrite.write(s"$id : $score : $score : 1 : \n")
+                id = id + 1
+            }
+            for (t <- negTrain) {
+                val score = SplitterNode.getScore(0, lnodes, t, i)
+                val negscore = -score
+                trainWrite.write(s"$id : $score : $negscore : -1 : \n")
+                id = id + 1
+            }
+            id = 0
+            for (t <- posTest) {
+                val score = SplitterNode.getScore(0, lnodes, t, i)
+                testWrite.write(s"$id : $score : $score : 1 : \n")
+                id = id + 1
+            }
+            for (t <- negTest) {
+                val score = SplitterNode.getScore(0, lnodes, t, i)
+                val negscore = -score
+                testWrite.write(s"$id : $score : $negscore : -1 : \n")
+                id = id + 1
+            }
+        }
+
+        trainWrite.close()
+        testWrite.close()
         nodes
     }
 
