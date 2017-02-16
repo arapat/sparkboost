@@ -79,8 +79,8 @@ object HiggsAdaboostAnalyze extends Comparison {
             val newTestPredicts = test.map(t => getNewPredict(t, node)).collect
             testPredicts = testPredicts.zip(newTestPredicts).map(t => t._1 + t._2)
 
-            trainError += trainPredicts.filter(t => compare(t) <= 0).size.toDouble / trainSize
-            testError += testPredicts.filter(t => compare(t) <= 0).size.toDouble / testSize
+            trainError += trainPredicts.count(t => compare(t) <= 0).toDouble / trainSize
+            testError += testPredicts.count(t => compare(t) <= 0).toDouble / testSize
             val weights = train.map(_.w)
             val wsum: Double = weights.reduce(_ + _)
             val wsq: Double = weights.map {x => x * x}
