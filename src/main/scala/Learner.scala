@@ -14,6 +14,15 @@ object Learner extends Comparison {
     type RDDElementType = (List[Instance], Int, List[Double])
     type RDDType = RDD[RDDElementType]
 
+    def safeLogRatio(a: Double, b: Double) = {
+        if (compare(a) == 0 && compare(b) == 0) {
+            0.0
+        } else {
+            val ratio = math.min(10.0, math.max(a / b, 0.1))
+            math.log(ratio)
+        }
+    }
+
     def findBestSplit(data: RDDElementType, nodes: ListBuffer[SplitterNode], root: Int,
                       lossFunc: (Double, Double, Double, Double, Double) => Double) = {
         def search(curInsts: List[Instance], index: Int, totWeight: Double, splits: List[Double]) = {
@@ -22,49 +31,57 @@ object Learner extends Comparison {
 
             val posInsts = curInsts.filter(t => t.y > 0)
             val posCount = posInsts.size
-            val totPos = if (posInsts.size > 0) posInsts.map(_.w).reduce(_ + _) else 0.0
             val negInsts = curInsts.filter(t => t.y < 0)
             val negCount = negInsts.size
-            val totNeg = if (negInsts.size > 0) negInsts.map(_.w).reduce(_ + _) else 0.0
-            val rej = totWeight - totPos - totNeg
-            var leftPos = 0.0
-            var leftPosCount = 0
-            var leftNeg = 0.0
-            var leftNegCount = 0
-            var splitIndex = 0
-            var lastSplitVal = splits(splitIndex)
-            for (t <- curInsts) {
-                if (compare(t.X(index), lastSplitVal) > 0) {
-                    val score = lossFunc(rej, leftPos, leftNeg,
-                                         totPos - leftPos, totNeg - leftNeg)
-                    if (compare(score, minScore._1) < 0) {
-                        minScore = (score, rej, leftPos, leftNeg,
-                                    totPos - leftPos, totNeg - leftNeg,
-                                    leftPosCount, leftNegCount,
-                                    posCount - leftPosCount, negCount - leftNegCount)
-                        splitVal = lastSplitVal
-                        /*
-                        if (minScore < 1e-8) {
-                            val rightPos = totPos - leftPos
-                            val rightNeg = totNeg - leftNeg
-                            val iter = nodes.size
-                            val size = curInsts.size
-                            log.info(s"debug: $iter, $size, $rej, $leftPos, $leftNeg, $rightPos, $rightNeg")
+            if (posCount == 0 || negCount == 0) {
+                (minScore, 0.0, (0.0, 0.0))
+            } else {
+                val totPos = posInsts.map(_.w).reduce(_ + _)
+                val totNeg = negInsts.map(_.w).reduce(_ + _)
+                val rej = totWeight - totPos - totNeg
+                var leftPos = 0.0
+                var leftPosCount = 0
+                var leftNeg = 0.0
+                var leftNegCount = 0
+                var leftPred = 0.0
+                var rightPred = 0.0
+                var splitIndex = 0
+                var lastSplitVal = splits(splitIndex)
+                for (t <- curInsts) {
+                    if (compare(t.X(index), lastSplitVal) > 0) {
+                        val score = lossFunc(rej, leftPos, leftNeg,
+                                             totPos - leftPos, totNeg - leftNeg)
+                        if (compare(score, minScore._1) < 0) {
+                            minScore = (score, rej, leftPos, leftNeg,
+                                        totPos - leftPos, totNeg - leftNeg,
+                                        leftPosCount, leftNegCount,
+                                        posCount - leftPosCount, negCount - leftNegCount)
+                            leftPred = safeLogRatio(leftPos, leftNeg)
+                            rightPred = safeLogRatio(totPos - leftPos, totNeg - leftNeg)
+                            splitVal = lastSplitVal
+                            /*
+                            if (minScore < 1e-8) {
+                                val rightPos = totPos - leftPos
+                                val rightNeg = totNeg - leftNeg
+                                val iter = nodes.size
+                                val size = curInsts.size
+                                log.info(s"debug: $iter, $size, $rej, $leftPos, $leftNeg, $rightPos, $rightNeg")
+                            }
+                            */
                         }
-                        */
+                        splitIndex += 1
+                        lastSplitVal = splits(splitIndex)
                     }
-                    splitIndex += 1
-                    lastSplitVal = splits(splitIndex)
+                    if (t.y > 0) {
+                        leftPos += t.w
+                        leftPosCount += 1
+                    } else {
+                        leftNeg += t.w
+                        leftNegCount += 1
+                    }
                 }
-                if (t.y > 0) {
-                    leftPos += t.w
-                    leftPosCount += 1
-                } else {
-                    leftNeg += t.w
-                    leftNegCount += 1
-                }
+                (minScore, splitVal, (leftPred, rightPred))
             }
-            (minScore, splitVal)
         }
 
         val instances = data._1
@@ -75,6 +92,7 @@ object Learner extends Comparison {
         var bestNodeIndex = root
         var splitVal = 0.0
         var onLeft = false
+        var preds = (0.0, 0.0)
 
         val totWeight = if (instances.size > 0) instances.map(_.w).reduce(_ + _) else 0.0
         val queue = Queue((root, instances))
@@ -92,6 +110,7 @@ object Learner extends Comparison {
                 minScore = leftScore
                 bestNodeIndex = nodeIndex
                 splitVal = leftSplitVal
+                preds = leftRes._3
                 onLeft = true
             }
 
@@ -103,13 +122,14 @@ object Learner extends Comparison {
                 minScore = rightScore
                 bestNodeIndex = nodeIndex
                 splitVal = rightSplitVal
+                preds = rightRes._3
                 onLeft = false
             }
 
             queue ++= nodes(nodeIndex).leftChild.map((_, leftInstances))
             queue ++= nodes(nodeIndex).rightChild.map((_, rightInstances))
         }
-        (minScore, (bestNodeIndex, onLeft, ThresholdCondition(index, splitVal)))
+        (minScore, (bestNodeIndex, onLeft, ThresholdCondition(index, splitVal), preds))
     }
 
     def partitionedGreedySplit(

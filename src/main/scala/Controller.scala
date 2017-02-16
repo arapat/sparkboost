@@ -13,7 +13,7 @@ import sparkboost.utils.Comparison
 object Controller extends Comparison {
     type RDDType = RDD[(List[Instance], Int, List[Double])]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
-    type LearnerObj = (Int, Boolean, Condition)
+    type LearnerObj = (Int, Boolean, Condition, (Double, Double))
     type LearnerFunc = (RDDType, ListBuffer[SplitterNode], LossFunc, Int) => LearnerObj
     type UpdateFunc = (RDDType, SplitterNode) => RDDType
     type WeightFunc = (Int, Double, Double) => Double
@@ -68,6 +68,9 @@ object Controller extends Comparison {
             var curWeight = rand() * segsize // first sample point
             var accumWeight = 0.0
             for (iw <- array.zip(weights)) {
+                if (iw._1.y > 0) {
+                    sampleList.append(iw._1)
+                }
                 while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
                     sampleList.append(iw._1)
                     curWeight += segsize
@@ -140,7 +143,10 @@ object Controller extends Comparison {
         val negCount = glomTrain.map(_._1.size).reduce(_ + _) - posCount
         println(s"Positive examples: $posCount")
         println(s"Negative examples: $negCount")
-        println()
+        val testPosCount = glomTest.map(_.count(_.y > 0)).reduce(_ + _)
+        val testNegCount = glomTest.map(_.count(_.y < 0)).reduce(_ + _)
+        println(s"Test positive examples: $testPosCount")
+        println(s"Test negative examples: $testNegCount")
 
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, new TrueCondition(), -1, true)
@@ -152,14 +158,19 @@ object Controller extends Comparison {
         println()
 
         // Iteratively grow the ADTree
-        for (batch <- 0 until T / K) {
+        var batch = 0
+        while (batch < T / K) {
             // Set up instances RDD
             var data = sample(glomTrain, sampleFrac, nodes.toList, weightFunc)
             // println("New positive sample weight:")
             // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
             // println("New negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
 
-            for (iteration <- 1 to K) {
+            var iteration = 0
+            var trapped = false
+            while (!trapped) {
+                iteration = iteration + 1
+
                 val bestSplit = learnerFunc(data, nodes, lossFunc, 0)
                 val prtNodeIndex = bestSplit._1
                 val onLeft = bestSplit._2
@@ -185,30 +196,39 @@ object Controller extends Comparison {
                 val rightNeg = predicts.getOrElse((-1, -1), 0.0)
                 val leftPred = 0.5 * safeLogRatio(leftPos.toDouble, leftNeg.toDouble)
                 val rightPred = 0.5 * safeLogRatio(rightPos.toDouble, rightNeg.toDouble)
+                /*
+                val leftPred = bestSplit._4._1
+                val rightPred = bestSplit._4._2
+                */
                 newNode.setPredict(leftPred, rightPred)
                 println(s"Predicts ($leftPred, $rightPred)")
+                if (compare(leftPred) == 0 && compare(rightPred) == 0) {
+                    trapped = true
+                } else {
+                    // add the new node to the nodes list
+                    nodes(prtNodeIndex).addChild(onLeft, nodes.size)
+                    nodes.append(newNode)
 
-                // add the new node to the nodes list
-                nodes(prtNodeIndex).addChild(onLeft, nodes.size)
-                nodes.append(newNode)
-
-                // adjust the weights of the instances
-                // TODO: why caching will slow the program down?
-                // println("(before) Positive sample weight:")
-                // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
-                data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY)
-                // println("(after) Positive sample weight:")
-                // println(data.map(_._1.filter(_.y > 0)).reduce(_ ::: _).foreach(t => println("%.2f ".format(t.w) + t.X)))
-                // return nodes
-                // println("Negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
-                /*
-                if (iteration % 25 == 0) {
-                    data.checkpoint()
+                    // adjust the weights of the instances
+                    // TODO: why caching will slow the program down?
+                    // println("(before) Positive sample weight:")
+                    // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
+                    data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY)
+                    // println("(after) Positive sample weight:")
+                    // println(data.map(_._1.filter(_.y > 0)).reduce(_ ::: _).foreach(t => println("%.2f ".format(t.w) + t.X)))
+                    // return nodes
+                    // println("Negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
+                    /*
+                    if (iteration % 25 == 0) {
+                        data.checkpoint()
+                    }
+                    */
+                    printStats(data, glomTest, nodes.toList, batch * K + iteration)
                 }
-                */
-                printStats(data, glomTest, nodes.toList, batch * K + iteration)
+
                 println
             }
+            batch = batch + 1
         }
         nodes
     }

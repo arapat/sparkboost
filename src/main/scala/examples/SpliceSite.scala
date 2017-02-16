@@ -30,16 +30,17 @@ object SpliceSite {
     def main(args: Array[String]) {
         // Feature: P1 + P2
         val CENTER = 60
-        val LEFT_WINDOW = 6
-        val RIGHT_WINDOW = 7
+        val LEFT_WINDOW = 59
+        val RIGHT_WINDOW = 80
         val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
-        val featureSize = (WINDOW_SIZE) * 4 + (WINDOW_SIZE - 1) * 4 * 4
+        val featureSize = (WINDOW_SIZE) * 4 // + (WINDOW_SIZE - 1) * 4 * 4
         val indexMap = {
             val unit = List("A", "C", "G", "T")
             val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
             val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
             val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
-            (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
+            // (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
+            p1.zip(0 until p1.size).toMap
         }
         def rowToInstance(t: Row) = {
             val raw = t.toSeq.tail.toVector.map(_.asInstanceOf[String])
@@ -48,8 +49,8 @@ object SpliceSite {
                 raw.slice(CENTER + 1, CENTER + RIGHT_WINDOW + 1)
             )
             val nonzeros = (
-                (0 until WINDOW_SIZE).zip(window) ++
-                (0 until WINDOW_SIZE).zip(window.zip(window.tail).map(t => t._1 + t._2))
+                (0 until WINDOW_SIZE).zip(window) // ++
+                // (0 until WINDOW_SIZE).zip(window.zip(window.tail).map(t => t._1 + t._2))
             ).map(t => indexMap(t._1 + t._2)).sorted
             val feature = ArrayBuffer[Double]()
             var last = 0
@@ -75,31 +76,38 @@ object SpliceSite {
         }
 
         val conf = new SparkConf()
+        conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         val sc = new SparkContext(conf)
         val sqlContext = new SQLContext(sc)
         sc.setCheckpointDir("checkpoints/")
 
         // training
+        val trainObjFile = "/train-pickle-onebit/"
+        val testObjFile = "/test-pickle-onebit/"
         val train = (
             if (args(7).toInt == 1) {
                 val data = sqlContext.read.parquet(args(0)).rdd.repartition(featureSize)
                 data.map(rowToInstance)
             } else {
-                sc.objectFile[Instance]("/user/ec2-user/train-pickle-mid/")
+                sc.objectFile[Instance](trainObjFile)
+                  // .coalesce(featureSize)
             }
-        ) // .cache()
+        ).cache()
         val test = (
             if (args(7).toInt == 1) {
                 sqlContext.read.parquet(args(1)).rdd
                           .sample(false, 0.1)
                           .map(rowToInstance)
             } else {
-                sc.objectFile[Instance]("/user/ec2-user/test-pickle/")
+                sc.objectFile[Instance](testObjFile)
             }
-        ) // .cache()
+        ).cache()
+        println("Partition size: " + train.partitions.size)
+        println(test.partitions.size)
+        println("Training data size: " + train.count)
         if (args(7).toInt == 1) {
-            train.saveAsObjectFile("train-pickle-50m/")
-            test.saveAsObjectFile("test-pickle/")
+            train.saveAsObjectFile(trainObjFile)
+            test.saveAsObjectFile(testObjFile)
         }
         // println("Training data size: " + train.count)
         // println("Test data size: " + test.count)
