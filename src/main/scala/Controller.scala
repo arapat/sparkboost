@@ -12,14 +12,15 @@ import sparkboost.utils.Comparison
 
 object Controller extends Comparison {
     type RDDType = RDD[(List[Instance], Int, List[Double])]
+    type TestRDDType = RDD[Array[Instance]]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, Double, Double)
     type LearnerFunc = (RDDType, ListBuffer[SplitterNode], LossFunc, Int) => LearnerObj
     type UpdateFunc = (RDDType, SplitterNode) => RDDType
     type WeightFunc = (Int, Double, Double) => Double
 
-    def printStats(train: RDDType, test: RDD[Array[Instance]], nodes: List[SplitterNode],
-                   iter: Int) {
+    def printStats(train: RDDType, test: TestRDDType, nodes: List[SplitterNode],
+                   iter: Int) = {
         // manual fix the auPRC computation bug in MLlib
         def adjust(points: Array[(Double, Double)]) = {
             require(points.length == 2)
@@ -50,6 +51,7 @@ object Controller extends Comparison {
         println("(Training) auPRC = " + train_auPRC)
         println("(Test) auPRC = " + test_auPRC)
         println("Effective count ratio is " + effectCnt)
+        effectCnt
     }
 
     def sample(data: RDDType,
@@ -68,9 +70,11 @@ object Controller extends Comparison {
             var curWeight = rand() * segsize // first sample point
             var accumWeight = 0.0
             for (iw <- array.zip(weights)) {
+                /*
                 if (iw._1.y > 0) {
                     sampleList.append(iw._1)
                 }
+                */
                 while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
                     sampleList.append(iw._1)
                     curWeight += segsize
@@ -88,8 +92,8 @@ object Controller extends Comparison {
         sampleData
     }
 
-    def runADTree(train: RDD[Instance],
-                  test: RDD[Instance],
+    def runADTree(glomTrain: RDDType,
+                  glomTest: TestRDDType,
                   learnerFunc: LearnerFunc,
                   updateFunc: UpdateFunc,
                   lossFunc: LossFunc,
@@ -106,32 +110,10 @@ object Controller extends Comparison {
             }
         }
 
-        def preprocess(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
-            val index = partIndex % featureSize
-            val sortedInsts = data.toList.sortWith(_.X(index) < _.X(index))
-
-            // Generate the slices
-            val sliceSize = (sortedInsts.size * sliceFrac).floor.toInt
-            val slices =
-                (sliceSize until sortedInsts.size by sliceSize).map(
-                    idx => 0.5 * (sortedInsts(idx - 1).X(index) + sortedInsts(idx).X(index))
-                ).distinct.toList :+ Double.MaxValue
-            Iterator((sortedInsts, index, slices))
-        }
-
         def getMetaInfo(insts: List[Instance]) = {
             val posInsts = insts.count(_.y > 0)
             (insts.size, posInsts, insts.size - posInsts)
         }
-
-        // assure the feature size is equal to the partition size
-        val featureSize = train.first.X.size
-        require(train.partitions.size >= featureSize)
-
-        // Glom data
-        val glomTrain = train.mapPartitionsWithIndex(preprocess(featureSize))
-                             .cache()
-        val glomTest = test.coalesce(10).glom().cache()
 
         // print meta info about partitions
         val metas = glomTrain.map(_._1).map(getMetaInfo).collect
@@ -184,13 +166,33 @@ object Controller extends Comparison {
                         _._1
                     ).map {
                         t: Instance => ((newNode.check(t), t.y), t.w)
-                    }.filter {
-                        t => t._1._1 != 0
                     }.reduceByKey {
                         (a: Double, b: Double) => a + b
                     }.collectAsMap()
                 )
-                println("predicts:" + predicts)
+                val predictsCount = (
+                    data.flatMap(
+                        _._1
+                    ).map {
+                        t: Instance => ((newNode.check(t), t.y), 1)
+                    }.reduceByKey {
+                        (a: Int, b: Int) => a + b
+                    }.collectAsMap()
+                )
+                val verify = {
+                    data.filter(
+                        _._2 == splitIndex
+                    ).flatMap(
+                        _._1
+                    ).map {
+                        t: Instance => ((newNode.check(t), t.y), 1)
+                    }.reduceByKey {
+                        (a: Int, b: Int) => a + b
+                    }.collectAsMap()
+                }
+                println("predicts: " + predicts)
+                println("counts: " + predictsCount)
+                println("verify: " + verify)
                 val leftPos = predicts.getOrElse((1, 1), 0.0)
                 val leftNeg = predicts.getOrElse((1, -1), 0.0)
                 val rightPos = predicts.getOrElse((-1, 1), 0.0)
@@ -202,7 +204,7 @@ object Controller extends Comparison {
                 val rightPred = bestSplit._4._2
                 */
                 newNode.setPredict(leftPred, rightPred)
-                println(s"Predicts ($leftPred, $rightPred)")
+                println(s"Predicts ($leftPred, $rightPred) Father $prtNodeIndex")
                 if (compare(leftPred) == 0 && compare(rightPred) == 0) {
                     trapped = true
                 } else {
@@ -224,7 +226,10 @@ object Controller extends Comparison {
                         data.checkpoint()
                     }
                     */
-                    printStats(data, glomTest, nodes.toList, batch * K + iteration)
+                    val effcnt = printStats(data, glomTest, nodes.toList, batch * K + iteration)
+                    if (effcnt < 0.5) {
+                        trapped = true
+                    }
                 }
 
                 println
@@ -234,28 +239,14 @@ object Controller extends Comparison {
         nodes
     }
 
-    def runADTreeWithAdaBoost(instances: RDD[Instance], test: RDD[Instance], sliceFrac: Double,
+    def runADTreeWithAdaBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
                               sampleFrac: Double, K: Int, T: Int, repartition: Boolean) = {
-        val data =
-            if (repartition) {
-                val featureSize = instances.first.X.size
-                instances.repartition(featureSize)
-            } else {
-                instances
-            }
-        runADTree(data, test, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
+        runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc, sliceFrac, sampleFrac, K, T)
     }
 
-    def runADTreeWithLogitBoost(instances: RDD[Instance], test: RDD[Instance], sliceFrac: Double,
+    def runADTreeWithLogitBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
                                 sampleFrac: Double, K: Int, T: Int, repartition: Boolean) = {
-        val data =
-            if (repartition) {
-                val featureSize = instances.first.X.size
-                instances.repartition(featureSize)
-            } else {
-                instances
-            }
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc, sliceFrac, sampleFrac, K, T)
     }

@@ -28,10 +28,23 @@ object SpliceSite {
         2 -> objects
     */
     def main(args: Array[String]) {
+        def preprocess(featureSize: Int, sliceFrac: Double)(partIndex: Int, data: Iterator[Instance]) = {
+            val index = partIndex % featureSize
+            val sortedInsts = data.toVector.sortWith(_.X(index) < _.X(index))
+
+            // Generate the slices
+            val sliceSize = (sortedInsts.size * sliceFrac).floor.toInt
+            val slices =
+                (sliceSize until sortedInsts.size by sliceSize).map(
+                    idx => 0.5 * (sortedInsts(idx - 1).X(index) + sortedInsts(idx).X(index))
+                ).distinct.toList :+ Double.MaxValue
+            Iterator((sortedInsts.toList, index, slices))
+        }
+
         // Feature: P1 + P2
         val CENTER = 60
-        val LEFT_WINDOW = 59
-        val RIGHT_WINDOW = 80
+        val LEFT_WINDOW = 20 // 59
+        val RIGHT_WINDOW = 20 // 80
         val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
         val featureSize = (WINDOW_SIZE) * 4 // + (WINDOW_SIZE - 1) * 4 * 4
         val indexMap = {
@@ -42,8 +55,9 @@ object SpliceSite {
             // (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
             p1.zip(0 until p1.size).toMap
         }
-        def rowToInstance(t: Row) = {
-            val raw = t.toSeq.tail.toVector.map(_.asInstanceOf[String])
+        def rowToInstance(s: String) = {
+            val data = s.slice(1, s.size - 2).split(", u'")
+            val raw = data(1)
             val window = (
                 raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
                 raw.slice(CENTER + 1, CENTER + RIGHT_WINDOW + 1)
@@ -51,7 +65,7 @@ object SpliceSite {
             val nonzeros = (
                 (0 until WINDOW_SIZE).zip(window) // ++
                 // (0 until WINDOW_SIZE).zip(window.zip(window.tail).map(t => t._1 + t._2))
-            ).map(t => indexMap(t._1 + t._2)).sorted
+            ).map(t => indexMap(t._1 + t._2.toString)).sorted
             val feature = ArrayBuffer[Double]()
             var last = 0
             for (i <- 0 until featureSize) {
@@ -62,7 +76,7 @@ object SpliceSite {
                     feature.append(0.0)
                 }
             }
-            Instance(t.getInt(0), feature.toVector)
+            Instance(data(0).toInt, feature.toVector)
         }
 
         if (args.size != 8) {
@@ -84,40 +98,60 @@ object SpliceSite {
         // training
         val trainObjFile = "/train-pickle-onebit/"
         val testObjFile = "/test-pickle-onebit/"
-        val train = (
+
+        val glomTrain = (
             if (args(7).toInt == 1) {
-                val data = sqlContext.read.parquet(args(0)).rdd.repartition(featureSize)
-                data.map(rowToInstance)
+                val train = sc.textFile(args(0))
+                              .map(rowToInstance)
+                              .cache()
+
+                // up-sample positive samples
+                val perPart = math.min(featureSize, 200.0) // TODO: make this a variable
+                val posSize = 3000
+                val dupSize = (perPart * featureSize / posSize).ceil.toInt
+
+                train.flatMap(inst =>
+                    if (inst.y < 0) {
+                        Iterator(inst)
+                    } else {
+                        (0 until dupSize).map(_ => Instance(inst.y, inst.X))
+                    }
+                ).repartition(featureSize)
+                 .mapPartitionsWithIndex(preprocess(featureSize, 0.05))
             } else {
-                sc.objectFile[Instance](trainObjFile)
-                  // .coalesce(featureSize)
+                sc.objectFile[(List[Instance], Int, List[Double])](trainObjFile)
+                  .coalesce(featureSize)
             }
         ).cache()
-        val test = (
+        val glomTest = (
             if (args(7).toInt == 1) {
-                sqlContext.read.parquet(args(1)).rdd
-                          .sample(false, 0.1)
-                          .map(rowToInstance)
+                sc.textFile(args(1))
+                  .sample(false, 0.1)
+                  .map(rowToInstance)
+                  .coalesce(10)
+                  .glom()
             } else {
-                sc.objectFile[Instance](testObjFile)
+                sc.objectFile[Array[Instance]](testObjFile)
             }
         ).cache()
-        println("Partition size: " + train.partitions.size)
-        println(test.partitions.size)
-        println("Training data size: " + train.count)
         if (args(7).toInt == 1) {
-            train.saveAsObjectFile(trainObjFile)
-            test.saveAsObjectFile(testObjFile)
+            glomTrain.saveAsObjectFile(trainObjFile)
+            glomTest.saveAsObjectFile(testObjFile)
         }
+
         // println("Training data size: " + train.count)
+
+        println("Partition size: " + glomTrain.partitions.size)
+
         // println("Test data size: " + test.count)
         // println("Positive: " + test.filter(_.y > 0).count)
         // println("Negative: " + test.filter(_.y < 0).count)
+
         val nodes = args(5).toInt match {
-            case 1 => Controller.runADTreeWithAdaBoost(train, test, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
+            case 1 => Controller.runADTreeWithAdaBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
             // TODO: added bulk learning option
             // case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(3).toInt)
-            case 3 => Controller.runADTreeWithLogitBoost(train, test, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
+            case 3 => Controller.runADTreeWithLogitBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
         }
         for (t <- nodes) {
             println(t)
@@ -139,3 +173,10 @@ object SpliceSite {
         SplitterNode.save(nodes.toList, args(6))
     }
 }
+
+// command:
+//
+// spark/bin/spark-submit --class sparkboost.examples.SpliceSite
+// --master spark://ec2-54-152-1-69.compute-1.amazonaws.com:7077
+// --conf spark.executor.extraJavaOptions=-XX:+UseG1GC  ./sparkboost_2.11-0.1.jar
+// /train-1m /test-txt 0.05 1 50 1 ./model.bin 2 > result.txt 2> log.txt

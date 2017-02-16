@@ -21,6 +21,7 @@ object Higgs {
         3 -> LogitBoost partitioned
     args(6) - File path to save the model
     */
+    /*
     def main(args: Array[String]) {
         if (args.size != 7) {
             println(
@@ -60,7 +61,7 @@ object Higgs {
         }
 
         // evaluation
-        /*
+        // ---
         val trainMargin = train.coalesce(20).glom()
                                .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
                                .cache()
@@ -69,9 +70,12 @@ object Higgs {
         val trainErrorRate = trainError.toDouble / trainTotal
         // println("Margin: " + trainMargin.sum)
         println("Training error is " + trainErrorRate)
-        */
+        // ---
+
+
         sc.stop()
 
         SplitterNode.save(nodes.toList, args(6))
     }
+    */
 }

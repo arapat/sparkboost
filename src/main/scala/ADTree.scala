@@ -16,7 +16,7 @@ class SplitterNode(val index: Int, val splitIndex: Int, val splitVal: Double,
         if (preChecked || prtIndex < 0 ||
                 (onLeft && instance.scores(prtIndex) > 0) ||
                 (!onLeft && instance.scores(prtIndex) < 0)) {
-            if (splitIndex < 0 || compare(instance.X(index), splitVal) <= 0) {
+            if (splitIndex < 0 || compare(instance.X(splitIndex), splitVal) <= 0) {
                 1
             } else {
                 -1
