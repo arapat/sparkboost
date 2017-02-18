@@ -28,17 +28,66 @@ object SpliceSite {
         2 -> objects
     */
     def main(args: Array[String]) {
-        def preprocess(featureSize: Int, sliceFrac: Double)(partIndex: Int, data: Iterator[Instance]) = {
+        def preprocessSort(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
             val index = partIndex % featureSize
-            val sortedInsts = data.toVector.sortWith(_.X(index) < _.X(index))
+            Iterator((index, (index, data.toList.sortWith(_.X(index) < _.X(index)))))
+        }
 
-            // Generate the slices
-            val sliceSize = (sortedInsts.size * sliceFrac).floor.toInt
+        def preprocessMergeSort(a: (Int, List[Instance]), b: (Int, List[Instance])) = {
+            if (a._2.size == 0) {
+                b
+            } else if (b._2.size == 0) {
+                a
+            } else {
+                val merged = ArrayBuffer[Instance]()
+                val index = a._1
+                val leftIter = a._2.iterator
+                val rightIter = b._2.iterator
+                var leftItem = leftIter.next
+                var rightItem = rightIter.next
+                var lastLeft =
+                    if (leftItem.X(index) < rightItem.X(index)) {
+                        merged += leftItem
+                        true
+                    } else {
+                        merged += rightItem
+                        true
+                    }
+                while ((!lastLeft || leftIter.hasNext) && (lastLeft || rightIter.hasNext)) {
+                    if (lastLeft) {
+                        leftItem = leftIter.next
+                    } else {
+                        rightItem = rightIter.next
+                    }
+                    lastLeft =
+                        if (leftItem.X(index) < rightItem.X(index)) {
+                            merged += leftItem
+                            true
+                        } else {
+                            merged += rightItem
+                            true
+                        }
+                }
+                while (leftIter.hasNext) {
+                    merged += leftIter.next
+                }
+                while (rightIter.hasNext) {
+                    merged += rightIter.next
+                }
+
+                (a._1, merged.toList)
+            }
+        }
+
+        def preprocessSlices(sliceFrac: Double)(indexData: (Int, List[Instance])) = {
+            val index = indexData._1
+            val data = indexData._2.map(_.X(index)).toVector
+            val sliceSize = (indexData._2.size * sliceFrac).floor.toInt
             val slices =
-                (sliceSize until sortedInsts.size by sliceSize).map(
-                    idx => 0.5 * (sortedInsts(idx - 1).X(index) + sortedInsts(idx).X(index))
+                (sliceSize until data.size by sliceSize).map(
+                    idx => 0.5 * (data(idx - 1) + data(idx))
                 ).distinct.toList :+ Double.MaxValue
-            Iterator((sortedInsts.toList, index, slices))
+            (indexData._2, index, slices)
         }
 
         // Feature: P1 + P2
@@ -96,19 +145,20 @@ object SpliceSite {
         sc.setCheckpointDir("checkpoints/")
 
         // training
+        val partitionSize = 10
         val trainObjFile = "/train-pickle-onebit/"
         val testObjFile = "/test-pickle-onebit/"
 
         val glomTrain = (
             if (args(7).toInt == 1) {
-                val train = sc.textFile(args(0))
+                val train = sc.textFile(args(0), 200)
                               .map(rowToInstance)
-                              .cache()
 
                 // up-sample positive samples
+                /*
                 val perPart = math.min(featureSize, 200.0) // TODO: make this a variable
                 val posSize = 3000
-                val dupSize = (perPart * featureSize / posSize).ceil.toInt
+                val dupSize = 1  // (perPart * featureSize / posSize).ceil.toInt
 
                 train.flatMap(inst =>
                     if (inst.y < 0) {
@@ -116,13 +166,16 @@ object SpliceSite {
                     } else {
                         (0 until dupSize).map(_ => Instance(inst.y, inst.X))
                     }
-                ).repartition(featureSize)
-                 .mapPartitionsWithIndex(preprocess(featureSize, 0.05))
+                )
+                */
+                train.mapPartitionsWithIndex(preprocessSort(featureSize))
+                     .reduceByKey(preprocessMergeSort)
+                     .map(t => preprocessSlices(0.05)(t._2))
             } else {
                 sc.objectFile[(List[Instance], Int, List[Double])](trainObjFile)
                   .coalesce(featureSize)
             }
-        ).cache()
+        ).persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
         val glomTest = (
             if (args(7).toInt == 1) {
                 sc.textFile(args(1))
@@ -133,7 +186,7 @@ object SpliceSite {
             } else {
                 sc.objectFile[Array[Instance]](testObjFile)
             }
-        ).cache()
+        ).persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
         if (args(7).toInt == 1) {
             glomTrain.saveAsObjectFile(trainObjFile)
             glomTest.saveAsObjectFile(testObjFile)

@@ -143,16 +143,17 @@ object Controller extends Comparison {
 
         // Iteratively grow the ADTree
         var batch = 0
-        while (batch < T / K) {
+        var data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY)
+        while (batch < 1) {  // T / K) {
             // Set up instances RDD
-            var data = sample(glomTrain, sampleFrac, nodes.toList, weightFunc)
+            // var data = sample(glomTrain, sampleFrac, nodes.toList, weightFunc)
             // println("New positive sample weight:")
             // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
             // println("New negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
 
             var iteration = 0
             var trapped = false
-            while (!trapped) {
+            while (iteration < T) {
                 iteration = iteration + 1
 
                 val bestSplit = learnerFunc(data, nodes, lossFunc, 0)
