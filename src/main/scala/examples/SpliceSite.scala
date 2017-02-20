@@ -151,6 +151,7 @@ object SpliceSite {
 
         val conf = new SparkConf()
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+            .set("spark.kryoserializer.buffer.mb","24")
         val sc = new SparkContext(conf)
         val sqlContext = new SQLContext(sc)
         sc.setCheckpointDir("checkpoints/")
