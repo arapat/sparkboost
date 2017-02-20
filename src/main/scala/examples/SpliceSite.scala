@@ -184,9 +184,9 @@ object SpliceSite {
                      .map(t => preprocessSlices(0.05)(t._2))
             } else {
                 sc.objectFile[(List[Instance], Int, List[Double])](trainObjFile)
-                  .coalesce(featureSize)
             }
-        ) // .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+        ).repartition(featureSize)
+        .persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY_SER)
         val glomTest = (
             if (args(7).toInt == 1) {
                 sc.textFile(args(1))

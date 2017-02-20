@@ -142,8 +142,9 @@ object Controller extends Comparison {
 
         // Iteratively grow the ADTree
         var batch = 0
-        var data = updateFunc(glomTrain, rootNode).cache()
+        var data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY_SER)
         data.count()
+        glomTrain.unpersist()
         printStats(data.filter(_._2 < BINSIZE), glomTest, nodes.toList, 0)
         println()
 
@@ -226,8 +227,10 @@ object Controller extends Comparison {
                     // TODO: why caching will slow the program down?
                     // println("(before) Positive sample weight:")
                     // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
-                    data = updateFunc(data, newNode).cache()
+                    val oldData = data
+                    data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY_SER)
                     data.count()
+                    oldData.unpersist()
                     // println("(after) Positive sample weight:")
                     // println(data.map(_._1.filter(_.y > 0)).reduce(_ ::: _).foreach(t => println("%.2f ".format(t.w) + t.X)))
                     // return nodes
