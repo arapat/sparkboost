@@ -13,6 +13,7 @@ import java.io._
 import sparkboost.utils.Comparison
 
 object Controller extends Comparison {
+    val BINSIZE = 10
     type RDDType = RDD[(List[Instance], Int, List[Double])]
     type TestRDDType = RDD[Array[Instance]]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
@@ -51,6 +52,7 @@ object Controller extends Comparison {
         val test_auPRC = testMetrics.areaUnderPR + adjust(testMetrics.pr.take(2))
 
         println("(Training) auPRC = " + train_auPRC)
+        // println("Training PR = " + trainMetrics.pr.collect)
         println("(Test) auPRC = " + test_auPRC)
         println("Effective count ratio is " + effectCnt)
         effectCnt
@@ -137,13 +139,14 @@ object Controller extends Comparison {
         rootNode.setPredict(predVal, 0.0)
         val nodes = ListBuffer(rootNode)
         println(s"Predict ($predVal, 0.0)")
-        printStats(sample(glomTrain, sampleFrac, nodes.toList, weightFunc),
-                   glomTest, nodes.toList, 0)
-        println()
 
         // Iteratively grow the ADTree
         var batch = 0
-        var data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY)
+        var data = updateFunc(glomTrain, rootNode).cache()
+        data.count()
+        printStats(data.filter(_._2 < BINSIZE), glomTest, nodes.toList, 0)
+        println()
+
         while (batch < 1) {  // T / K) {
             // Set up instances RDD
             // var data = sample(glomTrain, sampleFrac, nodes.toList, weightFunc)
@@ -165,7 +168,9 @@ object Controller extends Comparison {
 
                 // compute the predictions of the new node
                 val predicts = (
-                    data.flatMap(
+                    data.filter(
+                        _._2 < BINSIZE
+                    ).flatMap(
                         _._1
                     ).map {
                         t: Instance => ((newNode.check(t), t.y), t.w)
@@ -174,7 +179,9 @@ object Controller extends Comparison {
                     }.collectAsMap()
                 )
                 val predictsCount = (
-                    data.flatMap(
+                    data.filter(
+                        _._2 < BINSIZE
+                    ).flatMap(
                         _._1
                     ).map {
                         t: Instance => ((newNode.check(t), t.y), 1)
@@ -219,7 +226,8 @@ object Controller extends Comparison {
                     // TODO: why caching will slow the program down?
                     // println("(before) Positive sample weight:")
                     // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
-                    data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY)
+                    data = updateFunc(data, newNode).cache()
+                    data.count()
                     // println("(after) Positive sample weight:")
                     // println(data.map(_._1.filter(_.y > 0)).reduce(_ ::: _).foreach(t => println("%.2f ".format(t.w) + t.X)))
                     // return nodes
@@ -229,7 +237,9 @@ object Controller extends Comparison {
                         data.checkpoint()
                     }
                     */
-                    val effcnt = printStats(data, glomTest, nodes.toList, batch * K + iteration)
+                    val effcnt = printStats(
+                        data.filter(_._2 < BINSIZE), glomTest, nodes.toList, batch * K + iteration
+                    )
                     if (effcnt < 0.5) {
                         trapped = true
                     }

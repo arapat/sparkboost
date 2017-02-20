@@ -2,6 +2,7 @@ package sparkboost.examples
 
 import scala.io.Source
 import collection.mutable.ArrayBuffer
+import util.Random.nextDouble
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
@@ -28,9 +29,19 @@ object SpliceSite {
         2 -> objects
     */
     def main(args: Array[String]) {
+        val BINSIZE = 10
+
         def preprocessSort(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
-            val index = partIndex % featureSize
-            Iterator((index, (index, data.toList.sortWith(_.X(index) < _.X(index)))))
+            val partId = partIndex % BINSIZE
+            val dupData = ArrayBuffer[(Int, (Int, List[Instance]))]()
+            val sample = data.toList.filter(inst => {
+                if (inst.y > 0) true
+                else if (nextDouble() <= 0.01) true
+                else false
+            })
+            (partId until featureSize by BINSIZE).map(
+                idx => (idx, (idx, sample.sortWith(_.X(idx) < _.X(idx))))
+            ).iterator
         }
 
         def preprocessMergeSort(a: (Int, List[Instance]), b: (Int, List[Instance])) = {
@@ -51,7 +62,7 @@ object SpliceSite {
                         true
                     } else {
                         merged += rightItem
-                        true
+                        false
                     }
                 while ((!lastLeft || leftIter.hasNext) && (lastLeft || rightIter.hasNext)) {
                     if (lastLeft) {
@@ -65,7 +76,7 @@ object SpliceSite {
                             true
                         } else {
                             merged += rightItem
-                            true
+                            false
                         }
                 }
                 while (leftIter.hasNext) {
@@ -82,7 +93,7 @@ object SpliceSite {
         def preprocessSlices(sliceFrac: Double)(indexData: (Int, List[Instance])) = {
             val index = indexData._1
             val data = indexData._2.map(_.X(index)).toVector
-            val sliceSize = (indexData._2.size * sliceFrac).floor.toInt
+            val sliceSize = math.max(1, (indexData._2.size * sliceFrac).floor.toInt)
             val slices =
                 (sliceSize until data.size by sliceSize).map(
                     idx => 0.5 * (data(idx - 1) + data(idx))
@@ -105,7 +116,7 @@ object SpliceSite {
             p1.zip(0 until p1.size).toMap
         }
         def rowToInstance(s: String) = {
-            val data = s.slice(1, s.size - 2).split(", u'")
+            val data = s.slice(1, s.size - 1).split(",")
             val raw = data(1)
             val window = (
                 raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
@@ -175,7 +186,7 @@ object SpliceSite {
                 sc.objectFile[(List[Instance], Int, List[Double])](trainObjFile)
                   .coalesce(featureSize)
             }
-        ).persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+        ) // .persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
         val glomTest = (
             if (args(7).toInt == 1) {
                 sc.textFile(args(1))
@@ -195,6 +206,20 @@ object SpliceSite {
         // println("Training data size: " + train.count)
 
         println("Partition size: " + glomTrain.partitions.size)
+        println("Train set size: " + glomTrain.count)
+        println("Train data size: " + glomTrain.map(_._1.size).reduce(_ + _))
+
+        /*
+        val reducedGlomTrain = glomTrain.map(t => {
+            val sample = t._1.filter(inst => {
+                if (inst.y > 0) true
+                else if (nextDouble() <= 0.1) true
+                else false
+            })
+            (sample, t._2, t._3)
+        }).cache()
+        println("Sample size: " + reducedGlomTrain.map(_._1.size).reduce(_ + _))
+        */
 
         // println("Test data size: " + test.count)
         // println("Positive: " + test.filter(_.y > 0).count)
