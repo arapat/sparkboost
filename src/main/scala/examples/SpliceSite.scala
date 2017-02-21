@@ -29,14 +29,14 @@ object SpliceSite {
         2 -> objects
     */
     def main(args: Array[String]) {
-        val BINSIZE = 10
+        val BINSIZE = 40
 
         def preprocessSort(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
             val partId = partIndex % BINSIZE
             val dupData = ArrayBuffer[(Int, (Int, List[Instance]))]()
             val sample = data.toList.filter(inst => {
                 if (inst.y > 0) true
-                else if (nextDouble() <= 0.01) true
+                else if (nextDouble() <= 0.05) true
                 else false
             })
             (partId until featureSize by BINSIZE).map(
@@ -191,9 +191,9 @@ object SpliceSite {
         val glomTest = (
             if (args(7).toInt == 1) {
                 sc.textFile(args(1))
-                  .sample(false, 0.1)
+                  // .sample(false, 0.1)
                   .map(rowToInstance)
-                  .coalesce(10)
+                  .coalesce(20)
                   .glom()
             } else {
                 sc.objectFile[Array[Instance]](testObjFile)
@@ -209,6 +209,10 @@ object SpliceSite {
         println("Partition size: " + glomTrain.partitions.size)
         println("Train set size: " + glomTrain.count)
         println("Train data size: " + glomTrain.map(_._1.size).reduce(_ + _))
+        println("Distinct positive samples in the training data: " +
+                glomTrain.filter(_._2 < BINSIZE).map(_._1.count(t => t.y > 0)).reduce(_ + _))
+        println("Distinct negative samples in the training data: " +
+                glomTrain.filter(_._2 < BINSIZE).map(_._1.count(t => t.y < 0)).reduce(_ + _))
 
         /*
         val reducedGlomTrain = glomTrain.map(t => {

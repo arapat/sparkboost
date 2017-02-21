@@ -13,7 +13,7 @@ import java.io._
 import sparkboost.utils.Comparison
 
 object Controller extends Comparison {
-    val BINSIZE = 10
+    val BINSIZE = 40
     type RDDType = RDD[(List[Instance], Int, List[Double])]
     type TestRDDType = RDD[Array[Instance]]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
@@ -218,7 +218,8 @@ object Controller extends Comparison {
                 println(s"Predicts ($leftPred, $rightPred) Father $prtNodeIndex")
                 if (compare(leftPred) == 0 && compare(rightPred) == 0) {
                     trapped = true
-                } else {
+                }
+                {
                     // add the new node to the nodes list
                     nodes(prtNodeIndex).addChild(onLeft, nodes.size)
                     nodes.append(newNode)
