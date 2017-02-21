@@ -86,13 +86,18 @@ object SpliceSite {
                     merged += rightIter.next
                 }
 
-                (a._1, merged.toList)
+                (index, merged.toList)
             }
         }
 
         def preprocessSlices(sliceFrac: Double)(indexData: (Int, List[Instance])) = {
             val index = indexData._1
             val data = indexData._2.map(_.X(index)).toVector
+            var last = data(0)
+            for (t <- data) {
+                require(last <= t)
+                last = t
+            }
             val sliceSize = math.max(1, (indexData._2.size * sliceFrac).floor.toInt)
             val slices =
                 (sliceSize until data.size by sliceSize).map(
