@@ -13,7 +13,7 @@ import java.io._
 import sparkboost.utils.Comparison
 
 object Controller extends Comparison {
-    val BINSIZE = 40
+    val BINSIZE = 1
     type RDDType = RDD[(List[Instance], Int, List[Double])]
     type TestRDDType = RDD[Array[Instance]]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
@@ -87,7 +87,8 @@ object Controller extends Comparison {
             }
             for (s <- sampleList) {
                 s.setWeight(1.0)
-                s.setScores(nodes)
+                // TODO: FIX THIS
+                // s.setScores(nodes)
             }
             (sampleList.toList, datum._2, datum._3)
         })
@@ -142,7 +143,7 @@ object Controller extends Comparison {
 
         // Iteratively grow the ADTree
         var batch = 0
-        var data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY_SER)
+        var data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY)  // _SER)
         data.count()
         glomTrain.unpersist()
         printStats(data.filter(_._2 < BINSIZE), glomTest, nodes.toList, 0)
@@ -229,7 +230,7 @@ object Controller extends Comparison {
                     // println("(before) Positive sample weight:")
                     // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
                     val oldData = data
-                    data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY_SER)
+                    data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY)  // _SER)
                     data.count()
                     oldData.unpersist()
                     // println("(after) Positive sample weight:")
@@ -279,7 +280,7 @@ object Controller extends Comparison {
             for (t <- negTrain) {
                 val score = SplitterNode.getScore(0, lnodes, t, i)
                 val negscore = -score
-                trainWrite.write(s"$id : $score : $negscore : -1 : \n")
+                trainWrite.write(s"$id : $negscore : $score : -1 : \n")
                 id = id + 1
             }
             id = 0
@@ -291,7 +292,7 @@ object Controller extends Comparison {
             for (t <- negTest) {
                 val score = SplitterNode.getScore(0, lnodes, t, i)
                 val negscore = -score
-                testWrite.write(s"$id : $score : $negscore : -1 : \n")
+                testWrite.write(s"$id : $negscore : $score : -1 : \n")
                 id = id + 1
             }
         }

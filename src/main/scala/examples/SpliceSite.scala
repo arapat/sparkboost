@@ -29,18 +29,18 @@ object SpliceSite {
         2 -> objects
     */
     def main(args: Array[String]) {
-        val BINSIZE = 40
+        val BINSIZE = 1
+        val ALLSAMPLE = 0.05
+        val NEGSAMPLE = 0.01
+        val trainObjFile = "/train-pickle-onebit2/"
+        val testObjFile = "/test-pickle-onebit2/"
 
-        def preprocessSort(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
+        def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
             val partId = partIndex % BINSIZE
             val dupData = ArrayBuffer[(Int, (Int, List[Instance]))]()
-            val sample = data.toList.filter(inst => {
-                if (inst.y > 0) true
-                else if (nextDouble() <= 0.05) true
-                else false
-            })
+            val sample = data.toList
             (partId until featureSize by BINSIZE).map(
-                idx => (idx, (idx, sample.sortWith(_.X(idx) < _.X(idx))))
+                idx => (idx, (idx, sample))
             ).iterator
         }
 
@@ -141,7 +141,7 @@ object SpliceSite {
                     feature.append(0.0)
                 }
             }
-            Instance(data(0).toInt, feature.toVector)
+            Instance(data(0).toInt, feature.toArray) // .toVector)
         }
 
         if (args.size != 8) {
@@ -162,15 +162,16 @@ object SpliceSite {
         sc.setCheckpointDir("checkpoints/")
 
         // training
-        val partitionSize = 10
-        val trainObjFile = "/train-pickle-onebit/"
-        val testObjFile = "/test-pickle-onebit/"
+        val allData = sc.textFile(args(0), 200)
+                        .map(rowToInstance)
+                        .filter(inst => {
+                            nextDouble() <= ALLSAMPLE &&
+                            (inst.y > 0 || nextDouble() <= NEGSAMPLE)
+                        }).persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK_SER)
+        val Array(train, test) = allData.randomSplit(Array(0.75, 0.25))
 
         val glomTrain = (
             if (args(7).toInt == 1) {
-                val train = sc.textFile(args(0), 200)
-                              .map(rowToInstance)
-
                 // up-sample positive samples
                 /*
                 val perPart = math.min(featureSize, 200.0) // TODO: make this a variable
@@ -185,25 +186,24 @@ object SpliceSite {
                     }
                 )
                 */
-                train.mapPartitionsWithIndex(preprocessSort(featureSize))
+                train.mapPartitionsWithIndex(preprocessAssign(featureSize))
+                     .map(t => (t._1, (t._2._1, t._2._2.sortWith(_.X(t._1) < _.X(t._1)))))
                      .reduceByKey(preprocessMergeSort)
                      .map(t => preprocessSlices(0.05)(t._2))
             } else {
                 sc.objectFile[(List[Instance], Int, List[Double])](trainObjFile)
             }
-        ).repartition(featureSize)
-        .persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY_SER)
+        ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
         val glomTest = (
             if (args(7).toInt == 1) {
-                sc.textFile(args(1))
+                // sc.textFile(args(1))
                   // .sample(false, 0.1)
-                  .map(rowToInstance)
-                  .coalesce(20)
-                  .glom()
+                test.coalesce(20)
+                    .glom()
             } else {
                 sc.objectFile[Array[Instance]](testObjFile)
             }
-        ).persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK)
+        ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
         if (args(7).toInt == 1) {
             glomTrain.saveAsObjectFile(trainObjFile)
             glomTest.saveAsObjectFile(testObjFile)
@@ -211,13 +211,18 @@ object SpliceSite {
 
         // println("Training data size: " + train.count)
 
-        println("Partition size: " + glomTrain.partitions.size)
-        println("Train set size: " + glomTrain.count)
-        println("Train data size: " + glomTrain.map(_._1.size).reduce(_ + _))
+        println("Train partition (set) size: " + glomTrain.count)
+        println("Test partition (set) size: " + glomTest.count)
         println("Distinct positive samples in the training data: " +
                 glomTrain.filter(_._2 < BINSIZE).map(_._1.count(t => t.y > 0)).reduce(_ + _))
         println("Distinct negative samples in the training data: " +
                 glomTrain.filter(_._2 < BINSIZE).map(_._1.count(t => t.y < 0)).reduce(_ + _))
+        println("Distinct positive samples in the test data: " +
+                glomTest.map(_.count(t => t.y > 0)).reduce(_ + _))
+        println("Distinct negative samples in the test data: " +
+                glomTest.map(_.count(t => t.y < 0)).reduce(_ + _))
+        println()
+        allData.unpersist()
 
         /*
         val reducedGlomTrain = glomTrain.map(t => {
