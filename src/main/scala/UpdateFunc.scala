@@ -36,7 +36,7 @@ object UpdateFunc {
             (data._1.map(s => {
                 s.setWeight(s.w / wsum)
                 s
-             }).toList, data._2, data._3)
+             }), data._2, data._3)
         }
 
         val raw = instances.map(updateFunc(_, node, logitboostUpdateFunc)).cache()

@@ -1,7 +1,6 @@
 package sparkboost.examples
 
 import scala.io.Source
-import collection.mutable.ArrayBuffer
 import util.Random.nextDouble
 
 import org.apache.spark.SparkContext
@@ -37,7 +36,6 @@ object SpliceSite {
 
         def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
             val partId = partIndex % BINSIZE
-            val dupData = ArrayBuffer[(Int, (Int, List[Instance]))]()
             val sample = data.toList
             (partId until featureSize by BINSIZE).map(
                 idx => (idx, (idx, sample))
@@ -50,7 +48,7 @@ object SpliceSite {
             } else if (b._2.size == 0) {
                 a
             } else {
-                val merged = ArrayBuffer[Instance]()
+                var merged = Array[Instance]()
                 val index = a._1
                 val leftIter = a._2.iterator
                 val rightIter = b._2.iterator
@@ -58,10 +56,10 @@ object SpliceSite {
                 var rightItem = rightIter.next
                 var lastLeft =
                     if (leftItem.X(index) < rightItem.X(index)) {
-                        merged += leftItem
+                        merged :+= leftItem
                         true
                     } else {
-                        merged += rightItem
+                        merged :+= rightItem
                         false
                     }
                 while ((!lastLeft || leftIter.hasNext) && (lastLeft || rightIter.hasNext)) {
@@ -72,18 +70,18 @@ object SpliceSite {
                     }
                     lastLeft =
                         if (leftItem.X(index) < rightItem.X(index)) {
-                            merged += leftItem
+                            merged :+= leftItem
                             true
                         } else {
-                            merged += rightItem
+                            merged :+= rightItem
                             false
                         }
                 }
                 while (leftIter.hasNext) {
-                    merged += leftIter.next
+                    merged :+= leftIter.next
                 }
                 while (rightIter.hasNext) {
-                    merged += rightIter.next
+                    merged :+= rightIter.next
                 }
 
                 (index, merged.toList)
@@ -131,17 +129,17 @@ object SpliceSite {
                 (0 until WINDOW_SIZE).zip(window) // ++
                 // (0 until WINDOW_SIZE).zip(window.zip(window.tail).map(t => t._1 + t._2))
             ).map(t => indexMap(t._1 + t._2.toString)).sorted
-            val feature = ArrayBuffer[Double]()
+            var feature = Array[Double]()
             var last = 0
             for (i <- 0 until featureSize) {
                 if (last < nonzeros.size && nonzeros(last) == i) {
-                    feature.append(1.0)
+                    feature :+= 1.0
                     last += 1
                 } else {
-                    feature.append(0.0)
+                    feature :+= 0.0
                 }
             }
-            Instance(data(0).toInt, feature.toArray) // .toVector)
+            Instance(data(0).toInt, feature) // .toVector)
         }
 
         if (args.size != 8) {
@@ -263,7 +261,7 @@ object SpliceSite {
         */
         sc.stop()
 
-        SplitterNode.save(nodes.toList, args(6))
+        SplitterNode.save(nodes, args(6))
     }
 }
 

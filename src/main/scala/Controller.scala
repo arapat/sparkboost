@@ -1,6 +1,5 @@
 package sparkboost
 
-import collection.mutable.ListBuffer
 import math.log
 import util.Random.{nextDouble => rand}
 
@@ -18,11 +17,11 @@ object Controller extends Comparison {
     type TestRDDType = RDD[Array[Instance]]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, Double, Double)
-    type LearnerFunc = (RDDType, ListBuffer[SplitterNode], LossFunc, Int) => LearnerObj
+    type LearnerFunc = (RDDType, Array[SplitterNode], LossFunc, Int) => LearnerObj
     type UpdateFunc = (RDDType, SplitterNode) => RDDType
     type WeightFunc = (Int, Double, Double) => Double
 
-    def printStats(train: RDDType, test: TestRDDType, nodes: List[SplitterNode],
+    def printStats(train: RDDType, test: TestRDDType, nodes: Array[SplitterNode],
                    iter: Int) = {
         // manual fix the auPRC computation bug in MLlib
         def adjust(points: Array[(Double, Double)]) = {
@@ -60,12 +59,12 @@ object Controller extends Comparison {
 
     def sample(data: RDDType,
                fraction: Double,
-               nodes: List[SplitterNode],
+               nodes: Array[SplitterNode],
                wfunc: (Int, Double, Double) => Double): RDDType = {
         println("Resampling...")
         val sampleData = data.map(datum => {
             val array = datum._1
-            val sampleList = ListBuffer[Instance]()
+            var sampleList = Array[Instance]()
             val size = (array.size * fraction).ceil.toInt
             val weights = array.map(t => wfunc(t.y, 1.0, SplitterNode.getScore(0, nodes, t)))
             val weightSum = weights.reduce(_ + _)
@@ -80,7 +79,7 @@ object Controller extends Comparison {
                 }
                 */
                 while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
-                    sampleList.append(iw._1)
+                    sampleList :+= iw._1
                     curWeight += segsize
                 }
                 accumWeight += iw._2
@@ -105,7 +104,7 @@ object Controller extends Comparison {
                   weightFunc: WeightFunc,
                   sliceFrac: Double,
                   sampleFrac: Double,
-                  K: Int, T: Int): ListBuffer[SplitterNode] = {
+                  K: Int, T: Int): Array[SplitterNode] = {
         def safeLogRatio(a: Double, b: Double) = {
             if (compare(a) == 0 && compare(b) == 0) {
                 0.0
@@ -138,7 +137,7 @@ object Controller extends Comparison {
         val predVal = 0.5 * log(posCount.toDouble / negCount)
         val rootNode = SplitterNode(0, -1, 0, -1, true)
         rootNode.setPredict(predVal, 0.0)
-        val nodes = ListBuffer(rootNode)
+        var nodes = Array(rootNode)
         println(s"Predict ($predVal, 0.0)")
 
         // Iteratively grow the ADTree
@@ -146,12 +145,12 @@ object Controller extends Comparison {
         var data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY)  // _SER)
         data.count()
         glomTrain.unpersist()
-        printStats(data.filter(_._2 < BINSIZE), glomTest, nodes.toList, 0)
+        printStats(data.filter(_._2 < BINSIZE), glomTest, nodes, 0)
         println()
 
         while (batch < 1) {  // T / K) {
             // Set up instances RDD
-            // var data = sample(glomTrain, sampleFrac, nodes.toList, weightFunc)
+            // var data = sample(glomTrain, sampleFrac, nodes, weightFunc)
             // println("New positive sample weight:")
             // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
             // println("New negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
@@ -223,7 +222,7 @@ object Controller extends Comparison {
                 {
                     // add the new node to the nodes list
                     nodes(prtNodeIndex).addChild(onLeft, nodes.size)
-                    nodes.append(newNode)
+                    nodes :+= newNode
 
                     // adjust the weights of the instances
                     // TODO: why caching will slow the program down?
@@ -243,7 +242,7 @@ object Controller extends Comparison {
                     }
                     */
                     val effcnt = printStats(
-                        data.filter(_._2 < BINSIZE), glomTest, nodes.toList, batch * K + iteration
+                        data.filter(_._2 < BINSIZE), glomTest, nodes, batch * K + iteration
                     )
                     if (effcnt < 0.5) {
                         trapped = true
@@ -266,31 +265,30 @@ object Controller extends Comparison {
         val trainWrite = new BufferedWriter(new FileWriter(trainFile))
         val testFile = new File("trial0.test.boosting.info")
         val testWrite = new BufferedWriter(new FileWriter(testFile))
-        val lnodes = nodes.toList
 
         for (i <- 1 to nodes.size) {
             trainWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
             testWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
             var id = 0
             for (t <- posTrain) {
-                val score = SplitterNode.getScore(0, lnodes, t, i)
+                val score = SplitterNode.getScore(0, nodes, t, i)
                 trainWrite.write(s"$id : $score : $score : 1 : \n")
                 id = id + 1
             }
             for (t <- negTrain) {
-                val score = SplitterNode.getScore(0, lnodes, t, i)
+                val score = SplitterNode.getScore(0, nodes, t, i)
                 val negscore = -score
                 trainWrite.write(s"$id : $negscore : $score : -1 : \n")
                 id = id + 1
             }
             id = 0
             for (t <- posTest) {
-                val score = SplitterNode.getScore(0, lnodes, t, i)
+                val score = SplitterNode.getScore(0, nodes, t, i)
                 testWrite.write(s"$id : $score : $score : 1 : \n")
                 id = id + 1
             }
             for (t <- negTest) {
-                val score = SplitterNode.getScore(0, lnodes, t, i)
+                val score = SplitterNode.getScore(0, nodes, t, i)
                 val negscore = -score
                 testWrite.write(s"$id : $negscore : $score : -1 : \n")
                 id = id + 1

@@ -1,6 +1,5 @@
 package sparkboost
 
-import collection.mutable.ListBuffer
 import collection.mutable.Queue
 import Double.MaxValue
 
@@ -23,7 +22,7 @@ object Learner extends Comparison {
         }
     }
 
-    def findBestSplit(data: RDDElementType, nodes: ListBuffer[SplitterNode], root: Int,
+    def findBestSplit(data: RDDElementType, nodes: Array[SplitterNode], root: Int,
                       lossFunc: (Double, Double, Double, Double, Double) => Double) = {
         def search(curInsts: List[Instance], index: Int, totWeight: Double, totInsts: Int, splits: List[Double]) = {
             var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0)
@@ -142,7 +141,7 @@ object Learner extends Comparison {
     }
 
     def partitionedGreedySplit(
-            instsGroup: RDDType, nodes: ListBuffer[SplitterNode],
+            instsGroup: RDDType, nodes: Array[SplitterNode],
             lossFunc: (Double, Double, Double, Double, Double) => Double,
             rootIndex: Int = 0) = {
         val bestSplit = instsGroup.map(findBestSplit(_, nodes, rootIndex, lossFunc))
@@ -159,7 +158,7 @@ object Learner extends Comparison {
 
     /*
     def bulkGreedySplit(
-            instsGroup: RDDType, nodes: ListBuffer[SplitterNode],
+            instsGroup: RDDType, nodes: Array[SplitterNode],
             lossFunc: (Double, Double, Double, Double, Double) => Double,
             rootIndex: Int = 0) = {
         val insts = instsGroup.map(_._1).reduce((a, b) => List.concat(a, b))
