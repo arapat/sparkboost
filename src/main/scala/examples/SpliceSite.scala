@@ -3,6 +3,7 @@ package sparkboost.examples
 import scala.io.Source
 import util.Random.nextDouble
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.SparkContext._
@@ -23,11 +24,14 @@ object SpliceSite {
         2 -> AdaBoost non-partitioned
         3 -> LogitBoost partitioned
     args(6) - File path to save the model
-    args(7) - data format
+    args(7) - File path to load the model
+    args(8) - data format
         1 -> raw data
         2 -> objects
+        3 -> sample by model
     */
     def main(args: Array[String]) {
+        val loadMode = args(8).toInt
         val BINSIZE = 1
         val ALLSAMPLE = 0.05
         val NEGSAMPLE = 0.01
@@ -160,12 +164,12 @@ object SpliceSite {
             Instance(data(0).toInt, feature) // .toVector)
         }
 
-        if (args.size != 8) {
+        if (args.size != 9) {
             println(
-                "Please provide five arguments: training data path, " +
+                "Please provide nine arguments: training data path, " +
                 "test data path, sampling fraction, " +
                 "number of iterations, max depth, boolean flag, model file path, " +
-                "data source type."
+                "old model file path, data source type."
             )
             return
         }
@@ -177,55 +181,73 @@ object SpliceSite {
         val sqlContext = new SQLContext(sc)
         sc.setCheckpointDir("checkpoints/")
 
-        // training
-        val allData = sc.textFile(args(0), 200)
-                        .map(rowToInstance)
-                        .filter(inst => {
-                            nextDouble() <= ALLSAMPLE &&
-                            (inst.y > 0 || nextDouble() <= NEGSAMPLE)
-                        }).persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK_SER)
-        allData.count()
-        var Array(train, test) = allData.randomSplit(Array(0.75, 0.25))
-        train = train.cache()
-        test = test.cache()
-        train.count()
-        test.count()
+        // training/testing split
+        val TRAIN_PORTION = 0.75
+        val TEST_PORTION = 1.0 - TRAIN_PORTION
 
         val glomTrain = (
-            if (args(7).toInt == 1) {
-                // up-sample positive samples
-                /*
-                val perPart = math.min(featureSize, 200.0) // TODO: make this a variable
-                val posSize = 3000
-                val dupSize = 1  // (perPart * featureSize / posSize).ceil.toInt
-
-                train.flatMap(inst =>
-                    if (inst.y < 0) {
-                        Iterator(inst)
-                    } else {
-                        (0 until dupSize).map(_ => Instance(inst.y, inst.X))
-                    }
-                )
-                */
-                train.mapPartitionsWithIndex(preprocessAssign(featureSize))
-                     .map(t => (t._1, (t._2._1, t._2._2.sortWith(_.X(t._1) < _.X(t._1)))))
-                     .reduceByKey(preprocessMergeSort)
-                     .map(t => preprocessSlices(0.05)(t._2))
-            } else {
+            if (loadMode == 2){
                 sc.objectFile[(List[Instance], Int, List[Double])](trainObjFile)
+            } else {
+                val balancedTrain = sc.textFile(args(0), 200)
+                                      .map(rowToInstance)
+                                      .filter(inst => {
+                                          (inst.y > 0 || nextDouble() <= NEGSAMPLE)
+                                      })
+                val sampledTrain: RDD[Instance] = {
+                    val fraction = ALLSAMPLE * TRAIN_PORTION
+                    if (loadMode == 1) {
+                        balancedTrain.filter(_ => nextDouble() <= fraction)
+                    } else {
+                        val wfunc = UpdateFunc.adaboostUpdateFunc _
+                        val baseNodes = SplitterNode.load(args(7))
+                        balancedTrain.mapPartitionsWithIndex {
+                            (partIndex: Int, iterator: Iterator[Instance]) => {
+                                val array = iterator.toList
+                                var sampleList = Array[Instance]()
+                                val size = (array.size * fraction).ceil.toInt
+                                val weights = array.map(t =>
+                                    wfunc(t.y, 1.0, SplitterNode.getScore(0, baseNodes, t))
+                                )
+                                val weightSum = weights.reduce(_ + _)
+                                val segsize = weightSum.toDouble / size
+
+                                var curWeight = nextDouble() * segsize // first sample point
+                                var accumWeight = 0.0
+                                for (iw <- array.zip(weights)) {
+                                    while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
+                                        sampleList :+= iw._1
+                                        curWeight += segsize
+                                    }
+                                    accumWeight += iw._2
+                                }
+                                for (s <- sampleList) {
+                                    s.setWeight(1.0)
+                                }
+                                sampleList.toIterator
+                            }
+                        }
+                    }
+                }
+                sampledTrain.mapPartitionsWithIndex(preprocessAssign(featureSize))
+                            .map(t => (t._1, (t._2._1, t._2._2.sortWith(_.X(t._1) < _.X(t._1)))))
+                            .reduceByKey(preprocessMergeSort)
+                            .map(t => preprocessSlices(0.05)(t._2))
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
         val glomTest = (
-            if (args(7).toInt == 1) {
-                // sc.textFile(args(1))
-                  // .sample(false, 0.1)
-                test.coalesce(20)
-                    .glom()
+            if (loadMode == 1) {
+                sc.textFile(args(0), 20)
+                  .map(rowToInstance)
+                  .filter(inst => {
+                      nextDouble() <= ALLSAMPLE * TEST_PORTION &&
+                      (inst.y > 0 || nextDouble() <= NEGSAMPLE)
+                  }).coalesce(20).glom()
             } else {
                 sc.objectFile[Array[Instance]](testObjFile)
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
-        if (args(7).toInt == 1) {
+        if (loadMode == 1) {
             glomTrain.saveAsObjectFile(trainObjFile)
             glomTest.saveAsObjectFile(testObjFile)
         }
@@ -243,25 +265,6 @@ object SpliceSite {
         println("Distinct negative samples in the test data: " +
                 glomTest.map(_.count(t => t.y < 0)).reduce(_ + _))
         println()
-        allData.unpersist()
-        train.unpersist()
-        test.unpersist()
-
-        /*
-        val reducedGlomTrain = glomTrain.map(t => {
-            val sample = t._1.filter(inst => {
-                if (inst.y > 0) true
-                else if (nextDouble() <= 0.1) true
-                else false
-            })
-            (sample, t._2, t._3)
-        }).cache()
-        println("Sample size: " + reducedGlomTrain.map(_._1.size).reduce(_ + _))
-        */
-
-        // println("Test data size: " + test.count)
-        // println("Positive: " + test.filter(_.y > 0).count)
-        // println("Negative: " + test.filter(_.y < 0).count)
 
         val nodes = args(5).toInt match {
             case 1 => Controller.runADTreeWithAdaBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt)
@@ -271,17 +274,6 @@ object SpliceSite {
             println(t)
         }
 
-        // evaluation
-        /*
-        val trainMargin = train.coalesce(20).glom()
-                               .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
-                               .cache()
-        val trainError = trainMargin.map(_.count(_ <= 1e-8)).reduce(_ + _)
-        val trainTotal = trainMargin.map(_.size).reduce(_ + _)
-        val trainErrorRate = trainError.toDouble / trainTotal
-        // println("Margin: " + trainMargin.sum)
-        println("Training error is " + trainErrorRate)
-        */
         sc.stop()
 
         SplitterNode.save(nodes, args(6))
