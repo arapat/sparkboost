@@ -32,8 +32,8 @@ object SpliceSite {
         val BINSIZE = 1
         val ALLSAMPLE = 0.05
         val NEGSAMPLE = 0.01
-        val trainObjFile = "/train-pickle-onebit3/"
-        val testObjFile = "/test-pickle-onebit3/"
+        val trainObjFile = "/train-pickle-onebit2/"
+        val testObjFile = "/test-pickle-onebit2/"
 
         def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
             val partId = partIndex % BINSIZE
@@ -111,18 +111,25 @@ object SpliceSite {
         }
 
         // Feature: P1 + P2
+        val FEATURE_TYPE = 2
         val CENTER = 60
         val LEFT_WINDOW = 20 // 59
         val RIGHT_WINDOW = 20 // 80
         val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
-        val featureSize = (WINDOW_SIZE) * 4 // + (WINDOW_SIZE - 1) * 4 * 4
+        val featureSize =
+            if (FEATURE_TYPE == 1) {
+                (WINDOW_SIZE) * 4
+            } else {
+                (WINDOW_SIZE) * 4 + (WINDOW_SIZE - 1) * 4 * 4
+            }
         val indexMap = {
             val unit = List("A", "C", "G", "T")
             val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
             val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
             val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
-            // (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
-            p1.zip(0 until p1.size).toMap
+
+            if (FEATURE_TYPE == 1) p1.zip(0 until p1.size).toMap
+            else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
         }
         def rowToInstance(s: String) = {
             val data = s.slice(1, s.size - 1).split(",")
@@ -131,12 +138,15 @@ object SpliceSite {
                 raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
                 raw.slice(CENTER + 1, CENTER + RIGHT_WINDOW + 1)
             )
-            val nonzeros = (
-                (0 until WINDOW_SIZE).zip(window) // ++
-                // (0 until WINDOW_SIZE).zip(
-                //     window.zip(window.tail).map(t => t._1.toString + t._2)
-                // )
-            ).map(t => indexMap(t._1 + t._2.toString)).sorted
+            val nonzeros = {
+                if (FEATURE_TYPE == 1) (0 until WINDOW_SIZE).zip(window)
+                else {
+                    (0 until WINDOW_SIZE).zip(window) ++
+                    (0 until WINDOW_SIZE).zip(
+                        window.zip(window.tail).map(t => t._1.toString + t._2)
+                    )
+                }
+            }.map(t => indexMap(t._1 + t._2.toString)).sorted
             var feature = Array[Double]()
             var last = 0
             for (i <- 0 until featureSize) {
