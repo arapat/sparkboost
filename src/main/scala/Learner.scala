@@ -22,7 +22,7 @@ object Learner extends Comparison {
         }
     }
 
-    def findBestSplit(data: RDDElementType, nodes: Array[SplitterNode], root: Int,
+    def findBestSplit(data: RDDElementType, nodes: Array[SplitterNode], maxDepth: Int, root: Int,
                       lossFunc: (Double, Double, Double, Double, Double) => Double) = {
         def search(curInsts: List[Instance], index: Int, totWeight: Double, totInsts: Int, splits: List[Double]) = {
             var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0)
@@ -104,38 +104,34 @@ object Learner extends Comparison {
             val depth = curObj._3
 
             // find a best split value on this node
-            if (depth <= 0) {  // || nodes.size > 50 && depth <= 1) {  // leftInstances.size >= (totExamples * 0.3).toInt) {
-                val leftInstances = data.filter {_.scores(nodeIndex) > 0}
-                val leftRes = search(leftInstances, index, totWeight, totExamples, splits)
-                val leftScore = leftRes._1
-                val leftSplitVal = leftRes._2
-                if (compare(leftScore._1, minScore._1) < 0) {
-                    minScore = leftScore
-                    bestNodeIndex = nodeIndex
-                    splitVal = leftSplitVal
-                    preds = leftRes._3
-                    onLeft = true
-                }
-                // if (depth <= 0) {
-                queue ++= nodes(nodeIndex).leftChild.map((_, leftInstances, depth + 1))
-                // }
-
-                val rightInstances = data.filter {_.scores(nodeIndex) < 0}
-                val rightRes = search(rightInstances, index, totWeight, totExamples, splits)
-                val rightScore = rightRes._1
-                val rightSplitVal = rightRes._2
-                if (compare(rightScore._1, minScore._1) < 0) {
-                    minScore = rightScore
-                    bestNodeIndex = nodeIndex
-                    splitVal = rightSplitVal
-                    preds = rightRes._3
-                    onLeft = false
-                }
-                // if (depth <= 0) {
-                queue ++= nodes(nodeIndex).rightChild.map((_, rightInstances, depth + 1))
-                // }
+            val leftInstances = data.filter {_.scores(nodeIndex) > 0}
+            val leftRes = search(leftInstances, index, totWeight, totExamples, splits)
+            val leftScore = leftRes._1
+            val leftSplitVal = leftRes._2
+            if (compare(leftScore._1, minScore._1) < 0) {
+                minScore = leftScore
+                bestNodeIndex = nodeIndex
+                splitVal = leftSplitVal
+                preds = leftRes._3
+                onLeft = true
             }
 
+            val rightInstances = data.filter {_.scores(nodeIndex) < 0}
+            val rightRes = search(rightInstances, index, totWeight, totExamples, splits)
+            val rightScore = rightRes._1
+            val rightSplitVal = rightRes._2
+            if (compare(rightScore._1, minScore._1) < 0) {
+                minScore = rightScore
+                bestNodeIndex = nodeIndex
+                splitVal = rightSplitVal
+                preds = rightRes._3
+                onLeft = false
+            }
+
+            if (depth + 1 < maxDepth) {
+                queue ++= nodes(nodeIndex).leftChild.map((_, leftInstances, depth + 1))
+                queue ++= nodes(nodeIndex).rightChild.map((_, rightInstances, depth + 1))
+            }
         }
         (minScore, (bestNodeIndex, onLeft, index, splitVal, preds._1, preds._2))
     }
@@ -143,8 +139,8 @@ object Learner extends Comparison {
     def partitionedGreedySplit(
             instsGroup: RDDType, nodes: Array[SplitterNode],
             lossFunc: (Double, Double, Double, Double, Double) => Double,
-            rootIndex: Int = 0) = {
-        val bestSplit = instsGroup.map(findBestSplit(_, nodes, rootIndex, lossFunc))
+            maxDepth: Int, rootIndex: Int = 0) = {
+        val bestSplit = instsGroup.map(findBestSplit(_, nodes, maxDepth, rootIndex, lossFunc))
                                   .reduce {(a, b) => if (a._1._1 < b._1._1) a else b}
         println("Node " + nodes.size + " min score")
         println("Min score: " + "%.2f".format(bestSplit._1._1))

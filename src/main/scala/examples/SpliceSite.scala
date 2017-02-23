@@ -18,12 +18,13 @@ object SpliceSite {
     args(2) - fraction for sampling
     args(3) - number of batches
     args(4) - number of iterations
-    args(5) - algorithm selection
+    args(5) - max depth of the tree
+    args(6) - algorithm selection
         1 -> AdaBoost partitioned
         2 -> AdaBoost non-partitioned
         3 -> LogitBoost partitioned
-    args(6) - File path to save the model
-    args(7) - data format
+    args(7) - File path to save the model
+    args(8) - data format
         1 -> raw data
         2 -> objects
     */
@@ -149,11 +150,11 @@ object SpliceSite {
             Instance(data(0).toInt, feature) // .toVector)
         }
 
-        if (args.size != 8) {
+        if (args.size != 9) {
             println(
                 "Please provide five arguments: training data path, " +
                 "test data path, sampling fraction, number of batches, " +
-                "number of iterations, boolean flag, model file path, " +
+                "number of iterations, max depth, boolean flag, model file path, " +
                 "data source type."
             )
             return
@@ -181,7 +182,7 @@ object SpliceSite {
         test.count()
 
         val glomTrain = (
-            if (args(7).toInt == 1) {
+            if (args(8).toInt == 1) {
                 // up-sample positive samples
                 /*
                 val perPart = math.min(featureSize, 200.0) // TODO: make this a variable
@@ -205,7 +206,7 @@ object SpliceSite {
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
         val glomTest = (
-            if (args(7).toInt == 1) {
+            if (args(8).toInt == 1) {
                 // sc.textFile(args(1))
                   // .sample(false, 0.1)
                 test.coalesce(20)
@@ -214,7 +215,7 @@ object SpliceSite {
                 sc.objectFile[Array[Instance]](testObjFile)
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
-        if (args(7).toInt == 1) {
+        if (args(8).toInt == 1) {
             glomTrain.saveAsObjectFile(trainObjFile)
             glomTest.saveAsObjectFile(testObjFile)
         }
@@ -252,11 +253,11 @@ object SpliceSite {
         // println("Positive: " + test.filter(_.y > 0).count)
         // println("Negative: " + test.filter(_.y < 0).count)
 
-        val nodes = args(5).toInt match {
-            case 1 => Controller.runADTreeWithAdaBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
+        val nodes = args(6).toInt match {
+            case 1 => Controller.runADTreeWithAdaBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, args(5).toInt)
             // TODO: added bulk learning option
             // case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(3).toInt)
-            case 3 => Controller.runADTreeWithLogitBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, false)
+            case 3 => Controller.runADTreeWithLogitBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, args(5).toInt)
         }
         for (t <- nodes) {
             println(t)
@@ -275,7 +276,7 @@ object SpliceSite {
         */
         sc.stop()
 
-        SplitterNode.save(nodes, args(6))
+        SplitterNode.save(nodes, args(7))
     }
 }
 

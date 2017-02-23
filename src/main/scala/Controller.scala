@@ -17,7 +17,7 @@ object Controller extends Comparison {
     type TestRDDType = RDD[Array[Instance]]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, Double, Double)
-    type LearnerFunc = (RDDType, Array[SplitterNode], LossFunc, Int) => LearnerObj
+    type LearnerFunc = (RDDType, Array[SplitterNode], LossFunc, Int, Int) => LearnerObj
     type UpdateFunc = (RDDType, SplitterNode) => RDDType
     type WeightFunc = (Int, Double, Double) => Double
 
@@ -62,8 +62,8 @@ object Controller extends Comparison {
         // println("Training PR = " + trainMetrics.pr.collect)
         println("(Test) auPRC = " + test_auPRC)
         println("Effective count = " + effectCnt)
-        println("Positive effective count = " + effectCnt)
-        println("Negative effective count = " + effectCnt)
+        println("Positive effective count = " + posEffectCnt)
+        println("Negative effective count = " + negEffectCnt)
         effectCnt
     }
 
@@ -114,7 +114,7 @@ object Controller extends Comparison {
                   weightFunc: WeightFunc,
                   sliceFrac: Double,
                   sampleFrac: Double,
-                  K: Int, T: Int): Array[SplitterNode] = {
+                  K: Int, T: Int, maxDepth: Int): Array[SplitterNode] = {
         def safeLogRatio(a: Double, b: Double) = {
             if (compare(a) == 0 && compare(b) == 0) {
                 0.0
@@ -170,7 +170,7 @@ object Controller extends Comparison {
             while (iteration < T) {
                 iteration = iteration + 1
 
-                val bestSplit = learnerFunc(data, nodes, lossFunc, 0)
+                val bestSplit = learnerFunc(data, nodes, lossFunc, maxDepth, 0)
                 val prtNodeIndex = bestSplit._1
                 val onLeft = bestSplit._2
                 val splitIndex = bestSplit._3
@@ -311,15 +311,17 @@ object Controller extends Comparison {
     }
 
     def runADTreeWithAdaBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
-                              sampleFrac: Double, K: Int, T: Int, repartition: Boolean) = {
+                              sampleFrac: Double, K: Int, T: Int, maxDepth: Int) = {
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
-                  LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc, sliceFrac, sampleFrac, K, T)
+                  LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc, sliceFrac, sampleFrac, K, T,
+                  maxDepth)
     }
 
     def runADTreeWithLogitBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
-                                sampleFrac: Double, K: Int, T: Int, repartition: Boolean) = {
+                                sampleFrac: Double, K: Int, T: Int, maxDepth: Int) = {
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
-                  LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc, sliceFrac, sampleFrac, K, T)
+                  LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc, sliceFrac, sampleFrac, K, T,
+                  maxDepth)
     }
 
     /*
