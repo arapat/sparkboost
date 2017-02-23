@@ -114,7 +114,8 @@ object Controller extends Comparison {
                   weightFunc: WeightFunc,
                   sliceFrac: Double,
                   sampleFrac: Double,
-                  T: Int, maxDepth: Int): Array[SplitterNode] = {
+                  T: Int, maxDepth: Int,
+                  baseNodes: Array[SplitterNode]): Array[SplitterNode] = {
         def safeLogRatio(a: Double, b: Double) = {
             if (compare(a) == 0 && compare(b) == 0) {
                 0.0
@@ -144,16 +145,21 @@ object Controller extends Comparison {
         println(s"Test positive examples: $testPosCount")
         println(s"Test negative examples: $testNegCount")
 
-        val predVal = 0.5 * log(posCount.toDouble / negCount)
-        val rootNode = SplitterNode(0, -1, 0, -1, true)
-        rootNode.setPredict(predVal, 0.0)
-        var nodes = Array(rootNode)
-        println(s"Predict ($predVal, 0.0)")
+        var data = glomTrain
+        var nodes =
+            if (baseNodes == null) {
+                val predVal = 0.5 * log(posCount.toDouble / negCount)
+                val rootNode = SplitterNode(0, -1, 0, -1, true)
+                rootNode.setPredict(predVal, 0.0)
+                println(s"Predict ($predVal, 0.0)")
+                data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY)
+                data.count()
+                glomTrain.unpersist()
+                Array(rootNode)
+            } else {
+                baseNodes
+            }
 
-        // Iteratively grow the ADTree
-        var data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY)  // _SER)
-        data.count()
-        glomTrain.unpersist()
         printStats(data.filter(_._2 < BINSIZE), glomTest, nodes, 0)
         println()
 
@@ -281,17 +287,17 @@ object Controller extends Comparison {
     }
 
     def runADTreeWithAdaBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
-                              sampleFrac: Double, T: Int, maxDepth: Int) = {
+                              sampleFrac: Double, T: Int, maxDepth: Int, baseNodes: Array[SplitterNode]) = {
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc, sliceFrac, sampleFrac, T,
-                  maxDepth)
+                  maxDepth, baseNodes)
     }
 
     def runADTreeWithLogitBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
-                                sampleFrac: Double, T: Int, maxDepth: Int) = {
+                                sampleFrac: Double, T: Int, maxDepth: Int, baseNodes: Array[SplitterNode]) = {
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc, sliceFrac, sampleFrac, T,
-                  maxDepth)
+                  maxDepth, baseNodes)
     }
 
     /*

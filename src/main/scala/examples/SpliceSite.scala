@@ -35,8 +35,8 @@ object SpliceSite {
         val BINSIZE = 1
         val ALLSAMPLE = 0.05
         val NEGSAMPLE = 0.01
-        val trainObjFile = "/train-pickle-onebit2/"
-        val testObjFile = "/test-pickle-onebit2/"
+        val trainObjFile = "/train-pickle-onebit1/"  // use 3 to include 2-char mappings
+        val testObjFile = "/test-pickle-onebit1/"  // use 3 to include 2-char mappings
 
         // Feature: P1 + P2
         val FEATURE_TYPE = 2
@@ -201,8 +201,8 @@ object SpliceSite {
                     } else {
                         val wfunc = UpdateFunc.adaboostUpdateFunc _
                         val baseNodes = SplitterNode.load(args(7))
-                        balancedTrain.mapPartitionsWithIndex {
-                            (partIndex: Int, iterator: Iterator[Instance]) => {
+                        balancedTrain.mapPartitions {
+                            (iterator: Iterator[Instance]) => {
                                 val array = iterator.toList
                                 var sampleList = Array[Instance]()
                                 val size = (array.size * fraction).ceil.toInt
@@ -223,6 +223,7 @@ object SpliceSite {
                                 }
                                 for (s <- sampleList) {
                                     s.setWeight(1.0)
+                                    s.setScores(baseNodes)
                                 }
                                 sampleList.toIterator
                             }
@@ -236,7 +237,7 @@ object SpliceSite {
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
         val glomTest = (
-            if (loadMode == 1) {
+            if (loadMode == 1 || loadMode == 3) {
                 sc.textFile(args(0), 20)
                   .map(rowToInstance)
                   .filter(inst => {
@@ -247,7 +248,7 @@ object SpliceSite {
                 sc.objectFile[Array[Instance]](testObjFile)
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
-        if (loadMode == 1) {
+        if (loadMode == 1 || loadMode == 3) {
             glomTrain.saveAsObjectFile(trainObjFile)
             glomTest.saveAsObjectFile(testObjFile)
         }
@@ -266,9 +267,19 @@ object SpliceSite {
                 glomTest.map(_.count(t => t.y < 0)).reduce(_ + _))
         println()
 
+        val baseNodes = {
+            if (loadMode == 3) SplitterNode.load(args(7))
+            else               null
+        }
         val nodes = args(5).toInt match {
-            case 1 => Controller.runADTreeWithAdaBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt)
-            case 3 => Controller.runADTreeWithLogitBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt)
+            case 1 =>
+                Controller.runADTreeWithAdaBoost(
+                    glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, baseNodes
+                )
+            case 3 =>
+                Controller.runADTreeWithLogitBoost(
+                    glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, baseNodes
+                )
         }
         for (t <- nodes) {
             println(t)
@@ -285,4 +296,4 @@ object SpliceSite {
 // spark/bin/spark-submit --class sparkboost.examples.SpliceSite
 // --master spark://ec2-54-152-1-69.compute-1.amazonaws.com:7077
 // --conf spark.executor.extraJavaOptions=-XX:+UseG1GC  ./sparkboost_2.11-0.1.jar
-// /train-1m /test-txt 0.05 1 50 1 ./model.bin 2 > result.txt 2> log.txt
+// /train-txt /test-txt 0.05 200 1 1 ./model.bin ./base-model.bin 3 > result.txt 2> log.txt

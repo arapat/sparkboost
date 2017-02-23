@@ -16,4 +16,11 @@ object Instance {
               scores: Array[Int] = Array[Int]()) = {
         new Instance(y, X, w, scores)
     }
+
+    def setScores(inst: Instance, nodes: Array[SplitterNode]) {
+        inst.scores = Array[Int]()
+        nodes.foreach {t =>
+            inst.scores :+= t.check(inst)
+        }
+    }
 }
