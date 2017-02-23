@@ -114,7 +114,7 @@ object Controller extends Comparison {
                   weightFunc: WeightFunc,
                   sliceFrac: Double,
                   sampleFrac: Double,
-                  K: Int, T: Int, maxDepth: Int): Array[SplitterNode] = {
+                  T: Int, maxDepth: Int): Array[SplitterNode] = {
         def safeLogRatio(a: Double, b: Double) = {
             if (compare(a) == 0 && compare(b) == 0) {
                 0.0
@@ -151,117 +151,87 @@ object Controller extends Comparison {
         println(s"Predict ($predVal, 0.0)")
 
         // Iteratively grow the ADTree
-        var batch = 0
         var data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY)  // _SER)
         data.count()
         glomTrain.unpersist()
         printStats(data.filter(_._2 < BINSIZE), glomTest, nodes, 0)
         println()
 
-        while (batch < 1) {  // T / K) {
-            // Set up instances RDD
-            // var data = sample(glomTrain, sampleFrac, nodes, weightFunc)
-            // println("New positive sample weight:")
-            // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
-            // println("New negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
+        var iteration = 0
+        while (iteration < T) {
+            iteration = iteration + 1
 
-            var iteration = 0
-            var trapped = false
-            while (iteration < T) {
-                iteration = iteration + 1
+            val bestSplit = learnerFunc(data, nodes, lossFunc, maxDepth, 0)
+            val prtNodeIndex = bestSplit._1
+            val onLeft = bestSplit._2
+            val splitIndex = bestSplit._3
+            val splitVal = bestSplit._4
+            val newNode = SplitterNode(nodes.size, splitIndex, splitVal, prtNodeIndex, onLeft)
 
-                val bestSplit = learnerFunc(data, nodes, lossFunc, maxDepth, 0)
-                val prtNodeIndex = bestSplit._1
-                val onLeft = bestSplit._2
-                val splitIndex = bestSplit._3
-                val splitVal = bestSplit._4
-                val newNode = SplitterNode(nodes.size, splitIndex, splitVal, prtNodeIndex, onLeft)
-
-                // compute the predictions of the new node
-                val predicts = (
-                    data.filter(
-                        _._2 < BINSIZE
-                    ).flatMap(
-                        _._1
-                    ).map {
-                        t: Instance => ((newNode.check(t), t.y), t.w)
-                    }.reduceByKey {
-                        (a: Double, b: Double) => a + b
-                    }.collectAsMap()
-                )
-                val predictsCount = (
-                    data.filter(
-                        _._2 < BINSIZE
-                    ).flatMap(
-                        _._1
-                    ).map {
-                        t: Instance => ((newNode.check(t), t.y), 1)
-                    }.reduceByKey {
-                        (a: Int, b: Int) => a + b
-                    }.collectAsMap()
-                )
-                val verify = {
-                    data.filter(
-                        _._2 == splitIndex
-                    ).flatMap(
-                        _._1
-                    ).map {
-                        t: Instance => ((newNode.check(t), t.y), 1)
-                    }.reduceByKey {
-                        (a: Int, b: Int) => a + b
-                    }.collectAsMap()
-                }
-                println("predicts: " + predicts)
-                println("counts: " + predictsCount)
-                println("verify: " + verify)
-                val leftPos = predicts.getOrElse((1, 1), 0.0)
-                val leftNeg = predicts.getOrElse((1, -1), 0.0)
-                val rightPos = predicts.getOrElse((-1, 1), 0.0)
-                val rightNeg = predicts.getOrElse((-1, -1), 0.0)
-                val leftPred = 0.5 * safeLogRatio(leftPos.toDouble, leftNeg.toDouble)
-                val rightPred = 0.5 * safeLogRatio(rightPos.toDouble, rightNeg.toDouble)
-                /*
-                val leftPred = bestSplit._4._1
-                val rightPred = bestSplit._4._2
-                */
-                newNode.setPredict(leftPred, rightPred)
-                println(s"Predicts ($leftPred, $rightPred) Father $prtNodeIndex")
-                if (compare(leftPred) == 0 && compare(rightPred) == 0) {
-                    trapped = true
-                }
-                {
-                    // add the new node to the nodes list
-                    nodes(prtNodeIndex).addChild(onLeft, nodes.size)
-                    nodes :+= newNode
-
-                    // adjust the weights of the instances
-                    // TODO: why caching will slow the program down?
-                    // println("(before) Positive sample weight:")
-                    // data.map(_._1.filter(_.y > 0).map(_.w)).reduce(_ ::: _).foreach(t => print("%.2f, ".format(t)))
-                    val oldData = data
-                    data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY)  // _SER)
-                    data.count()
-                    oldData.unpersist()
-                    // println("(after) Positive sample weight:")
-                    // println(data.map(_._1.filter(_.y > 0)).reduce(_ ::: _).foreach(t => println("%.2f ".format(t.w) + t.X)))
-                    // return nodes
-                    // println("Negative sample weight: " + data.first._1.filter(_.y < 0).head.w)
-                    /*
-                    if (iteration % 25 == 0) {
-                        data.checkpoint()
-                    }
-                    */
-                    val effcnt = printStats(
-                        data.filter(_._2 < BINSIZE), glomTest, nodes, batch * K + iteration
-                    )
-                    if (effcnt < 0.5) {
-                        trapped = true
-                    }
-                }
-
-                println
+            // compute the predictions of the new node
+            val predicts = (
+                data.filter(
+                    _._2 < BINSIZE
+                ).flatMap(
+                    _._1
+                ).map {
+                    t: Instance => ((newNode.check(t), t.y), t.w)
+                }.reduceByKey {
+                    (a: Double, b: Double) => a + b
+                }.collectAsMap()
+            )
+            val predictsCount = (
+                data.filter(
+                    _._2 < BINSIZE
+                ).flatMap(
+                    _._1
+                ).map {
+                    t: Instance => ((newNode.check(t), t.y), 1)
+                }.reduceByKey {
+                    (a: Int, b: Int) => a + b
+                }.collectAsMap()
+            )
+            val verify = {
+                data.filter(
+                    _._2 == splitIndex
+                ).flatMap(
+                    _._1
+                ).map {
+                    t: Instance => ((newNode.check(t), t.y), 1)
+                }.reduceByKey {
+                    (a: Int, b: Int) => a + b
+                }.collectAsMap()
             }
-            batch = batch + 1
+            println("predicts: " + predicts)
+            println("counts: " + predictsCount)
+            println("verify: " + verify)
+            val leftPos = predicts.getOrElse((1, 1), 0.0)
+            val leftNeg = predicts.getOrElse((1, -1), 0.0)
+            val rightPos = predicts.getOrElse((-1, 1), 0.0)
+            val rightNeg = predicts.getOrElse((-1, -1), 0.0)
+            val leftPred = 0.5 * safeLogRatio(leftPos.toDouble, leftNeg.toDouble)
+            val rightPred = 0.5 * safeLogRatio(rightPos.toDouble, rightNeg.toDouble)
+            /*
+            val leftPred = bestSplit._4._1
+            val rightPred = bestSplit._4._2
+            */
+            newNode.setPredict(leftPred, rightPred)
+            println(s"Predicts ($leftPred, $rightPred) Father $prtNodeIndex")
+
+            // add the new node to the nodes list
+            nodes(prtNodeIndex).addChild(onLeft, nodes.size)
+            nodes :+= newNode
+
+            val oldData = data
+            data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY)  // _SER)
+            data.count()
+            oldData.unpersist()
+
+            val effcnt = printStats(
+                data.filter(_._2 < BINSIZE), glomTest, nodes, iteration
+            )
+
+            println
         }
 
         // print visualization meta data for JBoost
@@ -311,16 +281,16 @@ object Controller extends Comparison {
     }
 
     def runADTreeWithAdaBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
-                              sampleFrac: Double, K: Int, T: Int, maxDepth: Int) = {
+                              sampleFrac: Double, T: Int, maxDepth: Int) = {
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
-                  LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc, sliceFrac, sampleFrac, K, T,
+                  LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc, sliceFrac, sampleFrac, T,
                   maxDepth)
     }
 
     def runADTreeWithLogitBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
-                                sampleFrac: Double, K: Int, T: Int, maxDepth: Int) = {
+                                sampleFrac: Double, T: Int, maxDepth: Int) = {
         runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
-                  LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc, sliceFrac, sampleFrac, K, T,
+                  LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc, sliceFrac, sampleFrac, T,
                   maxDepth)
     }
 

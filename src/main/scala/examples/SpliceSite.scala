@@ -16,15 +16,14 @@ object SpliceSite {
     args(0) - file path to the training data
     args(1) - file path to the test data
     args(2) - fraction for sampling
-    args(3) - number of batches
-    args(4) - number of iterations
-    args(5) - max depth of the tree
-    args(6) - algorithm selection
+    args(3) - number of iterations
+    args(4) - max depth of the tree
+    args(5) - algorithm selection
         1 -> AdaBoost partitioned
         2 -> AdaBoost non-partitioned
         3 -> LogitBoost partitioned
-    args(7) - File path to save the model
-    args(8) - data format
+    args(6) - File path to save the model
+    args(7) - data format
         1 -> raw data
         2 -> objects
     */
@@ -34,6 +33,28 @@ object SpliceSite {
         val NEGSAMPLE = 0.01
         val trainObjFile = "/train-pickle-onebit2/"
         val testObjFile = "/test-pickle-onebit2/"
+
+        // Feature: P1 + P2
+        val FEATURE_TYPE = 2
+        val CENTER = 60
+        val LEFT_WINDOW = 20 // 59
+        val RIGHT_WINDOW = 20 // 80
+        val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
+        val featureSize =
+            if (FEATURE_TYPE == 1) {
+                (WINDOW_SIZE) * 4
+            } else {
+                (WINDOW_SIZE) * 4 + (WINDOW_SIZE - 1) * 4 * 4
+            }
+        val indexMap = {
+            val unit = List("A", "C", "G", "T")
+            val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
+            val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
+            val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
+
+            if (FEATURE_TYPE == 1) p1.zip(0 until p1.size).toMap
+            else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
+        }
 
         def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
             val partId = partIndex % BINSIZE
@@ -110,27 +131,6 @@ object SpliceSite {
             (indexData._2, index, slices)
         }
 
-        // Feature: P1 + P2
-        val FEATURE_TYPE = 2
-        val CENTER = 60
-        val LEFT_WINDOW = 20 // 59
-        val RIGHT_WINDOW = 20 // 80
-        val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
-        val featureSize =
-            if (FEATURE_TYPE == 1) {
-                (WINDOW_SIZE) * 4
-            } else {
-                (WINDOW_SIZE) * 4 + (WINDOW_SIZE - 1) * 4 * 4
-            }
-        val indexMap = {
-            val unit = List("A", "C", "G", "T")
-            val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
-            val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
-            val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
-
-            if (FEATURE_TYPE == 1) p1.zip(0 until p1.size).toMap
-            else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
-        }
         def rowToInstance(s: String) = {
             val data = s.slice(1, s.size - 1).split(",")
             val raw = data(1)
@@ -160,10 +160,10 @@ object SpliceSite {
             Instance(data(0).toInt, feature) // .toVector)
         }
 
-        if (args.size != 9) {
+        if (args.size != 8) {
             println(
                 "Please provide five arguments: training data path, " +
-                "test data path, sampling fraction, number of batches, " +
+                "test data path, sampling fraction, " +
                 "number of iterations, max depth, boolean flag, model file path, " +
                 "data source type."
             )
@@ -192,7 +192,7 @@ object SpliceSite {
         test.count()
 
         val glomTrain = (
-            if (args(8).toInt == 1) {
+            if (args(7).toInt == 1) {
                 // up-sample positive samples
                 /*
                 val perPart = math.min(featureSize, 200.0) // TODO: make this a variable
@@ -216,7 +216,7 @@ object SpliceSite {
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
         val glomTest = (
-            if (args(8).toInt == 1) {
+            if (args(7).toInt == 1) {
                 // sc.textFile(args(1))
                   // .sample(false, 0.1)
                 test.coalesce(20)
@@ -225,7 +225,7 @@ object SpliceSite {
                 sc.objectFile[Array[Instance]](testObjFile)
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
-        if (args(8).toInt == 1) {
+        if (args(7).toInt == 1) {
             glomTrain.saveAsObjectFile(trainObjFile)
             glomTest.saveAsObjectFile(testObjFile)
         }
@@ -263,11 +263,9 @@ object SpliceSite {
         // println("Positive: " + test.filter(_.y > 0).count)
         // println("Negative: " + test.filter(_.y < 0).count)
 
-        val nodes = args(6).toInt match {
-            case 1 => Controller.runADTreeWithAdaBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, args(5).toInt)
-            // TODO: added bulk learning option
-            // case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(3).toInt)
-            case 3 => Controller.runADTreeWithLogitBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, args(5).toInt)
+        val nodes = args(5).toInt match {
+            case 1 => Controller.runADTreeWithAdaBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt)
+            case 3 => Controller.runADTreeWithLogitBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt)
         }
         for (t <- nodes) {
             println(t)
@@ -286,7 +284,7 @@ object SpliceSite {
         */
         sc.stop()
 
-        SplitterNode.save(nodes, args(7))
+        SplitterNode.save(nodes, args(6))
     }
 }
 
