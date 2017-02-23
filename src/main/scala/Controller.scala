@@ -36,6 +36,8 @@ object Controller extends Comparison {
             (predict.toDouble, t.y.toDouble)
         })).cache()
         val trainCount = trainPredictionAndLabels.count()
+        val posTrainCount = trainPredictionAndLabels.filter(_._2 > 0).count()
+        val negTrainCount = trainPredictionAndLabels.filter(_._2 < 0).count()
         val testPredictAndLabels = test.flatMap(_.map(t => {
             val predict = SplitterNode.getScore(0, nodes, t)
             (predict.toDouble, t.y.toDouble)
@@ -43,6 +45,12 @@ object Controller extends Comparison {
         val trainWSum = train.map(_._1.map(t => t.w).reduce(_ + _)).reduce(_ + _)
         val trainWSqSum = train.map(_._1.map(t => t.w * t.w).reduce(_ + _)).reduce(_ + _)
         val effectCnt = (trainWSum.toDouble * trainWSum / trainWSqSum) / trainCount
+        val posTrainWSum = train.map(_._1.filter(t => t.y > 0).map(t => t.w).reduce(_ + _)).reduce(_ + _)
+        val posTrainWSqSum = train.map(_._1.filter(t => t.y > 0).map(t => t.w * t.w).reduce(_ + _)).reduce(_ + _)
+        val posEffectCnt = (posTrainWSum.toDouble * posTrainWSum / posTrainWSqSum) / posTrainCount
+        val negTrainWSum = train.map(_._1.filter(t => t.y < 0).map(t => t.w).reduce(_ + _)).reduce(_ + _)
+        val negTrainWSqSum = train.map(_._1.filter(t => t.y < 0).map(t => t.w * t.w).reduce(_ + _)).reduce(_ + _)
+        val negEffectCnt = (negTrainWSum.toDouble * negTrainWSum / negTrainWSqSum) / negTrainCount
 
         // Instantiate metrics object
         val trainMetrics = new BinaryClassificationMetrics(trainPredictionAndLabels)
@@ -53,7 +61,9 @@ object Controller extends Comparison {
         println("(Training) auPRC = " + train_auPRC)
         // println("Training PR = " + trainMetrics.pr.collect)
         println("(Test) auPRC = " + test_auPRC)
-        println("Effective count ratio is " + effectCnt)
+        println("Effective count = " + effectCnt)
+        println("Positive effective count = " + effectCnt)
+        println("Negative effective count = " + effectCnt)
         effectCnt
     }
 
@@ -255,8 +265,8 @@ object Controller extends Comparison {
         }
 
         // print visualization meta data for JBoost
-        val posTrain = glomTrain.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
-        val negTrain = glomTrain.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
+        val posTrain = data.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
+        val negTrain = data.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
         val posTest = glomTest.flatMap(t => t).filter(_.y > 0).takeSample(true, 3000)
         val negTest = glomTest.flatMap(t => t).filter(_.y < 0).takeSample(true, 3000)
         val esize = 6000

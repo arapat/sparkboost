@@ -31,8 +31,8 @@ object SpliceSite {
         val BINSIZE = 1
         val ALLSAMPLE = 0.05
         val NEGSAMPLE = 0.01
-        val trainObjFile = "/train-pickle-onebit2/"
-        val testObjFile = "/test-pickle-onebit2/"
+        val trainObjFile = "/train-pickle-onebit3/"
+        val testObjFile = "/test-pickle-onebit3/"
 
         def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
             val partId = partIndex % BINSIZE
@@ -76,6 +76,11 @@ object SpliceSite {
                             merged :+= rightItem
                             false
                         }
+                }
+                if (lastLeft) {
+                    merged :+= rightItem
+                } else {
+                    merged :+= leftItem
                 }
                 while (leftIter.hasNext) {
                     merged :+= leftIter.next
@@ -127,7 +132,9 @@ object SpliceSite {
             )
             val nonzeros = (
                 (0 until WINDOW_SIZE).zip(window) // ++
-                // (0 until WINDOW_SIZE).zip(window.zip(window.tail).map(t => t._1 + t._2))
+                // (0 until WINDOW_SIZE).zip(
+                //     window.zip(window.tail).map(t => t._1.toString + t._2)
+                // )
             ).map(t => indexMap(t._1 + t._2.toString)).sorted
             var feature = Array[Double]()
             var last = 0
@@ -166,7 +173,12 @@ object SpliceSite {
                             nextDouble() <= ALLSAMPLE &&
                             (inst.y > 0 || nextDouble() <= NEGSAMPLE)
                         }).persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK_SER)
-        val Array(train, test) = allData.randomSplit(Array(0.75, 0.25))
+        allData.count()
+        var Array(train, test) = allData.randomSplit(Array(0.75, 0.25))
+        train = train.cache()
+        test = test.cache()
+        train.count()
+        test.count()
 
         val glomTrain = (
             if (args(7).toInt == 1) {
@@ -221,6 +233,8 @@ object SpliceSite {
                 glomTest.map(_.count(t => t.y < 0)).reduce(_ + _))
         println()
         allData.unpersist()
+        train.unpersist()
+        test.unpersist()
 
         /*
         val reducedGlomTrain = glomTrain.map(t => {
