@@ -1,6 +1,7 @@
 package sparkboost.examples
 
 import scala.io.Source
+import scala.annotation.tailrec
 import util.Random.nextDouble
 
 import org.apache.spark.rdd.RDD
@@ -9,6 +10,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
+import org.apache.spark.mllib.linalg.SparseVector
 
 import sparkboost._
 
@@ -36,13 +38,13 @@ object SpliceSite {
         val ALLSAMPLE = 0.05
         val NEGSAMPLE = 0.01
         val trainObjFile = "/train-pickle-onebit1/"  // use 3 to include 2-char mappings
-        val testObjFile = "/test-pickle-onebit1/"  // use 3 to include 2-char mappings
+        val testObjFile = "/test-pickle-onebit1/"  // use 3 to include 2-char
 
         // Feature: P1 + P2
         val FEATURE_TYPE = 2
         val CENTER = 60
-        val LEFT_WINDOW = 20 // 59
-        val RIGHT_WINDOW = 20 // 80
+        val LEFT_WINDOW = 50 // 59
+        val RIGHT_WINDOW = 50 // 80
         val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
         val featureSize =
             if (FEATURE_TYPE == 1) {
@@ -69,54 +71,21 @@ object SpliceSite {
         }
 
         def preprocessMergeSort(a: (Int, List[Instance]), b: (Int, List[Instance])) = {
-            if (a._2.size == 0) {
-                b
-            } else if (b._2.size == 0) {
-                a
-            } else {
-                var merged = Array[Instance]()
-                val index = a._1
-                val leftIter = a._2.iterator
-                val rightIter = b._2.iterator
-                var leftItem = leftIter.next
-                var rightItem = rightIter.next
-                var lastLeft =
-                    if (leftItem.X(index) < rightItem.X(index)) {
-                        merged :+= leftItem
-                        true
-                    } else {
-                        merged :+= rightItem
-                        false
-                    }
-                while ((!lastLeft || leftIter.hasNext) && (lastLeft || rightIter.hasNext)) {
-                    if (lastLeft) {
-                        leftItem = leftIter.next
-                    } else {
-                        rightItem = rightIter.next
-                    }
-                    lastLeft =
-                        if (leftItem.X(index) < rightItem.X(index)) {
-                            merged :+= leftItem
-                            true
-                        } else {
-                            merged :+= rightItem
-                            false
-                        }
-                }
-                if (lastLeft) {
-                    merged :+= rightItem
-                } else {
-                    merged :+= leftItem
-                }
-                while (leftIter.hasNext) {
-                    merged :+= leftIter.next
-                }
-                while (rightIter.hasNext) {
-                    merged :+= rightIter.next
-                }
+            val index = a._1
 
-                (index, merged.toList)
+            @tailrec
+            def mergeSort(res: List[Instance], xs: List[Instance], ys: List[Instance]): List[Instance] = {
+                (xs, ys) match {
+                    case (Nil, _) => res.reverse ::: ys
+                    case (_, Nil) => res.reverse ::: xs
+                    case (x :: xs1, y :: ys1) => {
+                        if (x.X(index) < y.X(index)) mergeSort(x :: res, xs1, ys)
+                        else                         mergeSort(y :: res, xs, ys1)
+                    }
+                }
             }
+
+            (index, mergeSort(Nil, a._2, b._2))
         }
 
         def preprocessSlices(sliceFrac: Double)(indexData: (Int, List[Instance])) = {
@@ -150,18 +119,9 @@ object SpliceSite {
                         window.zip(window.tail).map(t => t._1.toString + t._2)
                     )
                 }
-            }.map(t => indexMap(t._1 + t._2.toString)).sorted
-            var feature = Array[Double]()
-            var last = 0
-            for (i <- 0 until featureSize) {
-                if (last < nonzeros.size && nonzeros(last) == i) {
-                    feature :+= 1.0
-                    last += 1
-                } else {
-                    feature :+= 0.0
-                }
-            }
-            Instance(data(0).toInt, feature) // .toVector)
+            }.map(t => indexMap(t._1 + t._2.toString)).toArray.sorted
+            Instance(data(0).toInt,
+                     new SparseVector(featureSize, nonzeros, nonzeros.map(_ => 1.0)))
         }
 
         if (args.size != 9) {
@@ -189,7 +149,7 @@ object SpliceSite {
             if (loadMode == 2){
                 sc.objectFile[(List[Instance], Int, List[Double])](trainObjFile)
             } else {
-                val balancedTrain = sc.textFile(args(0), 200)
+                val balancedTrain = sc.textFile(args(0), 1000)
                                       .map(rowToInstance)
                                       .filter(inst => {
                                           (inst.y > 0 || nextDouble() <= NEGSAMPLE)
@@ -223,7 +183,7 @@ object SpliceSite {
                                 }
                                 for (s <- sampleList) {
                                     s.setWeight(1.0)
-                                    s.setScores(baseNodes)
+                                    Instance.setScores(s, baseNodes)
                                 }
                                 sampleList.toIterator
                             }
