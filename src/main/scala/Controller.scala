@@ -6,6 +6,7 @@ import util.Random.{nextDouble => rand}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import org.apache.spark.mllib.linalg.SparseVector
 
 import java.io._
 
@@ -13,8 +14,8 @@ import sparkboost.utils.Comparison
 
 object Controller extends Comparison {
     val BINSIZE = 1
-    type RDDType = RDD[(List[Instance], Int, List[Double])]
-    type TestRDDType = RDD[Array[Instance]]
+    type RDDType = RDD[Instances]
+    type TestRDDType = RDD[Array[(Int, SparseVector)]]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, Double, Double)
     type LearnerFunc = (RDDType, Array[SplitterNode], LossFunc, Int, Int) => LearnerObj
