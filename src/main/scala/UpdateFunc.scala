@@ -22,7 +22,7 @@ object UpdateFunc {
             val c = f(inst)
             val pred = if (c > 0) leftPredict else if (c < 0) rightPredict else 0.0
             val updatedw = update(inst.y, inst.w, pred)
-            Instance(inst.y, inst.X, updatedw, inst.scores :+ c)
+            Instance(inst.y, inst.X, updatedw, c +: inst.scores)
         }
         (data._1.map(singleUpdate), data._2, data._3)
     }

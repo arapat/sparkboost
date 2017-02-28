@@ -83,23 +83,15 @@ object Controller extends Comparison {
             var curWeight = rand() * segsize // first sample point
             var accumWeight = 0.0
             for (iw <- array.zip(weights)) {
-                /*
-                if (iw._1.y > 0) {
-                    sampleList.append(iw._1)
-                }
-                */
                 while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
                     sampleList :+= iw._1
                     curWeight += segsize
                 }
                 accumWeight += iw._2
             }
-            for (s <- sampleList) {
-                s.setWeight(1.0)
-                // TODO: FIX THIS
-                // s.setScores(nodes)
-            }
-            (sampleList.toList, datum._2, datum._3)
+
+            (sampleList.map(t => Instance.clone(t, 1.0, nodes)).toList,
+             datum._2, datum._3)
         })
         sampleData.checkpoint()
         println("Resampling done. Sample size: " + sampleData.map(_._1.size).reduce(_ + _))

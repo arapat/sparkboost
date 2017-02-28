@@ -181,11 +181,7 @@ object SpliceSite {
                                     }
                                     accumWeight += iw._2
                                 }
-                                for (s <- sampleList) {
-                                    s.setWeight(1.0)
-                                    Instance.setScores(s, baseNodes)
-                                }
-                                sampleList.toIterator
+                                sampleList.map(t => Instance.clone(t, 1.0, baseNodes)).toIterator
                             }
                         }
                     }
