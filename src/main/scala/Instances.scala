@@ -4,6 +4,12 @@ import org.apache.spark.mllib.linalg.SparseVector
 
 class Instances(val x: SparseVector, val ptr: Array[Int],
                 val index: Int, val splits: Array[Double]) extends java.io.Serializable {
+    // set active=true if the current index of this group of instances is being used for training
+    var active = false
+
+    def setActive(isActivated: Boolean) {
+        active = isActivated
+    }
 }
 
 object Instances {

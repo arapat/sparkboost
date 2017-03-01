@@ -6,10 +6,7 @@ import util.Random.nextDouble
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.Row
 import org.apache.spark.mllib.linalg.SparseVector
 
 import sparkboost._
@@ -138,7 +135,6 @@ object SpliceSite {
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .set("spark.kryoserializer.buffer.mb","24")
         val sc = new SparkContext(conf)
-        val sqlContext = new SQLContext(sc)
         sc.setCheckpointDir("checkpoints/")
 
         // training/testing split
@@ -225,17 +221,19 @@ object SpliceSite {
 
         val baseNodes = {
             if (loadMode == 3) SplitterNode.load(args(7))
-            else               null
+            else               Nil
         }
         val nodes = args(5).toInt match {
             case 1 =>
                 Controller.runADTreeWithAdaBoost(
                     glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, baseNodes
                 )
+            /*
             case 3 =>
                 Controller.runADTreeWithLogitBoost(
                     glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, baseNodes
                 )
+            */
         }
         for (t <- nodes) {
             println(t)

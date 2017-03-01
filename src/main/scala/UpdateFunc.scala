@@ -6,12 +6,11 @@ import org.apache.spark.rdd.RDD
 
 object UpdateFunc {
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("UpdateFunc")
-    type RDDElementType = (List[Instance], Int, List[Double])
-    type RDDType = RDD[RDDElementType]
+    type RDDType = RDD[Instances]
 
-    def adaboostUpdateFunc(y: Int, w: Double, pred: Double) = w * exp(-y * pred)
+    def adaboostUpdateFunc(y: Int, w: Double, predict: Double) = w * exp(-y * predict)
 
-    def logitboostUpdateFunc(y: Int, w: Double, pred: Double) = w / (1.0 + exp(y * pred))
+    def logitboostUpdateFunc(y: Int, w: Double, predict: Double) = w / (1.0 + exp(y * predict))
 
     def updateFunc(data: RDDElementType, node: SplitterNode,
                    update: (Int, Double, Double) => Double): RDDElementType = {
@@ -27,10 +26,11 @@ object UpdateFunc {
         (data._1.map(singleUpdate), data._2, data._3)
     }
 
-    def adaboostUpdate(rdd: RDDType, node: SplitterNode) = {
+    def adaboostUpdate(train: RDDType, y: node: SplitterNode) = {
         rdd.map(updateFunc(_, node, adaboostUpdateFunc))
     }
 
+    /*
     def logitboostUpdate(instances: RDDType, node: SplitterNode) = {
         def normalize(wsum: Double)(data: RDDElementType) = {
             (data._1.map(s => {
@@ -43,4 +43,5 @@ object UpdateFunc {
         val wsum = raw.map(_._1.map(_.w).reduce(_ + _)).reduce(_ + _)
         raw.map(normalize(wsum))
     }
+    */
 }

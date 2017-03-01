@@ -3,6 +3,9 @@ package sparkboost
 import math.log
 import util.Random.{nextDouble => rand}
 
+
+import org.apache.spark.SparkContext
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
@@ -15,7 +18,7 @@ import sparkboost.utils.Comparison
 object Controller extends Comparison {
     val BINSIZE = 1
     type RDDType = RDD[Instances]
-    type TestRDDType = RDD[Array[(Int, SparseVector)]]
+    type TestRDDType = RDD[(Int, SparseVector)]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, Double, Double)
     type LearnerFunc = (RDDType, Array[SplitterNode], LossFunc, Int, Int) => LearnerObj
@@ -99,16 +102,15 @@ object Controller extends Comparison {
         sampleData
     }
 
-    def runADTree(glomTrain: RDDType,
-                  glomTest: TestRDDType,
+    def runADTree(sc: SparkContext,
+                  train: RDDType, y: Broadcast[Array[Int]], test: TestRDDType,
                   learnerFunc: LearnerFunc,
                   updateFunc: UpdateFunc,
                   lossFunc: LossFunc,
                   weightFunc: WeightFunc,
-                  sliceFrac: Double,
-                  sampleFrac: Double,
-                  T: Int, maxDepth: Int,
+                  sampleFrac: Double, T: Int, maxDepth: Int,
                   baseNodes: Array[SplitterNode]): Array[SplitterNode] = {
+        // Limit the prediction score in a reasonable range
         def safeLogRatio(a: Double, b: Double) = {
             if (compare(a) == 0 && compare(b) == 0) {
                 0.0
@@ -118,36 +120,27 @@ object Controller extends Comparison {
             }
         }
 
-        def getMetaInfo(insts: List[Instance]) = {
-            val posInsts = insts.count(_.y > 0)
-            (insts.size, posInsts, insts.size - posInsts)
-        }
+        // Report basic meta info about the training data
+        val posCount = y.value.count(_ > 0)
+        val negCount = y.value.size - posCount
+        println(s"Positive examples for training: $posCount")
+        println(s"Negative examples for training: $negCount")
+        val testPosCount = y.filter(_._1 > 0).count()
+        val testNegCount = y.count() - testPosCount
+        println(s"Positive examples for testing: $testPosCount")
+        println(s"Negative examples for testing: $testNegCount")
 
-        // print meta info about partitions
-        val metas = glomTrain.map(_._1).map(getMetaInfo).collect
-        println("Number of partitions: " + metas.size)
-        println(metas.reduce((a, b) => if (a._2 < b._2) a else b))
-
-        // Set up the root of the ADTree
-        val posCount = glomTrain map {t => t._1.count(_.y > 0)} reduce(_ + _)
-        val negCount = glomTrain.map(_._1.size).reduce(_ + _) - posCount
-        println(s"Positive examples: $posCount")
-        println(s"Negative examples: $negCount")
-        val testPosCount = glomTest.map(_.count(_.y > 0)).reduce(_ + _)
-        val testNegCount = glomTest.map(_.count(_.y < 0)).reduce(_ + _)
-        println(s"Test positive examples: $testPosCount")
-        println(s"Test negative examples: $testNegCount")
-
-        var data = glomTrain
+        var data = train
         var nodes =
-            if (baseNodes == null) {
+            if (baseNodes == Nil) {
                 val predVal = 0.5 * log(posCount.toDouble / negCount)
-                val rootNode = SplitterNode(0, -1, 0, -1, true)
+                val rootNode = SplitterNode(0, -1, true, (-1, 0.0))
                 rootNode.setPredict(predVal, 0.0)
-                println(s"Predict ($predVal, 0.0)")
-                data = updateFunc(glomTrain, rootNode).persist(StorageLevel.MEMORY_ONLY)
+                println(s"Root node predicts ($predVal, 0.0)")
+                data = updateFunc(train, rootNode).persist(StorageLevel.MEMORY_ONLY)
+                // TODO: continue from here
                 data.count()
-                glomTrain.unpersist()
+                train.unpersist()
                 Array(rootNode)
             } else {
                 baseNodes
@@ -279,19 +272,27 @@ object Controller extends Comparison {
         nodes
     }
 
-    def runADTreeWithAdaBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
-                              sampleFrac: Double, T: Int, maxDepth: Int, baseNodes: Array[SplitterNode]) = {
-        runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
-                  LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc, sliceFrac, sampleFrac, T,
-                  maxDepth, baseNodes)
+    def runADTreeWithAdaBoost(sc: SparkContext,
+                              train: RDDType, y: Broadcast[Array[Int]], est: TestRDDType,
+                              sampleFrac: Double, T: Int, maxDepth: Int,
+                              baseNodes: Array[SplitterNode]) = {
+        runADTree(sc, instances, y, test,
+                  Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
+                  LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,
+                  sampleFrac, T, maxDepth, baseNodes)
     }
 
-    def runADTreeWithLogitBoost(instances: RDDType, test: TestRDDType, sliceFrac: Double,
-                                sampleFrac: Double, T: Int, maxDepth: Int, baseNodes: Array[SplitterNode]) = {
-        runADTree(instances, test, Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
-                  LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc, sliceFrac, sampleFrac, T,
-                  maxDepth, baseNodes)
+    /*
+    def runADTreeWithLogitBoost(sc: SparkContext,
+                                instances: RDDType, y: Broadcast[Array[Int]], test: TestRDDType,
+                                sampleFrac: Double, T: Int, maxDepth: Int,
+                                baseNodes: Array[SplitterNode]) = {
+        runADTree(sc, instances, y, test,
+                  Learner.partitionedGreedySplit, UpdateFunc.logitboostUpdate,
+                  LossFunc.lossfunc, UpdateFunc.logitboostUpdateFunc,
+                  sampleFrac, T, maxDepth, baseNodes)
     }
+    */
 
     /*
     def runADTreeWithBulkAdaboost(instances: RDD[Instance], T: Int) = {

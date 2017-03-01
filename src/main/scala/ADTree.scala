@@ -58,8 +58,8 @@ class SplitterNode(val index: Int, val prtIndex: Int, val onLeft: Boolean,
 }
 
 object SplitterNode {
-    def apply(index: Int, prtIndex: Int, onLeft: Boolean, splitIndex: Int, splitVal: Double) = {
-        new SplitterNode(index, prtIndex, onLeft, splitIndex, splitVal)
+    def apply(index: Int, prtIndex: Int, onLeft: Boolean, splitPoint: (Int, Double)) = {
+        new SplitterNode(index, prtIndex, onLeft, splitPoint._1, splitPoint._2)
     }
 
     def save(nodes: Array[SplitterNode], filepath: String) {
