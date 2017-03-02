@@ -26,8 +26,8 @@ object Controller extends Comparison {
     type UpdateFunc = (RDDType, SplitterNode) => RDDType
     type WeightFunc = (Int, Double, Double) => Double
 
-    def printStats(train: RDDType, test: TestRDDType, nodes: Array[SplitterNode],
-                   iter: Int) = {
+    def printStats(train: TestRDDType, test: TestRDDType, nodes: Array[SplitterNode],
+                   y: Array[Int], w: Array[Double]) = {
         // manual fix the auPRC computation bug in MLlib
         def adjust(points: Array[(Double, Double)]) = {
             require(points.length == 2)
@@ -36,75 +36,51 @@ object Controller extends Comparison {
             y._1 * (y._2 - 1.0) / 2.0
         }
 
-        val trainPredictionAndLabels = train.flatMap(_._1.map(t => {
-            val predict = SplitterNode.getScore(0, nodes, t)
-            (predict.toDouble, t.y.toDouble)
+        // Part 1 - Compute auPRC
+        val trainPredictionAndLabels = train.map {case (y, X) =>
+            (SplitterNode.getScore(0, nodes, X).toDouble, y.toDouble)
         })).cache()
-        val trainCount = trainPredictionAndLabels.count()
-        val posTrainCount = trainPredictionAndLabels.filter(_._2 > 0).count()
-        val negTrainCount = trainPredictionAndLabels.filter(_._2 < 0).count()
-        val testPredictAndLabels = test.flatMap(_.map(t => {
-            val predict = SplitterNode.getScore(0, nodes, t)
-            (predict.toDouble, t.y.toDouble)
-        }))
-        val trainWSum = train.map(_._1.map(t => t.w).reduce(_ + _)).reduce(_ + _)
-        val trainWSqSum = train.map(_._1.map(t => t.w * t.w).reduce(_ + _)).reduce(_ + _)
-        val effectCnt = (trainWSum.toDouble * trainWSum / trainWSqSum) / trainCount
-        val posTrainWSum = train.map(_._1.filter(t => t.y > 0).map(t => t.w).reduce(_ + _)).reduce(_ + _)
-        val posTrainWSqSum = train.map(_._1.filter(t => t.y > 0).map(t => t.w * t.w).reduce(_ + _)).reduce(_ + _)
-        val posEffectCnt = (posTrainWSum.toDouble * posTrainWSum / posTrainWSqSum) / posTrainCount
-        val negTrainWSum = train.map(_._1.filter(t => t.y < 0).map(t => t.w).reduce(_ + _)).reduce(_ + _)
-        val negTrainWSqSum = train.map(_._1.filter(t => t.y < 0).map(t => t.w * t.w).reduce(_ + _)).reduce(_ + _)
-        val negEffectCnt = (negTrainWSum.toDouble * negTrainWSum / negTrainWSqSum) / negTrainCount
 
-        // Instantiate metrics object
+        val testPredictionAndLabels = test.map {case (y, X) =>
+            (SplitterNode.getScore(0, nodes, X).toDouble, y.toDouble)
+        })).cache()
+
         val trainMetrics = new BinaryClassificationMetrics(trainPredictionAndLabels)
-        val train_auPRC = trainMetrics.areaUnderPR + adjust(trainMetrics.pr.take(2))
+        val auPRCTrain = trainMetrics.areaUnderPR + adjust(trainMetrics.pr.take(2))
         val testMetrics = new BinaryClassificationMetrics(testPredictAndLabels)
-        val test_auPRC = testMetrics.areaUnderPR + adjust(testMetrics.pr.take(2))
+        val auPRCTest = testMetrics.areaUnderPR + adjust(testMetrics.pr.take(2))
 
-        println("(Training) auPRC = " + train_auPRC)
-        // println("Training PR = " + trainMetrics.pr.collect)
-        println("(Test) auPRC = " + test_auPRC)
-        println("Effective count = " + effectCnt)
-        println("Positive effective count = " + posEffectCnt)
-        println("Negative effective count = " + negEffectCnt)
-        effectCnt
-    }
+        println("Training auPRC = " + auPRCTrain)
+        println("Training PR = " + trainMetrics.pr.collect.toList)
+        println("Testing auPRC = " + auPRCTest)
 
-    def sample(data: RDDType,
-               fraction: Double,
-               nodes: Array[SplitterNode],
-               wfunc: (Int, Double, Double) => Double): RDDType = {
-        println("Resampling...")
-        val sampleData = data.map(datum => {
-            val array = datum._1
-            var sampleList = Array[Instance]()
-            val size = (array.size * fraction).ceil.toInt
-            val weights = array.map(t => wfunc(t.y, 1.0, SplitterNode.getScore(0, nodes, t)))
-            val weightSum = weights.reduce(_ + _)
-            val segsize = weightSum.toDouble / size
+        // Part 2 - Compute effective counts
+        val trainCount = y.count()
+        val positiveTrainCount = y.count(_ > 0)
+        val negativeTrainCount = trainCount - positiveTrainCount
 
-            var curWeight = rand() * segsize // first sample point
-            var accumWeight = 0.0
-            for (iw <- array.zip(weights)) {
-                while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
-                    sampleList :+= iw._1
-                    curWeight += segsize
-                }
-                accumWeight += iw._2
-            }
+        val wSum = w.sum()
+        val wsqSum = w.map(s => s * s).sum()
+        val effectiveCount = (wsum * wsum / wsqSum) / trainCount
 
-            (sampleList.map(t => Instance.clone(t, 1.0, nodes)).toList,
-             datum._2, datum._3)
-        })
-        sampleData.checkpoint()
-        println("Resampling done. Sample size: " + sampleData.map(_._1.size).reduce(_ + _))
-        sampleData
+        val wPositive = w.zip(y).filter(_._2 > 0)
+        val wSumPositive = wPositive.sum()
+        val wsqSumPositive = wPositive.map(s => s * s).sum()
+        val effectiveCountPositive = (wSumPositive * wSumPositive / wsqSumPositive) / positiveTrainCount
+
+        val wSumNegative = wSum - wSumPositive
+        val wsqSumNegative = wsqSum - wsqSumPositive
+        val effectiveCountNegative = (wSumNegative * wSumNegative / wsqSumNegative) / negativeTrainCount
+
+        println("Effective count = " + effectiveCount)
+        println("Positive effective count = " + effectiveCountPositive)
+        println("Negative effective count = " + effectiveCountNegative)
+        effectiveCount
     }
 
     def runADTree(sc: SparkContext,
-                  train: RDDType, y: Broadcast[Array[Int]], test: TestRDDType,
+                  train: RDDType, y: Broadcast[Array[Int]],
+                  trainRaw: TestRDDType, test: TestRDDType,
                   learnerFunc: LearnerFunc,
                   updateFunc: UpdateFunc,
                   lossFunc: LossFunc,
@@ -139,153 +115,77 @@ object Controller extends Comparison {
             }
         val initAssignAndWeights = {
             val aMatrix = new ArrayBuffer[Broadcast[Array[Int]]]()
-            var w = Broadcast((0 until y.value.size).map(_ => 1.0).toArray)
-            val fa = Broadcast(0 until y.value.size).map(_ => -1).toArray)
+            var w = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
+            val fa = sc.broadcast(0 until y.value.size).map(_ => -1).toArray)
             for (node <- nodes) {
                 val faIdx = node.prtIndex
                 val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
                 val (aVec, nw) = updateFunc(train, y, brFa, w, node)
                 val toDestroy = w
-                w = Broadcast(nw)
-                aMatrix.append(Broadcast(aVec))
+                w = sc.broadcast(nw)
+                aMatrix.append(sc.broadcast(aVec))
                 toDestroy.destroy()
             }
+            fa.destroy()
             (aMatrix, w)
         }
         val assign = initAssignAndWeights._1
         var weights = initAssignAndWeights._2
 
-        printStats() // TODO: fix this
+        printStats(trainRaw, test, nodes, y.value, weights.value)
         println()
 
         var iteration = 0
         while (iteration < T) {
             iteration = iteration + 1
-
-            val bestSplit = learnerFunc(data, nodes, lossFunc, maxDepth, 0)
-            val prtNodeIndex = bestSplit._1
-            val onLeft = bestSplit._2
-            val splitIndex = bestSplit._3
-            val splitVal = bestSplit._4
-            val newNode = SplitterNode(nodes.size, splitIndex, splitVal, prtNodeIndex, onLeft)
+            val (prtNodeIndex, onLeft, splitIndex, splitVal, learnerPredicts) =
+                    learnerFunc(train, y, weights, assign, nodes.toArray, maxDepth, lossFunc)
+            val newNode = SplitterNode(nodes.size, prtNodeIndex, onLeft, (splitIndex, splitVal))
 
             // compute the predictions of the new node
-            val predicts = (
-                data.filter(
-                    _._2 < BINSIZE
-                ).flatMap(
-                    _._1
-                ).map {
-                    t: Instance => ((newNode.check(t), t.y), t.w)
-                }.reduceByKey {
-                    (a: Double, b: Double) => a + b
+            val weightsAndCounts =
+                train.filter(_.index == splitIndex).flatMap(t =>
+                    t.ptr.map(k =>
+                        ((t.x(k) <= splitVal, y.value(k)), (weights.value(k), 1))
+                    )
+                ).reduceByKey {
+                    (a: (Double, Int), b: (Double, Int)) => (a._1 + b._1, a._2 + b._2)
                 }.collectAsMap()
-            )
-            val predictsCount = (
-                data.filter(
-                    _._2 < BINSIZE
-                ).flatMap(
-                    _._1
-                ).map {
-                    t: Instance => ((newNode.check(t), t.y), 1)
-                }.reduceByKey {
-                    (a: Int, b: Int) => a + b
-                }.collectAsMap()
-            )
-            val verify = {
-                data.filter(
-                    _._2 == splitIndex
-                ).flatMap(
-                    _._1
-                ).map {
-                    t: Instance => ((newNode.check(t), t.y), 1)
-                }.reduceByKey {
-                    (a: Int, b: Int) => a + b
-                }.collectAsMap()
-            }
-            println("predicts: " + predicts)
-            println("counts: " + predictsCount)
-            println("verify: " + verify)
-            val leftPos = predicts.getOrElse((1, 1), 0.0)
-            val leftNeg = predicts.getOrElse((1, -1), 0.0)
-            val rightPos = predicts.getOrElse((-1, 1), 0.0)
-            val rightNeg = predicts.getOrElse((-1, -1), 0.0)
-            val leftPred = 0.5 * safeLogRatio(leftPos.toDouble, leftNeg.toDouble)
-            val rightPred = 0.5 * safeLogRatio(rightPos.toDouble, rightNeg.toDouble)
-            /*
-            val leftPred = bestSplit._4._1
-            val rightPred = bestSplit._4._2
-            */
-            newNode.setPredict(leftPred, rightPred)
+            println("weightsAndCounts:")
+            println(weightsAndCounts)
+
+            val leftPositiveWeight = weightsAndCounts.getOrElse((true, 1), (0.0, 0))._1
+            val leftNegativeWeight = weightsAndCounts.getOrElse((true, -1), (0.0, 0))._1
+            val rightPositiveWeight = weightsAndCounts.getOrElse((false, 1), (0.0, 0))._1
+            val rightNegativeWeight = weightsAndCounts.getOrElse((false, -1), (0.0, 0))._1
+            val leftPred = 0.5 * safeLogRatio(leftPositiveWeight, leftNegativeWeight)
+            val rightPred = 0.5 * safeLogRatio(rightPositiveWeight, rightNegativeWeight)
             println(s"Predicts ($leftPred, $rightPred) Father $prtNodeIndex")
 
             // add the new node to the nodes list
+            newNode.setPredict(leftPred, rightPred)
             nodes(prtNodeIndex).addChild(onLeft, nodes.size)
             nodes :+= newNode
 
-            val oldData = data
-            data = updateFunc(data, newNode).persist(StorageLevel.MEMORY_ONLY)  // _SER)
-            data.count()
-            oldData.unpersist()
+            // update weights and assignment matrix
+            val (newAssign, newWeights) = updateFunc(train, y, assign(prtNodeIndex), weights, newNode)
+            assign.append(newAssign)
+            val toDestroy = weights
+            weights = sc.broadcast(newWeights)
+            toDestroy.destroy()
 
-            val effcnt = printStats(
-                data.filter(_._2 < BINSIZE), glomTest, nodes, iteration
-            )
-
+            printStats(trainRaw, test, nodes, y.value, newWeights)
             println
         }
-
-        // print visualization meta data for JBoost
-        val posTrain = data.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
-        val negTrain = data.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
-        val posTest = glomTest.flatMap(t => t).filter(_.y > 0).takeSample(true, 3000)
-        val negTest = glomTest.flatMap(t => t).filter(_.y < 0).takeSample(true, 3000)
-        val esize = 6000
-
-        val trainFile = new File("trial0.train.boosting.info")
-        val trainWrite = new BufferedWriter(new FileWriter(trainFile))
-        val testFile = new File("trial0.test.boosting.info")
-        val testWrite = new BufferedWriter(new FileWriter(testFile))
-
-        for (i <- 1 to nodes.size) {
-            trainWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
-            testWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
-            var id = 0
-            for (t <- posTrain) {
-                val score = SplitterNode.getScore(0, nodes, t, i)
-                trainWrite.write(s"$id : $score : $score : 1 : \n")
-                id = id + 1
-            }
-            for (t <- negTrain) {
-                val score = SplitterNode.getScore(0, nodes, t, i)
-                val negscore = -score
-                trainWrite.write(s"$id : $negscore : $score : -1 : \n")
-                id = id + 1
-            }
-            id = 0
-            for (t <- posTest) {
-                val score = SplitterNode.getScore(0, nodes, t, i)
-                testWrite.write(s"$id : $score : $score : 1 : \n")
-                id = id + 1
-            }
-            for (t <- negTest) {
-                val score = SplitterNode.getScore(0, nodes, t, i)
-                val negscore = -score
-                testWrite.write(s"$id : $negscore : $score : -1 : \n")
-                id = id + 1
-            }
-        }
-
-        trainWrite.close()
-        testWrite.close()
         nodes
     }
 
     def runADTreeWithAdaBoost(sc: SparkContext,
-                              train: RDDType, y: Broadcast[Array[Int]], est: TestRDDType,
+                              train: RDDType, y: Broadcast[Array[Int]],
+                              trainRaw: TestRDDType, test: TestRDDType,
                               sampleFrac: Double, T: Int, maxDepth: Int,
                               baseNodes: Array[SplitterNode]) = {
-        runADTree(sc, instances, y, test,
+        runADTree(sc, instances, y, trainRaw, test,
                   Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,
                   sampleFrac, T, maxDepth, baseNodes)
@@ -310,3 +210,36 @@ object Controller extends Comparison {
     }
     */
 }
+
+/*
+    def sample(data: RDDType,
+               fraction: Double,
+               nodes: Array[SplitterNode],
+               wfunc: (Int, Double, Double) => Double): RDDType = {
+        println("Resampling...")
+        val sampleData = data.map(datum => {
+            val array = datum._1
+            var sampleList = Array[Instance]()
+            val size = (array.size * fraction).ceil.toInt
+            val weights = array.map(t => wfunc(t.y, 1.0, SplitterNode.getScore(0, nodes, t)))
+            val weightSum = weights.reduce(_ + _)
+            val segsize = weightSum.toDouble / size
+
+            var curWeight = rand() * segsize // first sample point
+            var accumWeight = 0.0
+            for (iw <- array.zip(weights)) {
+                while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
+                    sampleList :+= iw._1
+                    curWeight += segsize
+                }
+                accumWeight += iw._2
+            }
+
+            (sampleList.map(t => Instance.clone(t, 1.0, nodes)).toList,
+             datum._2, datum._3)
+        })
+        sampleData.checkpoint()
+        println("Resampling done. Sample size: " + sampleData.map(_._1.size).reduce(_ + _))
+        sampleData
+    }
+*/

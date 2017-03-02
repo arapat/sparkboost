@@ -243,6 +243,51 @@ object SpliceSite {
 
         SplitterNode.save(nodes, args(6))
     }
+
+
+            // print visualization meta data for JBoost
+            val posTrain = data.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
+            val negTrain = data.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
+            val posTest = glomTest.flatMap(t => t).filter(_.y > 0).takeSample(true, 3000)
+            val negTest = glomTest.flatMap(t => t).filter(_.y < 0).takeSample(true, 3000)
+            val esize = 6000
+
+            val trainFile = new File("trial0.train.boosting.info")
+            val trainWrite = new BufferedWriter(new FileWriter(trainFile))
+            val testFile = new File("trial0.test.boosting.info")
+            val testWrite = new BufferedWriter(new FileWriter(testFile))
+
+            for (i <- 1 to nodes.size) {
+                trainWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
+                testWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
+                var id = 0
+                for (t <- posTrain) {
+                    val score = SplitterNode.getScore(0, nodes, t, i)
+                    trainWrite.write(s"$id : $score : $score : 1 : \n")
+                    id = id + 1
+                }
+                for (t <- negTrain) {
+                    val score = SplitterNode.getScore(0, nodes, t, i)
+                    val negscore = -score
+                    trainWrite.write(s"$id : $negscore : $score : -1 : \n")
+                    id = id + 1
+                }
+                id = 0
+                for (t <- posTest) {
+                    val score = SplitterNode.getScore(0, nodes, t, i)
+                    testWrite.write(s"$id : $score : $score : 1 : \n")
+                    id = id + 1
+                }
+                for (t <- negTest) {
+                    val score = SplitterNode.getScore(0, nodes, t, i)
+                    val negscore = -score
+                    testWrite.write(s"$id : $negscore : $score : -1 : \n")
+                    id = id + 1
+                }
+            }
+
+            trainWrite.close()
+            testWrite.close()
 }
 
 // command:
