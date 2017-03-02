@@ -41,7 +41,6 @@ object SpliceSite {
     val NEGSAMPLE = 0.01
     // training/testing split
     val TRAIN_PORTION = 0.75
-    val TEST_PORTION = 1.0 - TRAIN_PORTION
 
     // Construction features: P1 and P2 (as in Degroeve's SpliceMachine paper)
     val FEATURE_TYPE = 2
@@ -67,51 +66,9 @@ object SpliceSite {
                .toMap
     }
 
-    def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
-        val partId = partIndex % BINSIZE
-        val sample = data.toList
-        (partId until featureSize by BINSIZE).map(
-            idx => (idx, (idx, sample))
-        ).iterator
-    }
-
-    def preprocessMergeSort(a: (Int, List[Instance]), b: (Int, List[Instance])) = {
-        val index = a._1
-
-        @tailrec
-        def mergeSort(res: List[Instance], xs: List[Instance], ys: List[Instance]): List[Instance] = {
-            (xs, ys) match {
-                case (Nil, _) => res.reverse ::: ys
-                case (_, Nil) => res.reverse ::: xs
-                case (x :: xs1, y :: ys1) => {
-                    if (x.X(index) < y.X(index)) mergeSort(x :: res, xs1, ys)
-                    else                         mergeSort(y :: res, xs, ys1)
-                }
-            }
-        }
-
-        (index, mergeSort(Nil, a._2, b._2))
-    }
-
-    def preprocessSlices(sliceFrac: Double)(indexData: (Int, List[Instance])) = {
-        val index = indexData._1
-        val data = indexData._2.map(_.X(index)).toVector
-        var last = data(0)
-        for (t <- data) {
-            require(last <= t)
-            last = t
-        }
-        val sliceSize = math.max(1, (indexData._2.size * sliceFrac).floor.toInt)
-        val slices =
-            (sliceSize until data.size by sliceSize).map(
-                idx => 0.5 * (data(idx - 1) + data(idx))
-            ).distinct.toList :+ Double.MaxValue
-        (indexData._2, index, slices)
-    }
-
     def loadTrainData(trainPath: String, trainPath: String, trainObjFile: String,
                       testObjFile: String, nodes: Array[SplitterNode]):
-                        (RDD[(Int, SparseVector)], RDD[Instances], RDD[(Int, SparseVector)]) = {
+                (Array[Int], RDD[Instances], RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = {
         def rowToInstance(s: String) = {
             val data = s.slice(1, s.size - 1).split(",")
             val raw = data(1)
@@ -172,14 +129,27 @@ object SpliceSite {
                                 sampleList.toIterator
                             }
                         }
-                        // here use spark split func
                     }
                 }
+                sampleData.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
             }
-        sampledTrain.mapPartitionsWithIndex(preprocessAssign(featureSize))
-                    .map(t => (t._1, (t._2._1, t._2._2.sortWith(_.X(t._1) < _.X(t._1)))))
-                    .reduceByKey(preprocessMergeSort)
-                    .map(t => preprocessSlices(0.05)(t._2))
+
+
+        // apply(x: SparseVector, ptr: Array[Int], index: Int, sliceFrac: Double)
+        // TODO: support SIZE > 1
+        // TODO: parameterize sliceFrac
+        val sliceFrac = 0.05
+        val numPartitions = 160
+        val y = train.map(_._1).collect()
+        val train = trainRaw.zipWithIndex()
+                            .flatMap {case ((y, X), idx) =>
+                                        (0 until X.size).map(k => (k, (X(k), idx.toInt)))}
+                            .groupByKey(numPartitions)
+                            .map {case (index, xAndPtr) => {
+                                val (x, ptr) = xAndPtr.toArray.sorted.unzip
+                                Instances(DenseVector(x).toSparse, ptr, index, sliceFrac)
+                            }}
+        (y, train, trainRaw, test)
     }
 
     def main(args: Array[String]) {
@@ -210,11 +180,12 @@ object SpliceSite {
             else               Nil
         }
 
-        val (trainRaw, train, test) = loadTrainData(
+        val (yLocal, train, trainRaw, test) = loadTrainData(
             loadMode, trainPath, trainObjFile, testObjFile, baseNodes)
         trainRaw.persist(StorageLevel.MEMORY_ONLY)
         train.persist(StorageLevel.MEMORY_ONLY)
         test.persist(StorageLevel.MEMORY_ONLY)
+        val y = sc.broadcast(yLocal)
         val testRef = (
             if (testRefObjFile == "") {
                 test
@@ -248,7 +219,7 @@ object SpliceSite {
         val nodes = args(5).toInt match {
             case 1 =>
                 Controller.runADTreeWithAdaBoost(
-                    glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, baseNodes
+                    sc, train, y, trainRaw, test, sampleFrac, T, depth, baseNodes
                 )
             /*
             case 3 =>
@@ -263,50 +234,51 @@ object SpliceSite {
         sc.stop()
     }
 
+    /*
+    // print visualization meta data for JBoost
+    val posTrain = data.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
+    val negTrain = data.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
+    val posTest = glomTest.flatMap(t => t).filter(_.y > 0).takeSample(true, 3000)
+    val negTest = glomTest.flatMap(t => t).filter(_.y < 0).takeSample(true, 3000)
+    val esize = 6000
 
-            // print visualization meta data for JBoost
-            val posTrain = data.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
-            val negTrain = data.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
-            val posTest = glomTest.flatMap(t => t).filter(_.y > 0).takeSample(true, 3000)
-            val negTest = glomTest.flatMap(t => t).filter(_.y < 0).takeSample(true, 3000)
-            val esize = 6000
+    val trainFile = new File("trial0.train.boosting.info")
+    val trainWrite = new BufferedWriter(new FileWriter(trainFile))
+    val testFile = new File("trial0.test.boosting.info")
+    val testWrite = new BufferedWriter(new FileWriter(testFile))
 
-            val trainFile = new File("trial0.train.boosting.info")
-            val trainWrite = new BufferedWriter(new FileWriter(trainFile))
-            val testFile = new File("trial0.test.boosting.info")
-            val testWrite = new BufferedWriter(new FileWriter(testFile))
+    for (i <- 1 to nodes.size) {
+        trainWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
+        testWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
+        var id = 0
+        for (t <- posTrain) {
+            val score = SplitterNode.getScore(0, nodes, t, i)
+            trainWrite.write(s"$id : $score : $score : 1 : \n")
+            id = id + 1
+        }
+        for (t <- negTrain) {
+            val score = SplitterNode.getScore(0, nodes, t, i)
+            val negscore = -score
+            trainWrite.write(s"$id : $negscore : $score : -1 : \n")
+            id = id + 1
+        }
+        id = 0
+        for (t <- posTest) {
+            val score = SplitterNode.getScore(0, nodes, t, i)
+            testWrite.write(s"$id : $score : $score : 1 : \n")
+            id = id + 1
+        }
+        for (t <- negTest) {
+            val score = SplitterNode.getScore(0, nodes, t, i)
+            val negscore = -score
+            testWrite.write(s"$id : $negscore : $score : -1 : \n")
+            id = id + 1
+        }
+    }
 
-            for (i <- 1 to nodes.size) {
-                trainWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
-                testWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
-                var id = 0
-                for (t <- posTrain) {
-                    val score = SplitterNode.getScore(0, nodes, t, i)
-                    trainWrite.write(s"$id : $score : $score : 1 : \n")
-                    id = id + 1
-                }
-                for (t <- negTrain) {
-                    val score = SplitterNode.getScore(0, nodes, t, i)
-                    val negscore = -score
-                    trainWrite.write(s"$id : $negscore : $score : -1 : \n")
-                    id = id + 1
-                }
-                id = 0
-                for (t <- posTest) {
-                    val score = SplitterNode.getScore(0, nodes, t, i)
-                    testWrite.write(s"$id : $score : $score : 1 : \n")
-                    id = id + 1
-                }
-                for (t <- negTest) {
-                    val score = SplitterNode.getScore(0, nodes, t, i)
-                    val negscore = -score
-                    testWrite.write(s"$id : $negscore : $score : -1 : \n")
-                    id = id + 1
-                }
-            }
-
-            trainWrite.close()
-            testWrite.close()
+    trainWrite.close()
+    testWrite.close()
+    */
 }
 
 // command:

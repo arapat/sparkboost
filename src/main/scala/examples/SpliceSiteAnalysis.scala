@@ -13,6 +13,7 @@ import org.apache.spark.sql.Row
 import sparkboost._
 
 object SpliceSiteAnalysis {
+    /*
     type RDDType = RDD[(List[Instance], Int, List[Double])]
     type TestRDDType = RDD[Array[Instance]]
 
@@ -115,6 +116,7 @@ object SpliceSiteAnalysis {
 
         sc.stop()
     }
+    */
 }
 
 // command:
