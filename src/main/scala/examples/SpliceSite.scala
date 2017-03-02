@@ -172,8 +172,8 @@ object SpliceSite {
         val T = options("iteration").toInt
         val depth = options("depth").toInt
         val algo = options("algorithm").toInt
-        val modelReadPath = options.getOrElse("save-model", "")
-        val modelWritePath = options.getOrElse("load-model", "")
+        val modelReadPath = options.getOrElse("load-model", "")
+        val modelWritePath = options.getOrElse("save-model", "")
         val loadMode = options("format").toInt
         val trainObjFile = options.getOrElse("train-rdd", "")
         val testObjFile = options.getOrElse("test-rdd", "")
