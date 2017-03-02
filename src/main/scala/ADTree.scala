@@ -17,7 +17,7 @@ class SplitterNode(val index: Int, val prtIndex: Int, val onLeft: Boolean,
     def check(value: Double, fIndex: Int, inNode: Boolean) = {
         require(inNode == true)
         require(fIndex == splitIndex)
-        if (splitIndex < 0 || compare(instance.X(splitIndex), splitVal) <= 0) {
+        if (splitIndex < 0 || compare(value, splitVal) <= 0) {
             -1
         } else {
             1

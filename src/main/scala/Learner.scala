@@ -3,6 +3,7 @@ package sparkboost
 import collection.mutable.Queue
 import Double.MaxValue
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
 import sparkboost.utils.Comparison
@@ -13,6 +14,9 @@ object Learner extends Comparison {
     type RDDType = RDD[Instances]
     type BrAI = Broadcast[Array[Int]]
     type BrAD = Broadcast[Array[Double]]
+    type MinScoreType = (Double, (Double, Double, Double, Double, Double), (Int, Int, Int, Int, Int))
+    type NodeInfoType = (Int, Boolean, Int, Double, (Double, Double))
+    type ResultType = (MinScoreType, NodeInfoType)
 
     def findBestSplit(
             y: BrAI, w: BrAD, assign: Array[BrAI],
@@ -24,7 +28,7 @@ object Learner extends Comparison {
         val totalWeight = wLocal.sum
         val totalCount = wLocal.size
 
-        def findBest(nodeIndex: Int, depth: Int) = {
+        def findBest(nodeIndex: Int, depth: Int): ResultType = {
             val localAssign = data.ptr.map(k => assign(nodeIndex).value(k))
             val alw = localAssign.zip(yLocal).zip(wLocal)
             val assignAndLabelsToWeights = alw.groupBy(_._1)
@@ -62,13 +66,17 @@ object Learner extends Comparison {
             var rightLastSplitIndex = 0
             var rightLastSplitValue = data.splits(rightLastSplitIndex)
 
-            var minScore = Nil
+            var minScore = (
+                Double.MaxValue,
+                (0.0, 0.0, 0.0, 0.0, 0.0),
+                (0, 0, 0, 0, 0)
+            )
             var splitVal = 0.0
             var onLeft = true
             var leftPredict = 0.0
             var rightPredict = 0.0
 
-            val curIndex = 0
+            var curIndex = 0
             for (((iloc, iy), iw) <- alw) {
                 if (iloc < 0) {
                     // In left tree
@@ -77,7 +85,7 @@ object Learner extends Comparison {
                         val leftRemainNegativeWeight = leftTotalNegativeWeight - leftCurrNegativeWeight
                         val score = lossFunc(rejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
                                              leftRemainPositiveWeight, leftRemainNegativeWeight)
-                        if (minScore == Nil || compare(score, minScore._1) < 0) {
+                        if (compare(score, minScore._1) < 0) {
                             val leftRemainPositiveCount = leftTotalPositiveCount - leftCurrPositiveCount
                             val leftRemainNegativeCount = leftTOtalNegativeCount - leftCurrNegativeCount
                             minScore = (
@@ -87,13 +95,13 @@ object Learner extends Comparison {
                                 (rejectCount, leftCurrPositiveCount, leftCurrNegativeCount,
                                     leftRemainPositiveCount, leftRemainNegativeCount)
                             )
-                            splitVal = lastSplitVal
+                            splitVal = leftLastSplitValue
                             onLeft = true
                             leftPredict = safeLogRatio(leftCurrPositiveWeight, leftCurrNegativeWeight)
                             rightPredict = safeLogRatio(leftRemainPositiveWeight, leftRemainNegativeWeight)
                         }
                         leftLastSplitIndex += 1
-                        leftLastSplitValue = splits(leftLastSplitIndex)
+                        leftLastSplitValue = data.splits(leftLastSplitIndex)
                     }
                     if (iy > 0) {
                         leftCurrPositiveWeight += iw
@@ -110,9 +118,9 @@ object Learner extends Comparison {
                         val rightRemainNegativeWeight = rightTotalNegativeWeight - rightCurrNegativeWeight
                         val score = lossFunc(rejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
                                              rightRemainPositiveWeight, rightRemainNegativeWeight)
-                        if (minScore == Nil || compare(score, minScore._1) < 0) {
+                        if (compare(score, minScore._1) < 0) {
                             val rightRemainPositiveCount = rightTotalPositiveCount - rightCurrPositiveCount
-                            val rightRemainNegativeCount = rightTOtalNegativeCount - rightCurrNegativeCount
+                            val rightRemainNegativeCount = rightTotalNegativeCount - rightCurrNegativeCount
                             minScore = (
                                 score,
                                 (rejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
@@ -120,13 +128,13 @@ object Learner extends Comparison {
                                 (rejectCount, rightCurrPositiveCount, rightCurrNegativeCount,
                                     rightRemainPositiveCount, rightRemainNegativeCount)
                             )
-                            splitVal = lastSplitVal
+                            splitVal = rightLastSplitValue
                             onLeft = false
                             leftPredict = safeLogRatio(rightCurrPositiveWeight, rightCurrNegativeWeight)
                             rightPredict = safeLogRatio(rightRemainPositiveWeight, rightRemainNegativeWeight)
                         }
                         rightLastSplitIndex += 1
-                        rightLastSplitValue = splits(rightLastSplitIndex)
+                        rightLastSplitValue = data.splits(rightLastSplitIndex)
                     }
                     if (iy > 0) {
                         rightCurrPositiveWeight += iw
@@ -139,8 +147,8 @@ object Learner extends Comparison {
                 curIndex += 1
             }
 
-            val curResult = (minScore, (nodeIndex, splitVal, data.index, splitVal,
-                                        (leftPredict, rightPredict))
+            val curResult = (minScore, (nodeIndex, onLeft, data.index, splitVal,
+                                        (leftPredict, rightPredict)))
             if (depth + 1 < maxDepth) {
                 val r1 = nodes(nodeIndex).leftChild.map(t => findBest(t, depth + 1))
                             .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
@@ -153,7 +161,7 @@ object Learner extends Comparison {
             }
         }
 
-        findBest(Nil, 0, 0)
+        findBest(0, 0)
         // Will return following tuple:
         // (minScore, nodeInfo)
         // where minScore consists of

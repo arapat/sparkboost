@@ -7,6 +7,7 @@ import util.Random.{nextDouble => rand}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
+import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.storage.StorageLevel
 
@@ -59,15 +60,23 @@ object SpliceSite {
         else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
     }
 
+    // Define SparkContext
+    val conf = new SparkConf()
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+        .set("spark.kryoserializer.buffer.mb","24")
+    val sc = new SparkContext(conf)
+    // TODO: delete checkpoints before exiting
+    sc.setCheckpointDir("checkpoints/")
+
     def parseOptions(options: Array[String]) = {
         options.zip(options.slice(1, options.size))
                .zip(0 until options.size).filter(_._2 % 2 == 0).map(_._1)
-               .map {case (key, value): (key.slice(2, key.size), value)}
+               .map {case (key, value) => (key.slice(2, key.size), value)}
                .toMap
     }
 
-    def loadTrainData(trainPath: String, trainPath: String, trainObjFile: String,
-                      testObjFile: String, nodes: Array[SplitterNode]):
+    def loadTrainData(loadMode: Int, trainPath: String, trainObjFile: String, testObjFile: String,
+                      nodes: Array[SplitterNode]):
                 (Array[Int], RDD[Instances], RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = {
         def rowToInstance(s: String) = {
             val data = s.slice(1, s.size - 1).split(",")
@@ -89,17 +98,17 @@ object SpliceSite {
              new SparseVector(featureSize, nonzeros, nonzeros.map(_ => 1.0)))
         }
 
-        val (trainRaw, test) =
+        val splits =
             if (loadMode == 2){
-                (sc.objectFile[(Int, SparseVector)](trainObjFile),
-                 sc.objectFile[(Int, SparseVector)](testObjFile))
+                Array(sc.objectFile[(Int, SparseVector)](trainObjFile),
+                      sc.objectFile[(Int, SparseVector)](testObjFile))
             } else {
                 val balancedData = sc.textFile(trainPath)
                                      .map(rowToInstance)
                                      .filter(inst => {
-                                         (inst.y > 0 || rand() <= NEGSAMPLE)
+                                         (inst._1 > 0 || rand() <= NEGSAMPLE)
                                      })
-                val sampledData: RDD[Instance] = {
+                val sampledData: RDD[(Int, SparseVector)] = {
                     val fraction = ALLSAMPLE
                     if (loadMode == 1) {
                         balancedData.filter(_ => rand() <= fraction)
@@ -112,9 +121,9 @@ object SpliceSite {
                                 var sampleList = Array[(Int, SparseVector)]()
                                 val size = (array.size * fraction).ceil.toInt
                                 val weights = array.map(t =>
-                                    wfunc(t.y, 1.0, SplitterNode.getScore(0, baseNodes, t))
+                                    wfunc(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2))
                                 )
-                                val weightSum = weights.reduce(_ + _)
+                                val weightSum = weights.reduce {(a: Double, b: Double) => a + b}
                                 val segsize = weightSum.toDouble / size
 
                                 var curWeight = rand() * segsize // first sample point
@@ -131,8 +140,9 @@ object SpliceSite {
                         }
                     }
                 }
-                sampleData.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
+                sampledData.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
             }
+        val (trainRaw, test): (RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = (splits(0), splits(1))
 
 
         // apply(x: SparseVector, ptr: Array[Int], index: Int, sliceFrac: Double)
@@ -140,14 +150,14 @@ object SpliceSite {
         // TODO: parameterize sliceFrac
         val sliceFrac = 0.05
         val numPartitions = 160
-        val y = train.map(_._1).collect()
+        val y = trainRaw.map(_._1).collect()
         val train = trainRaw.zipWithIndex()
-                            .flatMap {case ((y, X), idx) =>
-                                        (0 until X.size).map(k => (k, (X(k), idx.toInt)))}
+                            .flatMap {case ((y, x), idx) =>
+                                        (0 until x.size).map(k => (k, (x(k), idx.toInt)))}
                             .groupByKey(numPartitions)
                             .map {case (index, xAndPtr) => {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
-                                Instances(DenseVector(x).toSparse, ptr, index, sliceFrac)
+                                Instances((new DenseVector(x)).toSparse, ptr, index, sliceFrac)
                             }}
         (y, train, trainRaw, test)
     }
@@ -157,27 +167,20 @@ object SpliceSite {
         val options = parseOptions(args)
         val trainPath = options("train")
         // val testPath = options.get("test")
-        val sampleFrac = options("sample-frac")
-        val T = options("iteration")
-        val depth = options("depth")
-        val algo = options("algorithm")
+        val sampleFrac = options("sample-frac").toDouble
+        val T = options("iteration").toInt
+        val depth = options("depth").toInt
+        val algo = options("algorithm").toInt
         val modelReadPath = options.getOrElse("save-model", "")
         val modelWritePath = options.getOrElse("load-model", "")
-        val dataFormat = options("format")
+        val loadMode = options("format").toInt
         val trainObjFile = options.getOrElse("train-rdd", "")
         val testObjFile = options.getOrElse("test-rdd", "")
         val testRefObjFile = options.getOrElse("test-ref-rdd", "")
 
-        val conf = new SparkConf()
-        conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-            .set("spark.kryoserializer.buffer.mb","24")
-        val sc = new SparkContext(conf)
-        // TODO: delete checkpoints before exiting
-        sc.setCheckpointDir("checkpoints/")
-
         val baseNodes = {
-            if (loadMode == 3) SplitterNode.load(args(7))
-            else               Nil
+            if (loadMode == 3) SplitterNode.load(modelReadPath)
+            else               Array[SplitterNode]()
         }
 
         val (yLocal, train, trainRaw, test) = loadTrainData(
@@ -216,7 +219,7 @@ object SpliceSite {
                 test.filter(_._1 < 0).count)
         println()
 
-        val nodes = args(5).toInt match {
+        val nodes = algo.toInt match {
             case 1 =>
                 Controller.runADTreeWithAdaBoost(
                     sc, train, y, trainRaw, test, sampleFrac, T, depth, baseNodes
@@ -224,7 +227,7 @@ object SpliceSite {
             /*
             case 3 =>
                 Controller.runADTreeWithLogitBoost(
-                    glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, baseNodes
+                    sc, train, y, trainRaw, test, sampleFrac, T, depth, baseNodes
                 )
             */
         }

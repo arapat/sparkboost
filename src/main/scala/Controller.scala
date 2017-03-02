@@ -18,12 +18,14 @@ import sparkboost.utils.Utils.safeLogRatio
 
 object Controller extends Comparison {
     val BINSIZE = 1
+    type BrAI = Broadcast[Array[Int]]
+    type BrAD = Broadcast[Array[Double]]
     type RDDType = RDD[Instances]
     type TestRDDType = RDD[(Int, SparseVector)]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
-    type LearnerObj = (Int, Boolean, Int, Double, Double, Double)
-    type LearnerFunc = (RDDType, Array[SplitterNode], LossFunc, Int, Int) => LearnerObj
-    type UpdateFunc = (RDDType, SplitterNode) => RDDType
+    type LearnerObj = (Int, Boolean, Int, Double, (Double, Double))
+    type LearnerFunc = (RDDType, BrAI, BrAD, Array[BrAI], Array[SplitterNode], Int, LossFunc) => LearnerObj
+    type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, SplitterNode) => (Array[Int], Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 
     def printStats(train: TestRDDType, test: TestRDDType, nodes: Array[SplitterNode],
@@ -37,17 +39,17 @@ object Controller extends Comparison {
         }
 
         // Part 1 - Compute auPRC
-        val trainPredictionAndLabels = train.map {case (y, X) =>
-            (SplitterNode.getScore(0, nodes, X).toDouble, y.toDouble)
-        })).cache()
+        val trainPredictionAndLabels = train.map {case t =>
+            (SplitterNode.getScore(0, nodes, t._2).toDouble, t._1.toDouble)
+        }.cache()
 
-        val testPredictionAndLabels = test.map {case (y, X) =>
-            (SplitterNode.getScore(0, nodes, X).toDouble, y.toDouble)
-        })).cache()
+        val testPredictionAndLabels = test.map {case t =>
+            (SplitterNode.getScore(0, nodes, t._2).toDouble, t._1.toDouble)
+        }.cache()
 
         val trainMetrics = new BinaryClassificationMetrics(trainPredictionAndLabels)
         val auPRCTrain = trainMetrics.areaUnderPR + adjust(trainMetrics.pr.take(2))
-        val testMetrics = new BinaryClassificationMetrics(testPredictAndLabels)
+        val testMetrics = new BinaryClassificationMetrics(testPredictionAndLabels)
         val auPRCTest = testMetrics.areaUnderPR + adjust(testMetrics.pr.take(2))
 
         println("Training auPRC = " + auPRCTrain)
@@ -55,17 +57,17 @@ object Controller extends Comparison {
         println("Testing auPRC = " + auPRCTest)
 
         // Part 2 - Compute effective counts
-        val trainCount = y.count()
+        val trainCount = y.size
         val positiveTrainCount = y.count(_ > 0)
         val negativeTrainCount = trainCount - positiveTrainCount
 
-        val wSum = w.sum()
-        val wsqSum = w.map(s => s * s).sum()
-        val effectiveCount = (wsum * wsum / wsqSum) / trainCount
+        val wSum = w.reduce(_ + _)
+        val wsqSum = w.map(s => s * s).reduce(_ + _)
+        val effectiveCount = (wSum * wSum / wsqSum) / trainCount
 
-        val wPositive = w.zip(y).filter(_._2 > 0)
-        val wSumPositive = wPositive.sum()
-        val wsqSumPositive = wPositive.map(s => s * s).sum()
+        val wPositive = w.zip(y).filter(_._2 > 0).map(_._1)
+        val wSumPositive = wPositive.reduce(_ + _)
+        val wsqSumPositive = wPositive.map(s => s * s).reduce(_ + _)
         val effectiveCountPositive = (wSumPositive * wSumPositive / wsqSumPositive) / positiveTrainCount
 
         val wSumNegative = wSum - wSumPositive
@@ -92,8 +94,8 @@ object Controller extends Comparison {
         val negCount = y.value.size - posCount
         println(s"Positive examples for training: $posCount")
         println(s"Negative examples for training: $negCount")
-        val testPosCount = y.filter(_._1 > 0).count()
-        val testNegCount = y.count() - testPosCount
+        val testPosCount = test.filter(_._1 > 0).count
+        val testNegCount = test.count - testPosCount
         println(s"Positive examples for testing: $testPosCount")
         println(s"Negative examples for testing: $testNegCount")
 
@@ -104,7 +106,7 @@ object Controller extends Comparison {
         // In both cases, we need to initialize `weights` vector and `assign` matrix.
         // In addition to that, for case 2 we need to create a root node that always says "YES"
         var nodes =
-            if (baseNodes == Nil) {
+            if (baseNodes.size == 0) {
                 val predVal = 0.5 * log(posCount.toDouble / negCount)
                 val rootNode = SplitterNode(0, -1, true, (-1, 0.0))
                 rootNode.setPredict(predVal, 0.0)
@@ -116,7 +118,7 @@ object Controller extends Comparison {
         val initAssignAndWeights = {
             val aMatrix = new ArrayBuffer[Broadcast[Array[Int]]]()
             var w = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
-            val fa = sc.broadcast(0 until y.value.size).map(_ => -1).toArray)
+            val fa = sc.broadcast((0 until y.value.size).map(_ => -1).toArray)
             for (node <- nodes) {
                 val faIdx = node.prtIndex
                 val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
@@ -138,8 +140,8 @@ object Controller extends Comparison {
         var iteration = 0
         while (iteration < T) {
             iteration = iteration + 1
-            val (prtNodeIndex, onLeft, splitIndex, splitVal, learnerPredicts) =
-                    learnerFunc(train, y, weights, assign, nodes.toArray, maxDepth, lossFunc)
+            val (prtNodeIndex, onLeft, splitIndex, splitVal, learnerPredicts): LearnerObj =
+                    learnerFunc(train, y, weights, assign.toArray, nodes.toArray, maxDepth, lossFunc)
             val newNode = SplitterNode(nodes.size, prtNodeIndex, onLeft, (splitIndex, splitVal))
 
             // compute the predictions of the new node
@@ -169,7 +171,7 @@ object Controller extends Comparison {
 
             // update weights and assignment matrix
             val (newAssign, newWeights) = updateFunc(train, y, assign(prtNodeIndex), weights, newNode)
-            assign.append(newAssign)
+            assign.append(sc.broadcast(newAssign))
             val toDestroy = weights
             weights = sc.broadcast(newWeights)
             toDestroy.destroy()
@@ -185,7 +187,7 @@ object Controller extends Comparison {
                               trainRaw: TestRDDType, test: TestRDDType,
                               sampleFrac: Double, T: Int, maxDepth: Int,
                               baseNodes: Array[SplitterNode]) = {
-        runADTree(sc, instances, y, trainRaw, test,
+        runADTree(sc, train, y, trainRaw, test,
                   Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,
                   sampleFrac, T, maxDepth, baseNodes)
