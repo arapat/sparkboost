@@ -2,7 +2,7 @@ package sparkboost
 
 import math.log
 import util.Random.{nextDouble => rand}
-
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
@@ -14,6 +14,7 @@ import org.apache.spark.mllib.linalg.SparseVector
 import java.io._
 
 import sparkboost.utils.Comparison
+import sparkboost.utils.Utils.safeLogRatio
 
 object Controller extends Comparison {
     val BINSIZE = 1
@@ -110,16 +111,6 @@ object Controller extends Comparison {
                   weightFunc: WeightFunc,
                   sampleFrac: Double, T: Int, maxDepth: Int,
                   baseNodes: Array[SplitterNode]): Array[SplitterNode] = {
-        // Limit the prediction score in a reasonable range
-        def safeLogRatio(a: Double, b: Double) = {
-            if (compare(a) == 0 && compare(b) == 0) {
-                0.0
-            } else {
-                val ratio = math.min(10.0, math.max(a / b, 0.1))
-                log(ratio)
-            }
-        }
-
         // Report basic meta info about the training data
         val posCount = y.value.count(_ > 0)
         val negCount = y.value.size - posCount
@@ -130,23 +121,41 @@ object Controller extends Comparison {
         println(s"Positive examples for testing: $testPosCount")
         println(s"Negative examples for testing: $testNegCount")
 
-        var data = train
+        // Initialize the training examples. There are two possible cases:
+        //     1. a ADTree is provided (i.e. improve an existing model)
+        //     2. start from scratch
+        //
+        // In both cases, we need to initialize `weights` vector and `assign` matrix.
+        // In addition to that, for case 2 we need to create a root node that always says "YES"
         var nodes =
             if (baseNodes == Nil) {
                 val predVal = 0.5 * log(posCount.toDouble / negCount)
                 val rootNode = SplitterNode(0, -1, true, (-1, 0.0))
                 rootNode.setPredict(predVal, 0.0)
                 println(s"Root node predicts ($predVal, 0.0)")
-                data = updateFunc(train, rootNode).persist(StorageLevel.MEMORY_ONLY)
-                // TODO: continue from here
-                data.count()
-                train.unpersist()
                 Array(rootNode)
             } else {
                 baseNodes
             }
+        val initAssignAndWeights = {
+            val aMatrix = new ArrayBuffer[Broadcast[Array[Int]]]()
+            var w = Broadcast((0 until y.value.size).map(_ => 1.0).toArray)
+            val fa = Broadcast(0 until y.value.size).map(_ => -1).toArray)
+            for (node <- nodes) {
+                val faIdx = node.prtIndex
+                val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
+                val (aVec, nw) = updateFunc(train, y, brFa, w, node)
+                val toDestroy = w
+                w = Broadcast(nw)
+                aMatrix.append(Broadcast(aVec))
+                toDestroy.destroy()
+            }
+            (aMatrix, w)
+        }
+        val assign = initAssignAndWeights._1
+        var weights = initAssignAndWeights._2
 
-        printStats(data.filter(_._2 < BINSIZE), glomTest, nodes, 0)
+        printStats() // TODO: fix this
         println()
 
         var iteration = 0
