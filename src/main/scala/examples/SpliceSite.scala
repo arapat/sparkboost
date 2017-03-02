@@ -13,133 +13,141 @@ import sparkboost._
 
 object SpliceSite {
     /*
-    args(0) - file path to the training data
-    args(1) - file path to the test data
-    args(2) - fraction for sampling
-    args(3) - number of iterations
-    args(4) - max depth of the tree
-    args(5) - algorithm selection
-        1 -> AdaBoost partitioned
-        2 -> AdaBoost non-partitioned
-        3 -> LogitBoost partitioned
-    args(6) - File path to save the model
-    args(7) - File path to load the model
-    args(8) - data format
-        1 -> raw data
-        2 -> objects
-        3 -> sample by model
+    Commandline options:
+
+    --train       - file path to the training data
+    --test        - file path to the test data
+    --sample-frac - fraction for sampling
+    --iteration   - number of iterations
+    --depth       - max depth of the tree
+    --algorithm   - algorithm selection
+                        1 -> AdaBoost partitioned
+                        2 -> AdaBoost non-partitioned
+                        3 -> LogitBoost partitioned
+    --save-model  - File path to save the model
+    --load-model  - File path to load the model
+    --format      - data format
+                        1 -> raw data
+                        2 -> objects
+                        3 -> sample by model
+    --train-rdd   - path to save training data RDD (row-based)
+    --test-rdd    - path to save testing data RDD
     */
+
+    // Global constants (TODO: parameterize them)
+    val BINSIZE = 1
+    val ALLSAMPLE = 0.05
+    val NEGSAMPLE = 0.01
+    // training/testing split
+    val TRAIN_PORTION = 0.75
+    val TEST_PORTION = 1.0 - TRAIN_PORTION
+
+    // Construction features: P1 and P2 (as in Degroeve's SpliceMachine paper)
+    val FEATURE_TYPE = 2
+    val CENTER = 60
+    val LEFT_WINDOW = 50  // out of 59
+    val RIGHT_WINDOW = 50  // out of 80
+    val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
+    val featureSize = (WINDOW_SIZE) * 4 + {if (FEATURE_TYPE == 1) 0 else (WINDOW_SIZE - 1) * 4 * 4}
+    val indexMap = {
+        val unit = List("A", "C", "G", "T")
+        val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
+        val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
+        val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
+
+        if (FEATURE_TYPE == 1) p1.zip(0 until p1.size).toMap
+        else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
+    }
+
+    def parseOptions(options: Array[String]) = {
+        options.zip(options.slice(1, options.size))
+               .zip(0 until options.size).filter(_._2 % 2 == 0).map(_._1)
+               .map {case (key, value): (key.slice(2, key.size), value)}
+               .toMap
+    }
+
+    def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
+        val partId = partIndex % BINSIZE
+        val sample = data.toList
+        (partId until featureSize by BINSIZE).map(
+            idx => (idx, (idx, sample))
+        ).iterator
+    }
+
+    def preprocessMergeSort(a: (Int, List[Instance]), b: (Int, List[Instance])) = {
+        val index = a._1
+
+        @tailrec
+        def mergeSort(res: List[Instance], xs: List[Instance], ys: List[Instance]): List[Instance] = {
+            (xs, ys) match {
+                case (Nil, _) => res.reverse ::: ys
+                case (_, Nil) => res.reverse ::: xs
+                case (x :: xs1, y :: ys1) => {
+                    if (x.X(index) < y.X(index)) mergeSort(x :: res, xs1, ys)
+                    else                         mergeSort(y :: res, xs, ys1)
+                }
+            }
+        }
+
+        (index, mergeSort(Nil, a._2, b._2))
+    }
+
+    def preprocessSlices(sliceFrac: Double)(indexData: (Int, List[Instance])) = {
+        val index = indexData._1
+        val data = indexData._2.map(_.X(index)).toVector
+        var last = data(0)
+        for (t <- data) {
+            require(last <= t)
+            last = t
+        }
+        val sliceSize = math.max(1, (indexData._2.size * sliceFrac).floor.toInt)
+        val slices =
+            (sliceSize until data.size by sliceSize).map(
+                idx => 0.5 * (data(idx - 1) + data(idx))
+            ).distinct.toList :+ Double.MaxValue
+        (indexData._2, index, slices)
+    }
+
+    def rowToInstance(s: String) = {
+        val data = s.slice(1, s.size - 1).split(",")
+        val raw = data(1)
+        val window = (
+            raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
+            raw.slice(CENTER + 1, CENTER + RIGHT_WINDOW + 1)
+        )
+        val nonzeros = {
+            if (FEATURE_TYPE == 1) (0 until WINDOW_SIZE).zip(window)
+            else {
+                (0 until WINDOW_SIZE).zip(window) ++
+                (0 until WINDOW_SIZE).zip(
+                    window.zip(window.tail).map(t => t._1.toString + t._2)
+                )
+            }
+        }.map(t => indexMap(t._1 + t._2.toString)).toArray.sorted
+        Instance(data(0).toInt,
+                 new SparseVector(featureSize, nonzeros, nonzeros.map(_ => 1.0)))
+    }
+
     def main(args: Array[String]) {
-        val loadMode = args(8).toInt
-        val BINSIZE = 1
-        val ALLSAMPLE = 0.05
-        val NEGSAMPLE = 0.01
-        val trainObjFile = "/train-pickle-onebit1/"  // use 3 to include 2-char mappings
-        val testObjFile = "/test-pickle-onebit1/"  // use 3 to include 2-char
-
-        // Feature: P1 + P2
-        val FEATURE_TYPE = 2
-        val CENTER = 60
-        val LEFT_WINDOW = 50 // 59
-        val RIGHT_WINDOW = 50 // 80
-        val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
-        val featureSize =
-            if (FEATURE_TYPE == 1) {
-                (WINDOW_SIZE) * 4
-            } else {
-                (WINDOW_SIZE) * 4 + (WINDOW_SIZE - 1) * 4 * 4
-            }
-        val indexMap = {
-            val unit = List("A", "C", "G", "T")
-            val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
-            val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
-            val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
-
-            if (FEATURE_TYPE == 1) p1.zip(0 until p1.size).toMap
-            else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
-        }
-
-        def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
-            val partId = partIndex % BINSIZE
-            val sample = data.toList
-            (partId until featureSize by BINSIZE).map(
-                idx => (idx, (idx, sample))
-            ).iterator
-        }
-
-        def preprocessMergeSort(a: (Int, List[Instance]), b: (Int, List[Instance])) = {
-            val index = a._1
-
-            @tailrec
-            def mergeSort(res: List[Instance], xs: List[Instance], ys: List[Instance]): List[Instance] = {
-                (xs, ys) match {
-                    case (Nil, _) => res.reverse ::: ys
-                    case (_, Nil) => res.reverse ::: xs
-                    case (x :: xs1, y :: ys1) => {
-                        if (x.X(index) < y.X(index)) mergeSort(x :: res, xs1, ys)
-                        else                         mergeSort(y :: res, xs, ys1)
-                    }
-                }
-            }
-
-            (index, mergeSort(Nil, a._2, b._2))
-        }
-
-        def preprocessSlices(sliceFrac: Double)(indexData: (Int, List[Instance])) = {
-            val index = indexData._1
-            val data = indexData._2.map(_.X(index)).toVector
-            var last = data(0)
-            for (t <- data) {
-                require(last <= t)
-                last = t
-            }
-            val sliceSize = math.max(1, (indexData._2.size * sliceFrac).floor.toInt)
-            val slices =
-                (sliceSize until data.size by sliceSize).map(
-                    idx => 0.5 * (data(idx - 1) + data(idx))
-                ).distinct.toList :+ Double.MaxValue
-            (indexData._2, index, slices)
-        }
-
-        def rowToInstance(s: String) = {
-            val data = s.slice(1, s.size - 1).split(",")
-            val raw = data(1)
-            val window = (
-                raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
-                raw.slice(CENTER + 1, CENTER + RIGHT_WINDOW + 1)
-            )
-            val nonzeros = {
-                if (FEATURE_TYPE == 1) (0 until WINDOW_SIZE).zip(window)
-                else {
-                    (0 until WINDOW_SIZE).zip(window) ++
-                    (0 until WINDOW_SIZE).zip(
-                        window.zip(window.tail).map(t => t._1.toString + t._2)
-                    )
-                }
-            }.map(t => indexMap(t._1 + t._2.toString)).toArray.sorted
-            Instance(data(0).toInt,
-                     new SparseVector(featureSize, nonzeros, nonzeros.map(_ => 1.0)))
-        }
-
-        if (args.size != 9) {
-            println(
-                "Please provide nine arguments: training data path, " +
-                "test data path, sampling fraction, " +
-                "number of iterations, max depth, boolean flag, model file path, " +
-                "old model file path, data source type."
-            )
-            return
-        }
+        // Parse and read options
+        val options = parseOptions(args)
+        val trainPath = options("train")
+        val testPath = options("test")
+        val sampleFrac = options("sample-frac")
+        val T = options("iteration")
+        val depth = options("depth")
+        val algo = options("algorithm")
+        val modelReadPath = options.get("save-model", "")
+        val modelWritePath = options.get("load-model", "")
+        val dataFormat = options("format")
+        val trainFile = options("train-rdd")
+        val testFile = options("test-rdd")
 
         val conf = new SparkConf()
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .set("spark.kryoserializer.buffer.mb","24")
         val sc = new SparkContext(conf)
         sc.setCheckpointDir("checkpoints/")
-
-        // training/testing split
-        val TRAIN_PORTION = 0.75
-        val TEST_PORTION = 1.0 - TRAIN_PORTION
 
         val glomTrain = (
             if (loadMode == 2){
@@ -200,12 +208,11 @@ object SpliceSite {
                 sc.objectFile[Array[Instance]](testObjFile)
             }
         ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
+
         if (loadMode == 1 || loadMode == 3) {
             glomTrain.saveAsObjectFile(trainObjFile)
             glomTest.saveAsObjectFile(testObjFile)
         }
-
-        // println("Training data size: " + train.count)
 
         println("Train partition (set) size: " + glomTrain.count)
         println("Test partition (set) size: " + glomTest.count)
@@ -235,13 +242,10 @@ object SpliceSite {
                 )
             */
         }
-        for (t <- nodes) {
-            println(t)
-        }
 
+        nodes.foreach(println)
+        SplitterNode.save(nodes, modelWritePath)
         sc.stop()
-
-        SplitterNode.save(nodes, args(6))
     }
 
 
