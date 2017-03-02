@@ -60,14 +60,6 @@ object SpliceSite {
         else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
     }
 
-    // Define SparkContext
-    val conf = new SparkConf()
-    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-        .set("spark.kryoserializer.buffer.mb","24")
-    val sc = new SparkContext(conf)
-    // TODO: delete checkpoints before exiting
-    sc.setCheckpointDir("checkpoints/")
-
     def parseOptions(options: Array[String]) = {
         options.zip(options.slice(1, options.size))
                .zip(0 until options.size).filter(_._2 % 2 == 0).map(_._1)
@@ -75,7 +67,8 @@ object SpliceSite {
                .toMap
     }
 
-    def loadTrainData(loadMode: Int, trainPath: String, trainObjFile: String, testObjFile: String,
+    def loadTrainData(sc: SparkContext,
+                      loadMode: Int, trainPath: String, trainObjFile: String, testObjFile: String,
                       nodes: Array[SplitterNode]):
                 (Array[Int], RDD[Instances], RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = {
         def rowToInstance(s: String) = {
@@ -157,12 +150,20 @@ object SpliceSite {
                             .groupByKey(numPartitions)
                             .map {case (index, xAndPtr) => {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
-                                Instances((new DenseVector(x)).toSparse, ptr, index, sliceFrac)
+                                Instances((new DenseVector(x)).toSparse, ptr, index, sliceFrac, true)
                             }}
         (y, train, trainRaw, test)
     }
 
     def main(args: Array[String]) {
+        // Define SparkContext
+        val conf = new SparkConf()
+        conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+            .set("spark.kryoserializer.buffer.mb","24")
+        val sc = new SparkContext(conf)
+        // TODO: delete checkpoints before exiting
+        sc.setCheckpointDir("checkpoints/")
+
         // Parse and read options
         val options = parseOptions(args)
         val trainPath = options("train")
@@ -184,7 +185,7 @@ object SpliceSite {
         }
 
         val (yLocal, train, trainRaw, test) = loadTrainData(
-            loadMode, trainPath, trainObjFile, testObjFile, baseNodes)
+            sc, loadMode, trainPath, trainObjFile, testObjFile, baseNodes)
         trainRaw.persist(StorageLevel.MEMORY_ONLY)
         train.persist(StorageLevel.MEMORY_ONLY)
         test.persist(StorageLevel.MEMORY_ONLY)

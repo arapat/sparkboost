@@ -1,6 +1,7 @@
 package sparkboost
 
 import java.io._
+import math.max
 
 import sparkboost.utils.Comparison
 
@@ -91,7 +92,7 @@ object SplitterNode {
             0.0
         } else {
             val node = nodes(curIndex)
-            node.check(instance(node.splitIndex), node.splitIndex, true) match {
+            node.check(instance(max(0, node.splitIndex)), node.splitIndex, true) match {
                 case -1 => {
                     node.leftPredict + (
                         if (node.leftChild.nonEmpty) {

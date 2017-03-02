@@ -1,6 +1,7 @@
 package sparkboost
 
 import math.exp
+import math.max
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -21,13 +22,13 @@ object UpdateFunc {
         val curOnLeft = node.onLeft
         val leftPredict = node.leftPredict
         val rightPredict = node.rightPredict
-        val results = train.filter(_.index == curIndex).flatMap(insts =>
+        val results = train.filter(_.index == max(0, curIndex)).flatMap(insts =>
             insts.x.toDense.values.zip(insts.ptr).map { case (ix, ipt) => {
                 val iy = y.value(ipt)
                 val iw = w.value(ipt)
                 val faPredict = fa.value(ipt)
                 val assign =
-                    if (faPredict == 0 || faPredict < 0 && curOnLeft || faPredict > 0 && !curOnLeft) {
+                    if (faPredict == 0 || faPredict < 0 && !curOnLeft || faPredict > 0 && curOnLeft) {
                         0
                     } else {
                         node.check(ix, curIndex, true)

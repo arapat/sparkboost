@@ -3,13 +3,9 @@ package sparkboost
 import org.apache.spark.mllib.linalg.SparseVector
 
 class Instances(val x: SparseVector, val ptr: Array[Int],
-                val index: Int, val splits: Array[Double]) extends java.io.Serializable {
+                val index: Int, val splits: Array[Double],
+                val active: Boolean) extends java.io.Serializable {
     // set active=true if the current index of this group of instances is being used for training
-    var active = false
-
-    def setActive(isActivated: Boolean) {
-        active = isActivated
-    }
 }
 
 object Instances {
@@ -21,8 +17,8 @@ object Instances {
         ).distinct.toArray :+ Double.MaxValue
     }
 
-    def apply(x: SparseVector, ptr: Array[Int], index: Int, sliceFrac: Double) = {
+    def apply(x: SparseVector, ptr: Array[Int], index: Int, sliceFrac: Double, active: Boolean) = {
         val slices = createSlices(sliceFrac, x.toDense.values)
-        new Instances(x, ptr, index, slices)
+        new Instances(x, ptr, index, slices, active)
     }
 }

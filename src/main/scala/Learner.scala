@@ -27,21 +27,23 @@ object Learner extends Comparison {
         val wLocal: Array[Double] = data.ptr.map(k => w.value(k))
         val totalWeight = wLocal.sum
         val totalCount = wLocal.size
+        val emptyDArray = Array[Double]()
+        val zeroDArray = Array(0.0)
 
         def findBest(nodeIndex: Int, depth: Int): ResultType = {
             val localAssign = data.ptr.map(k => assign(nodeIndex).value(k))
             val alw = localAssign.zip(yLocal).zip(wLocal)
-            val assignAndLabelsToWeights = alw.groupBy(_._1)
+            val assignAndLabelsToWeights = alw.groupBy(_._1).mapValues(_.map(_._2))
 
-            val leftTotalPositiveWeight = assignAndLabelsToWeights((-1, 1)).map(_._2).sum
-            val leftTotalPositiveCount = assignAndLabelsToWeights((-1, 1)).size
-            val leftTotalNegativeWeight = assignAndLabelsToWeights((-1, -1)).map(_._2).sum
-            val leftTOtalNegativeCount = assignAndLabelsToWeights((-1, -1)).size
+            val leftTotalPositiveWeight = assignAndLabelsToWeights.getOrElse((-1, 1), zeroDArray).sum
+            val leftTotalPositiveCount = assignAndLabelsToWeights.getOrElse((-1, 1), emptyDArray).size
+            val leftTotalNegativeWeight = assignAndLabelsToWeights.getOrElse((-1, -1), zeroDArray).sum
+            val leftTOtalNegativeCount = assignAndLabelsToWeights.getOrElse((-1, -1), emptyDArray).size
 
-            val rightTotalPositiveWeight = assignAndLabelsToWeights((1, 1)).map(_._2).sum
-            val rightTotalPositiveCount = assignAndLabelsToWeights((1, 1)).size
-            val rightTotalNegativeWeight = assignAndLabelsToWeights((1, -1)).map(_._2).sum
-            val rightTotalNegativeCount = assignAndLabelsToWeights((1, -1)).size
+            val rightTotalPositiveWeight = assignAndLabelsToWeights.getOrElse((1, 1), zeroDArray).sum
+            val rightTotalPositiveCount = assignAndLabelsToWeights.getOrElse((1, 1), emptyDArray).size
+            val rightTotalNegativeWeight = assignAndLabelsToWeights.getOrElse((1, -1), zeroDArray).sum
+            val rightTotalNegativeCount = assignAndLabelsToWeights.getOrElse((1, -1), emptyDArray).size
 
             val rejectWeight = totalWeight -
                                (leftTotalNegativeWeight + leftTotalPositiveCount) -
