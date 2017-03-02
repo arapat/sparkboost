@@ -147,9 +147,9 @@ object Controller extends Comparison {
             // compute the predictions of the new node
             val weightsAndCounts =
                 train.filter(_.index == splitIndex).flatMap(t =>
-                    t.ptr.map(k =>
-                        ((t.x(k) <= splitVal, y.value(k)), (weights.value(k), 1))
-                    )
+                    t.ptr.zip(t.x.toDense.values).map {case (k, ix) =>
+                        ((ix <= splitVal, y.value(k)), (weights.value(k), 1))
+                    }
                 ).reduceByKey {
                     (a: (Double, Int), b: (Double, Int)) => (a._1 + b._1, a._2 + b._2)
                 }.collectAsMap()

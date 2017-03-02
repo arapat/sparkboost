@@ -53,7 +53,7 @@ class SplitterNode(val index: Int, val prtIndex: Int, val onLeft: Boolean,
             s" side of the node $prtIndex,"
         } else ""
 
-        s"Node $index: Index $index <= $splitVal ($leftPredict, $rightPredict)" + position +
+        s"Node $index: Index $splitIndex <= $splitVal ($leftPredict, $rightPredict)" + position +
         s" has $nLeftChild left and $nRightChild right children."
     }
 }
