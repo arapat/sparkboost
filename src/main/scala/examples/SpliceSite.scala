@@ -38,7 +38,7 @@ object SpliceSite {
 
     // Global constants (TODO: parameterize them)
     val BINSIZE = 1
-    val ALLSAMPLE = 0.05
+    val ALLSAMPLE = 1.0
     val NEGSAMPLE = 0.01
     // training/testing split
     val TRAIN_PORTION = 0.75
@@ -136,9 +136,9 @@ object SpliceSite {
                 sampledData.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
             }
         val (trainRaw, test): (RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = (splits(0), splits(1))
+        trainRaw.cache()
+        test.cache()
 
-
-        // apply(x: SparseVector, ptr: Array[Int], index: Int, sliceFrac: Double)
         // TODO: support SIZE > 1
         // TODO: parameterize sliceFrac
         val sliceFrac = 0.05
@@ -152,6 +152,7 @@ object SpliceSite {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
                                 Instances((new DenseVector(x)).toSparse, ptr, index, sliceFrac, true)
                             }}
+        train.cache()
         (y, train, trainRaw, test)
     }
 
@@ -186,9 +187,6 @@ object SpliceSite {
 
         val (yLocal, train, trainRaw, test) = loadTrainData(
             sc, loadMode, trainPath, trainObjFile, testObjFile, baseNodes)
-        trainRaw.persist(StorageLevel.MEMORY_ONLY)
-        train.persist(StorageLevel.MEMORY_ONLY)
-        test.persist(StorageLevel.MEMORY_ONLY)
         val y = sc.broadcast(yLocal)
         val testRef = (
             if (testRefObjFile == "") {
