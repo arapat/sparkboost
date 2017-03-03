@@ -1,6 +1,6 @@
 package sparkboost
 
-import collection.mutable.Queue
+import collection.mutable.Map
 import Double.MaxValue
 
 import org.apache.spark.broadcast.Broadcast
@@ -17,39 +17,37 @@ object Learner extends Comparison {
     type MinScoreType = (Double, (Double, Double, Double, Double, Double), (Int, Int, Int, Int, Int))
     type NodeInfoType = (Int, Boolean, Int, Double, (Double, Double))
     type ResultType = (MinScoreType, NodeInfoType)
+    val assignAndLabelsTemplate = Array(-1, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
 
     def findBestSplit(
             y: BrAI, w: BrAD, assign: Array[BrAI],
             nodes: Array[SplitterNode], maxDepth: Int,
             lossFunc: (Double, Double, Double, Double, Double) => Double
     )(data: Instances) = {
-        val yLocal: Array[Int] = data.ptr.map(k => y.value(k))
-        val wLocal: Array[Double] = data.ptr.map(k => w.value(k))
+        val (yLocal, wLocal) = data.ptr.map(k => (y.value(k), w.value(k))).unzip
+        val denseX = data.x.toDense.values
         val totalWeight = wLocal.sum
         val totalCount = wLocal.size
-        val emptyDArray = Array[Double]()
-        val zeroDArray = Array(0.0)
 
         def findBest(nodeIndex: Int, depth: Int): ResultType = {
             val localAssign = data.ptr.map(k => assign(nodeIndex).value(k))
             val alw = localAssign.zip(yLocal).zip(wLocal)
-            val assignAndLabelsToWeights = alw.groupBy(_._1).mapValues(_.map(_._2))
+            val assignAndLabelsToWeights = collection.mutable.Map(assignAndLabelsTemplate: _*)
+            alw.foreach {case (ay, iw) => {
+                val (ws, wc) = assignAndLabelsToWeights(ay)
+                assignAndLabelsToWeights(ay) = (ws + iw, wc + 1)
+            }}
 
-            val leftTotalPositiveWeight = assignAndLabelsToWeights.getOrElse((-1, 1), zeroDArray).sum
-            val leftTotalPositiveCount = assignAndLabelsToWeights.getOrElse((-1, 1), emptyDArray).size
-            val leftTotalNegativeWeight = assignAndLabelsToWeights.getOrElse((-1, -1), zeroDArray).sum
-            val leftTOtalNegativeCount = assignAndLabelsToWeights.getOrElse((-1, -1), emptyDArray).size
-
-            val rightTotalPositiveWeight = assignAndLabelsToWeights.getOrElse((1, 1), zeroDArray).sum
-            val rightTotalPositiveCount = assignAndLabelsToWeights.getOrElse((1, 1), emptyDArray).size
-            val rightTotalNegativeWeight = assignAndLabelsToWeights.getOrElse((1, -1), zeroDArray).sum
-            val rightTotalNegativeCount = assignAndLabelsToWeights.getOrElse((1, -1), emptyDArray).size
+            val (leftTotalPositiveWeight, leftTotalPositiveCount) = assignAndLabelsToWeights((-1, 1))
+            val (leftTotalNegativeWeight, leftTotalNegativeCount) = assignAndLabelsToWeights((-1, -1))
+            val (rightTotalPositiveWeight, rightTotalPositiveCount) = assignAndLabelsToWeights((1, 1))
+            val (rightTotalNegativeWeight, rightTotalNegativeCount) = assignAndLabelsToWeights((1, -1))
 
             val rejectWeight = totalWeight -
-                               (leftTotalNegativeWeight + leftTotalPositiveCount) -
+                               (leftTotalNegativeWeight + leftTotalPositiveWeight) -
                                (rightTotalNegativeWeight + rightTotalPositiveWeight)
             val rejectCount = totalCount -
-                              (leftTOtalNegativeCount + leftTotalPositiveCount) -
+                              (leftTotalNegativeCount + leftTotalPositiveCount) -
                               (rightTotalNegativeCount + rightTotalPositiveCount)
 
             var leftCurrPositiveWeight = 0.0
@@ -79,17 +77,17 @@ object Learner extends Comparison {
             var rightPredict = 0.0
 
             var curIndex = 0
-            for (((iloc, iy), iw) <- alw) {
+            for ((ix, ((iloc, iy), iw)) <- denseX.zip(alw)) {
                 if (iloc < 0) {
                     // In left tree
-                    if (compare(data.x(curIndex), leftLastSplitValue) > 0) {
+                    if (compare(ix, leftLastSplitValue) > 0) {
                         val leftRemainPositiveWeight = leftTotalPositiveWeight - leftCurrPositiveWeight
                         val leftRemainNegativeWeight = leftTotalNegativeWeight - leftCurrNegativeWeight
                         val score = lossFunc(rejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
                                              leftRemainPositiveWeight, leftRemainNegativeWeight)
                         if (compare(score, minScore._1) < 0) {
                             val leftRemainPositiveCount = leftTotalPositiveCount - leftCurrPositiveCount
-                            val leftRemainNegativeCount = leftTOtalNegativeCount - leftCurrNegativeCount
+                            val leftRemainNegativeCount = leftTotalNegativeCount - leftCurrNegativeCount
                             minScore = (
                                 score,
                                 (rejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
@@ -115,7 +113,7 @@ object Learner extends Comparison {
                 } else if (iloc > 0) {
                     // In right tree
                     // In left tree
-                    if (compare(data.x(curIndex), rightLastSplitValue) > 0) {
+                    if (compare(ix, rightLastSplitValue) > 0) {
                         val rightRemainPositiveWeight = rightTotalPositiveWeight - rightCurrPositiveWeight
                         val rightRemainNegativeWeight = rightTotalNegativeWeight - rightCurrNegativeWeight
                         val score = lossFunc(rejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
