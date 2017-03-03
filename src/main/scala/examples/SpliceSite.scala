@@ -181,8 +181,8 @@ object SpliceSite {
         val testRefObjFile = options.getOrElse("test-ref-rdd", "")
 
         val baseNodes = {
-            if (loadMode == 3) SplitterNode.load(modelReadPath)
-            else               Array[SplitterNode]()
+            if (modelReadPath != "") SplitterNode.load(modelReadPath)
+            else                     Array[SplitterNode]()
         }
 
         val (yLocal, train, trainRaw, test) = loadTrainData(
