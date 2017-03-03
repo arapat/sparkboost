@@ -45,12 +45,10 @@ object Learner extends Comparison {
             val (rightTotalPositiveWeight, rightTotalPositiveCount) = assignAndLabelsToWeights((1, 1))
             val (rightTotalNegativeWeight, rightTotalNegativeCount) = assignAndLabelsToWeights((1, -1))
 
-            val rejectWeight = totalWeight -
-                               (leftTotalNegativeWeight + leftTotalPositiveWeight) -
-                               (rightTotalNegativeWeight + rightTotalPositiveWeight)
-            val rejectCount = totalCount -
-                              (leftTotalNegativeCount + leftTotalPositiveCount) -
-                              (rightTotalNegativeCount + rightTotalPositiveCount)
+            val leftRejectWeight = totalWeight - (leftTotalNegativeWeight + leftTotalPositiveWeight)
+            val leftRejectCount = totalCount - (leftTotalNegativeCount + leftTotalPositiveCount)
+            val rightRejectWeight = totalWeight - (rightTotalNegativeWeight + rightTotalPositiveWeight)
+            val rightRejectCount = totalCount - (rightTotalNegativeCount + rightTotalPositiveCount)
 
             var leftCurrPositiveWeight = 0.0
             var leftCurrPositiveCount = 0
@@ -90,16 +88,16 @@ object Learner extends Comparison {
                     if (compare(ix, leftLastSplitValue) > 0) {
                         val leftRemainPositiveWeight = leftTotalPositiveWeight - leftCurrPositiveWeight
                         val leftRemainNegativeWeight = leftTotalNegativeWeight - leftCurrNegativeWeight
-                        val score = lossFunc(rejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
+                        val score = lossFunc(leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
                                              leftRemainPositiveWeight, leftRemainNegativeWeight)
                         if (compare(score, minScore._1) < 0) {
                             val leftRemainPositiveCount = leftTotalPositiveCount - leftCurrPositiveCount
                             val leftRemainNegativeCount = leftTotalNegativeCount - leftCurrNegativeCount
                             minScore = (
                                 score,
-                                (rejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
+                                (leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
                                     leftRemainPositiveWeight, leftRemainNegativeWeight),
-                                (rejectCount, leftCurrPositiveCount, leftCurrNegativeCount,
+                                (leftRejectCount, leftCurrPositiveCount, leftCurrNegativeCount,
                                     leftRemainPositiveCount, leftRemainNegativeCount)
                             )
                             splitVal = leftLastSplitValue
@@ -123,16 +121,16 @@ object Learner extends Comparison {
                     if (compare(ix, rightLastSplitValue) > 0) {
                         val rightRemainPositiveWeight = rightTotalPositiveWeight - rightCurrPositiveWeight
                         val rightRemainNegativeWeight = rightTotalNegativeWeight - rightCurrNegativeWeight
-                        val score = lossFunc(rejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
+                        val score = lossFunc(rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
                                              rightRemainPositiveWeight, rightRemainNegativeWeight)
                         if (compare(score, minScore._1) < 0) {
                             val rightRemainPositiveCount = rightTotalPositiveCount - rightCurrPositiveCount
                             val rightRemainNegativeCount = rightTotalNegativeCount - rightCurrNegativeCount
                             minScore = (
                                 score,
-                                (rejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
+                                (rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
                                     rightRemainPositiveWeight, rightRemainNegativeWeight),
-                                (rejectCount, rightCurrPositiveCount, rightCurrNegativeCount,
+                                (rightRejectCount, rightCurrPositiveCount, rightCurrNegativeCount,
                                     rightRemainPositiveCount, rightRemainNegativeCount)
                             )
                             splitVal = rightLastSplitValue

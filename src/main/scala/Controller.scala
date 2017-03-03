@@ -146,10 +146,14 @@ object Controller extends Comparison {
                     learnerFunc(train, y, weights, assign.toArray, nodes.toArray, maxDepth, lossFunc)
             val newNode = SplitterNode(nodes.size, prtNodeIndex, onLeft, (splitIndex, splitVal))
 
+            val prtAssign = assign(prtNodeIndex)
             // compute the predictions of the new node
             val weightsAndCounts =
                 train.filter(_.index == splitIndex).flatMap(t =>
-                    t.ptr.zip(t.x.toDense.values).map {case (k, ix) =>
+                    t.ptr.zip(t.x.toDense.values) filter {case (k, ix) => {
+                        val ia = prtAssign.value(k)
+                        ia < 0 && onLeft || ia > 0 && !onLeft
+                    }} map {case (k, ix) =>
                         ((ix <= splitVal, y.value(k)), (weights.value(k), 1))
                     }
                 ).reduceByKey {
@@ -172,7 +176,7 @@ object Controller extends Comparison {
             nodes :+= newNode
 
             // update weights and assignment matrix
-            val (newAssign, newWeights) = updateFunc(train, y, assign(prtNodeIndex), weights, newNode)
+            val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, newNode)
             assign.append(sc.broadcast(newAssign))
             val toDestroy = weights
             weights = sc.broadcast(newWeights)
