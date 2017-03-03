@@ -42,8 +42,14 @@ object Controller extends Comparison {
 
         // TODO: extend to other boosting loss functions
         def getLossFunc(predictionAndLabels: RDD[(Double, Double)]) = {
-            predictionAndLabels.map(t => exp(-t._1 * t._2))
-                               .reduce(_ + _) / predictionAndLabels.count
+            val scores = predictionAndLabels.map(t => (t._2, exp(-t._1 * t._2))).cache()
+            val count = scores.count
+            val sumScores = scores.map(_._2).reduce(_ + _)
+            val positiveCount = scores.filter(_._1 > 0).count
+            val positiveSumScores = scores.filter(_._1 > 0).map(_._2).reduce(_ + _)
+            val negativeCount = count - positiveCount
+            val negativeSumScores = sumScores - positiveSumScores
+            (sumScores / count, positiveSumScores / positiveCount, negativeSumScores / negativeCount)
         }
 
         // Part 1 - Compute auPRC
@@ -76,11 +82,17 @@ object Controller extends Comparison {
         }
 
         println("Training auPRC = " + auPRCTrain)
-        println("Training average score = " + lossFuncTrain)
+        println("Training average score = " + lossFuncTrain._1)
+        println("Training average score (positive) = " + lossFuncTrain._2)
+        println("Training average score (negative) = " + lossFuncTrain._3)
         println("Testing auPRC = " + auPRCTest)
-        println("Testing average score = " + lossFuncTest)
+        println("Testing average score = " + lossFuncTest._1)
+        println("Testing average score (positive) = " + lossFuncTest._2)
+        println("Testing average score (negative) = " + lossFuncTest._3)
         println("Testing (ref) auPRC = " + auPRCTestRef)
-        println("Testing (ref) average score = " + lossFuncTestRef)
+        println("Testing (ref) average score = " + lossFuncTestRef._1)
+        println("Testing (ref) average score (positive) = " + lossFuncTestRef._2)
+        println("Testing (ref) average score (negative) = " + lossFuncTestRef._3)
         if (iteration % 20 == 0) {
             println("Training PR = " + trainMetrics.pr.collect.toList)
             println("Testing PR = " + testMetrics.pr.collect.toList)
@@ -136,8 +148,9 @@ object Controller extends Comparison {
         //
         // In both cases, we need to initialize `weights` vector and `assign` matrix.
         // In addition to that, for case 2 we need to create a root node that always says "YES"
+        val genRootNode = baseNodes.size == 0
         var nodes =
-            if (baseNodes.size == 0) {
+            if (genRootNode) {
                 val predVal = 0.5 * log(posCount.toDouble / negCount)
                 val rootNode = SplitterNode(0, -1, true, (-1, 0.0))
                 rootNode.setPredict(predVal, 0.0)
@@ -154,10 +167,12 @@ object Controller extends Comparison {
                 val faIdx = node.prtIndex
                 val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
                 val (aVec, nw) = updateFunc(train, y, brFa, w, node)
-                val toDestroy = w
-                w = sc.broadcast(nw)
                 aMatrix.append(sc.broadcast(aVec))
-                toDestroy.destroy()
+                if (genRootNode) {
+                    val toDestroy = w
+                    w = sc.broadcast(nw)
+                    toDestroy.destroy()
+                }
             }
             fa.destroy()
             (aMatrix, w)
