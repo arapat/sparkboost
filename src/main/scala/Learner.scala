@@ -24,19 +24,22 @@ object Learner extends Comparison {
             nodes: Array[SplitterNode], maxDepth: Int,
             lossFunc: (Double, Double, Double, Double, Double) => Double
     )(data: Instances) = {
-        val (yLocal, wLocal) = data.ptr.map(k => (y.value(k), w.value(k))).unzip
-        val denseX = data.x.toDense.values
+        val (yLocal, wLocal): (Array[Int], Array[Double]) =
+            data.ptr.map(k => (y.value(k), w.value(k))).unzip
+        val denseX: Array[Double] = data.x.toDense.values
         val totalWeight = wLocal.sum
         val totalCount = wLocal.size
 
         def findBest(nodeIndex: Int, depth: Int): ResultType = {
-            val localAssign = data.ptr.map(k => assign(nodeIndex).value(k))
-            val alw = localAssign.zip(yLocal).zip(wLocal)
+            val localAssign: Array[Int] = data.ptr.map(k => assign(nodeIndex).value(k))
+            var idx = 0
             val assignAndLabelsToWeights = collection.mutable.Map(assignAndLabelsTemplate: _*)
-            alw.foreach {case (ay, iw) => {
+            while (idx < localAssign.size) {
+                val ay = (localAssign(idx), yLocal(idx))
                 val (ws, wc) = assignAndLabelsToWeights(ay)
-                assignAndLabelsToWeights(ay) = (ws + iw, wc + 1)
-            }}
+                assignAndLabelsToWeights(ay) = (ws + wLocal(idx), wc + 1)
+                idx += 1
+            }
 
             val (leftTotalPositiveWeight, leftTotalPositiveCount) = assignAndLabelsToWeights((-1, 1))
             val (leftTotalNegativeWeight, leftTotalNegativeCount) = assignAndLabelsToWeights((-1, -1))
@@ -76,8 +79,12 @@ object Learner extends Comparison {
             var leftPredict = 0.0
             var rightPredict = 0.0
 
-            var curIndex = 0
-            for ((ix, ((iloc, iy), iw)) <- denseX.zip(alw)) {
+            idx = 0
+            while (idx < denseX.size) {
+                val ix = denseX(idx)
+                val iloc = localAssign(idx)
+                val iy = yLocal(idx)
+                val iw = wLocal(idx)
                 if (iloc < 0) {
                     // In left tree
                     if (compare(ix, leftLastSplitValue) > 0) {
@@ -144,7 +151,7 @@ object Learner extends Comparison {
                         rightCurrNegativeCount += 1
                     }
                 } // else if iloc is zero, ignore
-                curIndex += 1
+                idx = idx + 1
             }
 
             val curResult = (minScore, (nodeIndex, onLeft, data.index, splitVal,

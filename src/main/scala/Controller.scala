@@ -29,7 +29,7 @@ object Controller extends Comparison {
     type WeightFunc = (Int, Double, Double) => Double
 
     def printStats(train: TestRDDType, test: TestRDDType, nodes: Array[SplitterNode],
-                   y: Array[Int], w: Array[Double]) = {
+                   y: Array[Int], w: Array[Double], iteration: Int) = {
         // manual fix the auPRC computation bug in MLlib
         def adjust(points: Array[(Double, Double)]) = {
             require(points.length == 2)
@@ -53,7 +53,9 @@ object Controller extends Comparison {
         val auPRCTest = testMetrics.areaUnderPR + adjust(testMetrics.pr.take(2))
 
         println("Training auPRC = " + auPRCTrain)
-        println("Training PR = " + trainMetrics.pr.collect.toList)
+        if (iteration % 20 == 0) {
+            println("Training PR = " + trainMetrics.pr.collect.toList)
+        }
         println("Testing auPRC = " + auPRCTest)
 
         // Part 2 - Compute effective counts
@@ -134,7 +136,7 @@ object Controller extends Comparison {
         val assign = initAssignAndWeights._1
         var weights = initAssignAndWeights._2
 
-        printStats(trainRaw, test, nodes, y.value, weights.value)
+        printStats(trainRaw, test, nodes, y.value, weights.value, 0)
         println()
 
         var iteration = 0
@@ -176,7 +178,7 @@ object Controller extends Comparison {
             weights = sc.broadcast(newWeights)
             toDestroy.destroy()
 
-            printStats(trainRaw, test, nodes, y.value, newWeights)
+            printStats(trainRaw, test, nodes, y.value, newWeights, iteration)
             println
         }
         nodes
