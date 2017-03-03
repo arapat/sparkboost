@@ -221,7 +221,7 @@ object SpliceSite {
         val nodes = algo.toInt match {
             case 1 =>
                 Controller.runADTreeWithAdaBoost(
-                    sc, train, y, trainRaw, test, sampleFrac, T, depth, baseNodes
+                    sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth, baseNodes
                 )
             /*
             case 3 =>

@@ -1,6 +1,7 @@
 package sparkboost
 
 import math.log
+import math.exp
 import util.Random.{nextDouble => rand}
 import scala.collection.mutable.ArrayBuffer
 
@@ -28,7 +29,8 @@ object Controller extends Comparison {
     type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, SplitterNode) => (Array[Int], Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 
-    def printStats(train: TestRDDType, test: TestRDDType, nodes: Array[SplitterNode],
+    def printStats(train: TestRDDType, test: TestRDDType, testRef: TestRDDType,
+                   nodes: Array[SplitterNode],
                    y: Array[Int], w: Array[Double], iteration: Int) = {
         // manual fix the auPRC computation bug in MLlib
         def adjust(points: Array[(Double, Double)]) = {
@@ -36,6 +38,12 @@ object Controller extends Comparison {
             require(points.head == (0.0, 1.0))
             val y = points.last
             y._1 * (y._2 - 1.0) / 2.0
+        }
+
+        // TODO: extend to other boosting loss functions
+        def getLossFunc(predictionAndLabels: RDD[(Double, Double)]) = {
+            predictionAndLabels.map(t => exp(-t._1 * t._2))
+                               .reduce(_ + _) / predictionAndLabels.count
         }
 
         // Part 1 - Compute auPRC
@@ -47,16 +55,37 @@ object Controller extends Comparison {
             (SplitterNode.getScore(0, nodes, t._2).toDouble, t._1.toDouble)
         }.cache()
 
+        val testRefPredictionAndLabels = testRef.map {case t =>
+            (SplitterNode.getScore(0, nodes, t._2).toDouble, t._1.toDouble)
+        }.cache()
+
         val trainMetrics = new BinaryClassificationMetrics(trainPredictionAndLabels)
         val auPRCTrain = trainMetrics.areaUnderPR + adjust(trainMetrics.pr.take(2))
+        val lossFuncTrain = getLossFunc(trainPredictionAndLabels)
         val testMetrics = new BinaryClassificationMetrics(testPredictionAndLabels)
         val auPRCTest = testMetrics.areaUnderPR + adjust(testMetrics.pr.take(2))
+        val lossFuncTest = getLossFunc(testPredictionAndLabels)
+
+        var testRefMetrics = testMetrics
+        var auPRCTestRef = auPRCTest
+        var lossFuncTestRef = lossFuncTest
+        if (test.id != testRef.id) {
+            testRefMetrics = new BinaryClassificationMetrics(testRefPredictionAndLabels)
+            auPRCTestRef = testRefMetrics.areaUnderPR + adjust(testRefMetrics.pr.take(2))
+            lossFuncTestRef = getLossFunc(testRefPredictionAndLabels)
+        }
 
         println("Training auPRC = " + auPRCTrain)
+        println("Training average score = " + lossFuncTrain)
+        println("Testing auPRC = " + auPRCTest)
+        println("Testing average score = " + lossFuncTest)
+        println("Testing (ref) auPRC = " + auPRCTestRef)
+        println("Testing (ref) average score = " + lossFuncTestRef)
         if (iteration % 20 == 0) {
             println("Training PR = " + trainMetrics.pr.collect.toList)
+            println("Testing PR = " + testMetrics.pr.collect.toList)
+            println("Testing (ref) PR = " + testRefMetrics.pr.collect.toList)
         }
-        println("Testing auPRC = " + auPRCTest)
 
         // Part 2 - Compute effective counts
         val trainCount = y.size
@@ -84,7 +113,7 @@ object Controller extends Comparison {
 
     def runADTree(sc: SparkContext,
                   train: RDDType, y: Broadcast[Array[Int]],
-                  trainRaw: TestRDDType, test: TestRDDType,
+                  trainRaw: TestRDDType, test: TestRDDType, testRef: TestRDDType,
                   learnerFunc: LearnerFunc,
                   updateFunc: UpdateFunc,
                   lossFunc: LossFunc,
@@ -136,7 +165,7 @@ object Controller extends Comparison {
         val assign = initAssignAndWeights._1
         var weights = initAssignAndWeights._2
 
-        printStats(trainRaw, test, nodes, y.value, weights.value, 0)
+        printStats(trainRaw, test, testRef, nodes, y.value, weights.value, 0)
         println()
 
         var iteration = 0
@@ -187,7 +216,7 @@ object Controller extends Comparison {
             toDestroy.destroy()
 
             val timerStats = System.nanoTime()
-            printStats(trainRaw, test, nodes, y.value, newWeights, iteration)
+            printStats(trainRaw, test, testRef, nodes, y.value, newWeights, iteration)
             println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             println("Running time for Iteration " + iteration + " is (ms) " +
                     (System.nanoTime() - timerStart) / SEC)
@@ -198,10 +227,10 @@ object Controller extends Comparison {
 
     def runADTreeWithAdaBoost(sc: SparkContext,
                               train: RDDType, y: Broadcast[Array[Int]],
-                              trainRaw: TestRDDType, test: TestRDDType,
+                              trainRaw: TestRDDType, test: TestRDDType, testRef: TestRDDType,
                               sampleFrac: Double, T: Int, maxDepth: Int,
                               baseNodes: Array[SplitterNode]) = {
-        runADTree(sc, train, y, trainRaw, test,
+        runADTree(sc, train, y, trainRaw, test, testRef,
                   Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,
                   sampleFrac, T, maxDepth, baseNodes)
