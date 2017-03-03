@@ -1,5 +1,6 @@
 package sparkboost
 
+import collection.mutable.ArrayBuffer
 import collection.mutable.Map
 import Double.MaxValue
 
@@ -16,7 +17,7 @@ object Learner extends Comparison {
     type BrAD = Broadcast[Array[Double]]
     type MinScoreType = (Double, (Double, Double, Double, Double, Double), (Int, Int, Int, Int, Int))
     type NodeInfoType = (Int, Boolean, Int, Double, (Double, Double))
-    type ResultType = (MinScoreType, NodeInfoType)
+    type ResultType = (MinScoreType, NodeInfoType, Array[Double])
     val assignAndLabelsTemplate = Array(-1, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
 
     def findBestSplit(
@@ -28,8 +29,13 @@ object Learner extends Comparison {
             data.ptr.map(k => (y.value(k), w.value(k))).unzip
         val totalWeight = wLocal.sum
         val totalCount = wLocal.size
+        val globalTimeLog = ArrayBuffer[Double]()
 
         def findBest(nodeIndex: Int, depth: Int): ResultType = {
+            val tstart = System.nanoTime()
+            val timeLog = ArrayBuffer[Double]()
+            var t0 = System.nanoTime()
+
             val localAssign: Array[Int] = data.ptr.map(k => assign(nodeIndex).value(k))
             var idx = 0
             val assignAndLabelsToWeights = collection.mutable.Map(assignAndLabelsTemplate: _*)
@@ -39,6 +45,9 @@ object Learner extends Comparison {
                 assignAndLabelsToWeights(ay) = (ws + wLocal(idx), wc + 1)
                 idx += 1
             }
+
+            timeLog.append(System.nanoTime() - t0)
+            t0 = System.nanoTime()
 
             val (leftTotalPositiveWeight, leftTotalPositiveCount) = assignAndLabelsToWeights((-1, 1))
             val (leftTotalNegativeWeight, leftTotalNegativeCount) = assignAndLabelsToWeights((-1, -1))
@@ -78,6 +87,10 @@ object Learner extends Comparison {
 
             idx = 0
             val x = data.x
+
+            timeLog.append(System.nanoTime() - t0)
+            t0 = System.nanoTime()
+
             while (idx < yLocal.size) {
                 val ix = x(idx)
                 val iloc = localAssign(idx)
@@ -152,9 +165,12 @@ object Learner extends Comparison {
                 idx = idx + 1
             }
 
+            timeLog.append(System.nanoTime() - t0)
+            t0 = System.nanoTime()
+
             val curResult = (minScore, (nodeIndex, onLeft, data.index, splitVal,
-                                        (leftPredict, rightPredict)))
-            if (depth + 1 < maxDepth) {
+                                        (leftPredict, rightPredict)), timeLog.toArray)
+            val result = if (depth + 1 < maxDepth) {
                 val childs = nodes(nodeIndex).leftChild ++ nodes(nodeIndex).rightChild
                 if (childs.size > 0) {
                     val cResult = childs.map(t => findBest(t, depth + 1))
@@ -166,9 +182,14 @@ object Learner extends Comparison {
             } else {
                 curResult
             }
+
+            globalTimeLog.append(System.nanoTime() - tstart)
+            result
         }
 
-        findBest(0, 0)
+        val result = findBest(0, 0)
+        val gtLog: Array[Double] =  (globalTimeLog.toArray)
+        (result._1, result._2, ((result._3) ++ (Array(9999.0)) ++ gtLog))
         // Will return following tuple:
         // (minScore, nodeInfo)
         // where minScore consists of
@@ -188,10 +209,10 @@ object Learner extends Comparison {
             w: BrAD, assign: Array[BrAI],
             nodes: Array[SplitterNode], maxDepth: Int,
             lossFunc: (Double, Double, Double, Double, Double) => Double) = {
-        val (minScore, nodeInfo) = train.filter(_.active)
+        val tStart = System.nanoTime()
+        val (minScore, nodeInfo, timer) = train.filter(_.active)
                                         .map(findBestSplit(y, w, assign, nodes, maxDepth, lossFunc))
                                         .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
-
         println("Node " + nodes.size + " learner info")
         println("Min score: " + "%.2f".format(minScore._1))
         println("Reject weight/count: "    + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)
@@ -199,6 +220,12 @@ object Learner extends Comparison {
         println("Left neg weight/count: "  + "%.2f".format(minScore._2._3) + " / " + minScore._3._3)
         println("Right pos weight/count: " + "%.2f".format(minScore._2._4) + " / " + minScore._3._4)
         println("Right neg weight/count: " + "%.2f".format(minScore._2._5) + " / " + minScore._3._5)
+
+        val SEC = 10000000
+        println("Total time: " + (System.nanoTime() - tStart) / SEC + " ms.")
+        print("Timer: ")
+        timer.foreach(k => print(k / SEC + ", "))
+        println
 
         nodeInfo
     }

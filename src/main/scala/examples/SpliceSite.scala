@@ -38,7 +38,7 @@ object SpliceSite {
 
     // Global constants (TODO: parameterize them)
     val BINSIZE = 1
-    val ALLSAMPLE = 1.0
+    val ALLSAMPLE = 0.5
     val NEGSAMPLE = 0.01
     // training/testing split
     val TRAIN_PORTION = 0.75
