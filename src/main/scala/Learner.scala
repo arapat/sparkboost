@@ -26,7 +26,6 @@ object Learner extends Comparison {
     )(data: Instances) = {
         val (yLocal, wLocal): (Array[Int], Array[Double]) =
             data.ptr.map(k => (y.value(k), w.value(k))).unzip
-        val denseX: Array[Double] = data.x.toDense.values
         val totalWeight = wLocal.sum
         val totalCount = wLocal.size
 
@@ -80,8 +79,9 @@ object Learner extends Comparison {
             var rightPredict = 0.0
 
             idx = 0
-            while (idx < denseX.size) {
-                val ix = denseX(idx)
+            val x = data.x
+            while (idx < yLocal.size) {
+                val ix = x(idx)
                 val iloc = localAssign(idx)
                 val iy = yLocal(idx)
                 val iw = wLocal(idx)

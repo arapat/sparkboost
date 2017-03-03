@@ -38,7 +38,7 @@ object UpdateFunc {
                 (ipt, (assign, nw))
             }}
         ).sortByKey().map(_._2).collect()
-        (results.map(_._1).toArray, results.map(_._2).toArray)
+        results.unzip
     }
 
     def adaboostUpdate(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: SplitterNode) = {
