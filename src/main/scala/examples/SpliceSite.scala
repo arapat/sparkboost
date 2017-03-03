@@ -38,7 +38,7 @@ object SpliceSite {
 
     // Global constants (TODO: parameterize them)
     val BINSIZE = 1
-    val ALLSAMPLE = 0.5
+    val ALLSAMPLE = 0.05
     val NEGSAMPLE = 0.01
     // training/testing split
     val TRAIN_PORTION = 0.75
@@ -46,8 +46,8 @@ object SpliceSite {
     // Construction features: P1 and P2 (as in Degroeve's SpliceMachine paper)
     val FEATURE_TYPE = 2
     val CENTER = 60
-    val LEFT_WINDOW = 50  // out of 59
-    val RIGHT_WINDOW = 50  // out of 80
+    val LEFT_WINDOW = 20  // out of 59
+    val RIGHT_WINDOW = 20  // out of 80
     val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
     val featureSize = (WINDOW_SIZE) * 4 + {if (FEATURE_TYPE == 1) 0 else (WINDOW_SIZE - 1) * 4 * 4}
     val indexMap = {
@@ -285,7 +285,7 @@ object SpliceSite {
 
 // command:
 //
-// spark/bin/spark-submit --class sparkboost.examples.SpliceSite
-// --master spark://ec2-54-152-1-69.compute-1.amazonaws.com:7077
-// --conf spark.executor.extraJavaOptions=-XX:+UseG1GC  ./sparkboost_2.11-0.1.jar
-// /train-txt /test-txt 0.05 200 1 1 ./model.bin ./base-model.bin 3 > result.txt 2> log.txt
+// ./spark/bin/spark-submit --master spark://ec2-54-152-198-27.compute-1.amazonaws.com:7077
+// --class sparkboost.examples.SpliceSite --conf spark.executor.extraJavaOptions=-XX:+UseG1GC
+// ./sparkboost_2.11-0.1.jar --train /train-txt --sample-frac 0.05 --iteration 500 --depth 2
+// --algorithm 1 --save-model ./model.bin --format 2 --train-rdd /train0 --test-rdd /test0

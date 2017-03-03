@@ -140,7 +140,9 @@ object Controller extends Comparison {
         println()
 
         var iteration = 0
+        val SEC = 1000000
         while (iteration < T) {
+            val timerStart = System.nanoTime()
             iteration = iteration + 1
             val (prtNodeIndex, onLeft, splitIndex, splitVal, learnerPredicts): LearnerObj =
                     learnerFunc(train, y, weights, assign.toArray, nodes.toArray, maxDepth, lossFunc)
@@ -176,13 +178,19 @@ object Controller extends Comparison {
             nodes :+= newNode
 
             // update weights and assignment matrix
+            val timerUpdate = System.nanoTime()
             val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, newNode)
+            println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             assign.append(sc.broadcast(newAssign))
             val toDestroy = weights
             weights = sc.broadcast(newWeights)
             toDestroy.destroy()
 
+            val timerStats = System.nanoTime()
             printStats(trainRaw, test, nodes, y.value, newWeights, iteration)
+            println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
+            println("Running time for Iteration " + iteration + " is (ms) " +
+                    (System.nanoTime() - timerStart) / SEC)
             println
         }
         nodes

@@ -221,9 +221,9 @@ object Learner extends Comparison {
         println("Right pos weight/count: " + "%.2f".format(minScore._2._4) + " / " + minScore._3._4)
         println("Right neg weight/count: " + "%.2f".format(minScore._2._5) + " / " + minScore._3._5)
 
-        val SEC = 10000000
-        println("Total time: " + (System.nanoTime() - tStart) / SEC + " ms.")
-        print("Timer: ")
+        val SEC = 1000000
+        println("FindWeakLearner took (ms) " + (System.nanoTime() - tStart) / SEC)
+        print("Timer details: ")
         timer.foreach(k => print(k / SEC + ", "))
         println
 
