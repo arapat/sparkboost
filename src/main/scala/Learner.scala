@@ -157,12 +157,14 @@ object Learner extends Comparison {
             val curResult = (minScore, (nodeIndex, onLeft, data.index, splitVal,
                                         (leftPredict, rightPredict)))
             if (depth + 1 < maxDepth) {
-                val r1 = nodes(nodeIndex).leftChild.map(t => findBest(t, depth + 1))
-                            .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
-                val r2 = nodes(nodeIndex).rightChild.map(t => findBest(t, depth + 1))
-                            .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
-                val rChild = if (r1._1._1 < r2._1._1) r1 else r2
-                if (curResult._1._1 < rChild._1._1) curResult else rChild
+                val childs = nodes(nodeIndex).leftChild ++ nodes(nodeIndex).rightChild
+                if (childs.size > 0) {
+                    val cResult = childs.map(t => findBest(t, depth + 1))
+                                        .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
+                    if (curResult._1._1 < cResult._1._1) curResult else cResult
+                } else {
+                    curResult
+                }
             } else {
                 curResult
             }
