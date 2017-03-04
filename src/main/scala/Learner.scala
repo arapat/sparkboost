@@ -1,173 +1,232 @@
 package sparkboost
 
-import collection.mutable.Queue
+import collection.mutable.ArrayBuffer
+import collection.mutable.Map
 import Double.MaxValue
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
-import utils.Comparison
+import sparkboost.utils.Comparison
+import sparkboost.utils.Utils.safeLogRatio
 
 object Learner extends Comparison {
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
-    // RDDElement: Instances, feature index, split points
-    type RDDElementType = (List[Instance], Int, List[Double])
-    type RDDType = RDD[RDDElementType]
+    type RDDType = RDD[Instances]
+    type BrAI = Broadcast[Array[Int]]
+    type BrAD = Broadcast[Array[Double]]
+    type MinScoreType = (Double, (Double, Double, Double, Double, Double), (Int, Int, Int, Int, Int))
+    type NodeInfoType = (Int, Boolean, Int, Double, (Double, Double))
+    type ResultType = (MinScoreType, NodeInfoType, Array[Double])
+    val assignAndLabelsTemplate = Array(-1, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
 
-    def safeLogRatio(a: Double, b: Double) = {
-        if (compare(a) == 0 && compare(b) == 0) {
-            0.0
-        } else {
-            val ratio = math.min(10.0, math.max(a / b, 0.1))
-            math.log(ratio)
-        }
-    }
+    def findBestSplit(
+            y: BrAI, w: BrAD, assign: Array[BrAI],
+            nodes: Array[SplitterNode], maxDepth: Int,
+            lossFunc: (Double, Double, Double, Double, Double) => Double
+    )(data: Instances) = {
+        val (yLocal, wLocal): (Array[Int], Array[Double]) =
+            data.ptr.map(k => (y.value(k), w.value(k))).unzip
+        val totalWeight = wLocal.sum
+        val totalCount = wLocal.size
+        val globalTimeLog = ArrayBuffer[Double]()
 
-    def findBestSplit(data: RDDElementType, nodes: Array[SplitterNode], maxDepth: Int, root: Int,
-                      lossFunc: (Double, Double, Double, Double, Double) => Double) = {
-        def search(curInsts: List[Instance], index: Int, totWeight: Double, totInsts: Int, splits: List[Double]) = {
-            var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0)
+        def findBest(nodeIndex: Int, depth: Int): ResultType = {
+            val tstart = System.nanoTime()
+            val timeLog = ArrayBuffer[Double]()
+            var t0 = System.nanoTime()
+
+            val localAssign: Array[Int] = data.ptr.map(k => assign(nodeIndex).value(k))
+            var idx = 0
+            val assignAndLabelsToWeights = collection.mutable.Map(assignAndLabelsTemplate: _*)
+            while (idx < localAssign.size) {
+                val ay = (localAssign(idx), yLocal(idx))
+                val (ws, wc) = assignAndLabelsToWeights(ay)
+                assignAndLabelsToWeights(ay) = (ws + wLocal(idx), wc + 1)
+                idx += 1
+            }
+
+            timeLog.append(System.nanoTime() - t0)
+            t0 = System.nanoTime()
+
+            val (leftTotalPositiveWeight, leftTotalPositiveCount) = assignAndLabelsToWeights((-1, 1))
+            val (leftTotalNegativeWeight, leftTotalNegativeCount) = assignAndLabelsToWeights((-1, -1))
+            val (rightTotalPositiveWeight, rightTotalPositiveCount) = assignAndLabelsToWeights((1, 1))
+            val (rightTotalNegativeWeight, rightTotalNegativeCount) = assignAndLabelsToWeights((1, -1))
+
+            val leftRejectWeight = totalWeight - (leftTotalNegativeWeight + leftTotalPositiveWeight)
+            val leftRejectCount = totalCount - (leftTotalNegativeCount + leftTotalPositiveCount)
+            val rightRejectWeight = totalWeight - (rightTotalNegativeWeight + rightTotalPositiveWeight)
+            val rightRejectCount = totalCount - (rightTotalNegativeCount + rightTotalPositiveCount)
+
+            var leftCurrPositiveWeight = 0.0
+            var leftCurrPositiveCount = 0
+            var leftCurrNegativeWeight = 0.0
+            var leftCurrNegativeCount = 0
+
+            var rightCurrPositiveWeight = 0.0
+            var rightCurrPositiveCount = 0
+            var rightCurrNegativeWeight = 0.0
+            var rightCurrNegativeCount = 0
+
+            var leftLastSplitIndex = 0
+            var leftLastSplitValue = data.splits(leftLastSplitIndex)
+
+            var rightLastSplitIndex = 0
+            var rightLastSplitValue = data.splits(rightLastSplitIndex)
+
+            var minScore = (
+                Double.MaxValue,
+                (0.0, 0.0, 0.0, 0.0, 0.0),
+                (0, 0, 0, 0, 0)
+            )
             var splitVal = 0.0
+            var onLeft = true
+            var leftPredict = 0.0
+            var rightPredict = 0.0
 
-            val posInsts = curInsts.filter(t => t.y > 0)
-            val posCount = posInsts.size
-            val negInsts = curInsts.filter(t => t.y < 0)
-            val negCount = negInsts.size
-            if (posCount == 0 || negCount == 0) {
-                (minScore, 0.0, (0.0, 0.0))
-            } else {
-                val totPos = posInsts.map(_.w).reduce(_ + _)
-                val totNeg = negInsts.map(_.w).reduce(_ + _)
-                val rej = totWeight - totPos - totNeg
-                val rejCount = totInsts - posCount - negCount
-                var leftPos = 0.0
-                var leftPosCount = 0
-                var leftNeg = 0.0
-                var leftNegCount = 0
-                var leftPred = 0.0
-                var rightPred = 0.0
-                var splitIndex = 0
-                var lastSplitVal = splits(splitIndex)
-                for (t <- curInsts) {
-                    if (compare(t.X(index), lastSplitVal) > 0) {
-                        val score = lossFunc(rej, leftPos, leftNeg,
-                                             totPos - leftPos, totNeg - leftNeg)
+            idx = 0
+            val x = data.x
+
+            timeLog.append(System.nanoTime() - t0)
+            t0 = System.nanoTime()
+
+            while (idx < yLocal.size) {
+                val ix = x(idx)
+                val iloc = localAssign(idx)
+                val iy = yLocal(idx)
+                val iw = wLocal(idx)
+                if (iloc < 0) {
+                    // In left tree
+                    if (compare(ix, leftLastSplitValue) > 0) {
+                        val leftRemainPositiveWeight = leftTotalPositiveWeight - leftCurrPositiveWeight
+                        val leftRemainNegativeWeight = leftTotalNegativeWeight - leftCurrNegativeWeight
+                        val score = lossFunc(leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
+                                             leftRemainPositiveWeight, leftRemainNegativeWeight)
                         if (compare(score, minScore._1) < 0) {
-                            minScore = (score, rej, leftPos, leftNeg,
-                                        totPos - leftPos, totNeg - leftNeg,
-                                        rejCount, leftPosCount, leftNegCount,
-                                        posCount - leftPosCount, negCount - leftNegCount)
-                            leftPred = safeLogRatio(leftPos, leftNeg)
-                            rightPred = safeLogRatio(totPos - leftPos, totNeg - leftNeg)
-                            splitVal = lastSplitVal
-                            /*
-                            if (minScore < 1e-8) {
-                                val rightPos = totPos - leftPos
-                                val rightNeg = totNeg - leftNeg
-                                val iter = nodes.size
-                                val size = curInsts.size
-                                log.info(s"debug: $iter, $size, $rej, $leftPos, $leftNeg, $rightPos, $rightNeg")
-                            }
-                            */
+                            val leftRemainPositiveCount = leftTotalPositiveCount - leftCurrPositiveCount
+                            val leftRemainNegativeCount = leftTotalNegativeCount - leftCurrNegativeCount
+                            minScore = (
+                                score,
+                                (leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
+                                    leftRemainPositiveWeight, leftRemainNegativeWeight),
+                                (leftRejectCount, leftCurrPositiveCount, leftCurrNegativeCount,
+                                    leftRemainPositiveCount, leftRemainNegativeCount)
+                            )
+                            splitVal = leftLastSplitValue
+                            onLeft = true
+                            leftPredict = safeLogRatio(leftCurrPositiveWeight, leftCurrNegativeWeight)
+                            rightPredict = safeLogRatio(leftRemainPositiveWeight, leftRemainNegativeWeight)
                         }
-                        splitIndex += 1
-                        lastSplitVal = splits(splitIndex)
+                        leftLastSplitIndex += 1
+                        leftLastSplitValue = data.splits(leftLastSplitIndex)
                     }
-                    if (t.y > 0) {
-                        leftPos += t.w
-                        leftPosCount += 1
+                    if (iy > 0) {
+                        leftCurrPositiveWeight += iw
+                        leftCurrPositiveCount += 1
                     } else {
-                        leftNeg += t.w
-                        leftNegCount += 1
+                        leftCurrNegativeWeight += iw
+                        leftCurrNegativeCount += 1
                     }
+                } else if (iloc > 0) {
+                    // In right tree
+                    // In left tree
+                    if (compare(ix, rightLastSplitValue) > 0) {
+                        val rightRemainPositiveWeight = rightTotalPositiveWeight - rightCurrPositiveWeight
+                        val rightRemainNegativeWeight = rightTotalNegativeWeight - rightCurrNegativeWeight
+                        val score = lossFunc(rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
+                                             rightRemainPositiveWeight, rightRemainNegativeWeight)
+                        if (compare(score, minScore._1) < 0) {
+                            val rightRemainPositiveCount = rightTotalPositiveCount - rightCurrPositiveCount
+                            val rightRemainNegativeCount = rightTotalNegativeCount - rightCurrNegativeCount
+                            minScore = (
+                                score,
+                                (rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
+                                    rightRemainPositiveWeight, rightRemainNegativeWeight),
+                                (rightRejectCount, rightCurrPositiveCount, rightCurrNegativeCount,
+                                    rightRemainPositiveCount, rightRemainNegativeCount)
+                            )
+                            splitVal = rightLastSplitValue
+                            onLeft = false
+                            leftPredict = safeLogRatio(rightCurrPositiveWeight, rightCurrNegativeWeight)
+                            rightPredict = safeLogRatio(rightRemainPositiveWeight, rightRemainNegativeWeight)
+                        }
+                        rightLastSplitIndex += 1
+                        rightLastSplitValue = data.splits(rightLastSplitIndex)
+                    }
+                    if (iy > 0) {
+                        rightCurrPositiveWeight += iw
+                        rightCurrPositiveCount += 1
+                    } else {
+                        rightCurrNegativeWeight += iw
+                        rightCurrNegativeCount += 1
+                    }
+                } // else if iloc is zero, ignore
+                idx = idx + 1
+            }
+
+            timeLog.append(System.nanoTime() - t0)
+            t0 = System.nanoTime()
+
+            val curResult = (minScore, (nodeIndex, onLeft, data.index, splitVal,
+                                        (leftPredict, rightPredict)), timeLog.toArray)
+            val result = if (depth + 1 < maxDepth) {
+                val childs = nodes(nodeIndex).leftChild ++ nodes(nodeIndex).rightChild
+                if (childs.size > 0) {
+                    val cResult = childs.map(t => findBest(t, depth + 1))
+                                        .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
+                    if (curResult._1._1 < cResult._1._1) curResult else cResult
+                } else {
+                    curResult
                 }
-                (minScore, splitVal, (leftPred, rightPred))
+            } else {
+                curResult
             }
+
+            globalTimeLog.append(System.nanoTime() - tstart)
+            result
         }
 
-        val instances = data._1
-        val index = data._2
-        val splits = data._3
-
-        var minScore = (MaxValue, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0)
-        var bestNodeIndex = root
-        var splitVal = 0.0
-        var onLeft = false
-        var preds = (0.0, 0.0)
-
-        val totWeight = if (instances.size > 0) instances.map(_.w).reduce(_ + _) else 0.0
-        val totExamples = instances.size
-        val queue = Queue((root, instances, 0))
-        while (!queue.isEmpty) {
-            val curObj = queue.dequeue()
-            val nodeIndex = curObj._1
-            val data = curObj._2
-            val depth = curObj._3
-
-            // find a best split value on this node
-            val leftInstances = data.filter {_.scores(nodeIndex) > 0}
-            val leftRes = search(leftInstances, index, totWeight, totExamples, splits)
-            val leftScore = leftRes._1
-            val leftSplitVal = leftRes._2
-            if (compare(leftScore._1, minScore._1) < 0) {
-                minScore = leftScore
-                bestNodeIndex = nodeIndex
-                splitVal = leftSplitVal
-                preds = leftRes._3
-                onLeft = true
-            }
-
-            val rightInstances = data.filter {_.scores(nodeIndex) < 0}
-            val rightRes = search(rightInstances, index, totWeight, totExamples, splits)
-            val rightScore = rightRes._1
-            val rightSplitVal = rightRes._2
-            if (compare(rightScore._1, minScore._1) < 0) {
-                minScore = rightScore
-                bestNodeIndex = nodeIndex
-                splitVal = rightSplitVal
-                preds = rightRes._3
-                onLeft = false
-            }
-
-            if (depth + 1 < maxDepth) {
-                queue ++= nodes(nodeIndex).leftChild.map((_, leftInstances, depth + 1))
-                queue ++= nodes(nodeIndex).rightChild.map((_, rightInstances, depth + 1))
-            }
-        }
-        (minScore, (bestNodeIndex, onLeft, index, splitVal, preds._1, preds._2))
+        val result = findBest(0, 0)
+        val gtLog: Array[Double] =  (globalTimeLog.toArray)
+        (result._1, result._2, ((result._3) ++ (Array(9999.0)) ++ gtLog))
+        // Will return following tuple:
+        // (minScore, nodeInfo)
+        // where minScore consists of
+        //
+        //     (score,
+        //      (rej_weight, leftPos_weight, leftNeg_weight, rightPos_weight, rightNeg_weight),
+        //      (rej_count,  leftPos_count,  leftNeg_count,  rightPos_count,  rightNeg_count)
+        //     )
+        //
+        // and nodeInfo consists of
+        //
+        //     (bestNodeIndex, onLeft, splitIndex, splitVal, (leftPredict, rightPredict)
     }
 
     def partitionedGreedySplit(
-            instsGroup: RDDType, nodes: Array[SplitterNode],
-            lossFunc: (Double, Double, Double, Double, Double) => Double,
-            maxDepth: Int, rootIndex: Int = 0) = {
-        val bestSplit = instsGroup.map(findBestSplit(_, nodes, maxDepth, rootIndex, lossFunc))
-                                  .reduce {(a, b) => if (a._1._1 < b._1._1) a else b}
-        println("Node " + nodes.size + " min score")
-        println("Min score: " + "%.2f".format(bestSplit._1._1))
-        println("Rej weight/count: " + "%.2f".format(bestSplit._1._2) + " / " + bestSplit._1._7)
-        println("Left pos weight/count: " + "%.2f".format(bestSplit._1._3) + " / " + bestSplit._1._8)
-        println("Left neg weight/count: " + "%.2f".format(bestSplit._1._4) + " / " + bestSplit._1._9)
-        println("Right pos weight/count: " + "%.2f".format(bestSplit._1._5) + " / " + bestSplit._1._10)
-        println("Right neg weight/count: " + "%.2f".format(bestSplit._1._6) + " / " + bestSplit._1._11)
-        bestSplit._2
-    }
+            train: RDDType, y: BrAI,
+            w: BrAD, assign: Array[BrAI],
+            nodes: Array[SplitterNode], maxDepth: Int,
+            lossFunc: (Double, Double, Double, Double, Double) => Double) = {
+        val tStart = System.nanoTime()
+        val (minScore, nodeInfo, timer) = train.filter(_.active)
+                                        .map(findBestSplit(y, w, assign, nodes, maxDepth, lossFunc))
+                                        .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
+        println("Node " + nodes.size + " learner info")
+        println("Min score: " + "%.2f".format(minScore._1))
+        println("Reject weight/count: "    + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)
+        println("Left pos weight/count: "  + "%.2f".format(minScore._2._2) + " / " + minScore._3._2)
+        println("Left neg weight/count: "  + "%.2f".format(minScore._2._3) + " / " + minScore._3._3)
+        println("Right pos weight/count: " + "%.2f".format(minScore._2._4) + " / " + minScore._3._4)
+        println("Right neg weight/count: " + "%.2f".format(minScore._2._5) + " / " + minScore._3._5)
 
-    /*
-    def bulkGreedySplit(
-            instsGroup: RDDType, nodes: Array[SplitterNode],
-            lossFunc: (Double, Double, Double, Double, Double) => Double,
-            rootIndex: Int = 0) = {
-        val insts = instsGroup.map(_._1).reduce((a, b) => List.concat(a, b))
-        val splits = instsGroup.map(_._2 -> _._3).toMap
-        val inst = insts.head
-        val featureSize = inst.X.size
-        val splits = (0 until featureSize) map (i => {
-            findBestSplit(insts.sortWith(_.X(i) < _.X(i)).toList, i, splits(i),
-                          nodes, rootIndex, lossFunc)
-        })
-        val bestSplit = splits.reduce {(a, b) => if (a._1 < b._1) a else b}
-        println("Node " + nodes.size + " min score is " + bestSplit._1)
-        bestSplit._2
+        val SEC = 1000000
+        println("FindWeakLearner took (ms) " + (System.nanoTime() - tStart) / SEC)
+        print("Timer details: ")
+        timer.foreach(k => print(k / SEC + ", "))
+        println
+
+        nodeInfo
     }
-    */
 }

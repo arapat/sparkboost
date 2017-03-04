@@ -1,136 +1,76 @@
 package sparkboost.examples
 
 import scala.io.Source
-import util.Random.nextDouble
+import scala.annotation.tailrec
+import util.Random.{nextDouble => rand}
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.Row
+import org.apache.spark.mllib.linalg.DenseVector
+import org.apache.spark.mllib.linalg.SparseVector
+import org.apache.spark.storage.StorageLevel
 
 import sparkboost._
 
 object SpliceSite {
     /*
-    args(0) - file path to the training data
-    args(1) - file path to the test data
-    args(2) - fraction for sampling
-    args(3) - number of batches
-    args(4) - number of iterations
-    args(5) - max depth of the tree
-    args(6) - algorithm selection
-        1 -> AdaBoost partitioned
-        2 -> AdaBoost non-partitioned
-        3 -> LogitBoost partitioned
-    args(7) - File path to save the model
-    args(8) - data format
-        1 -> raw data
-        2 -> objects
+    Commandline options:
+
+    --train         - file path to the training data
+    --sample-frac   - fraction for sampling
+    --iteration     - number of iterations
+    --depth         - max depth of the tree
+    --algorithm     - algorithm selection
+                          1 -> AdaBoost partitioned
+                          2 -> AdaBoost non-partitioned
+                          3 -> LogitBoost partitioned
+    --save-model    - File path to save the model
+    --load-model    - File path to load the model
+    --format        - data format
+                          1 -> raw data
+                          2 -> objects
+                          3 -> sample by model
+    --train-rdd     - path to save training data RDD (row-based)
+    --test-rdd      - path to save testing data RDD
+    --test-ref-rdd  - path to save referenced testing data RDD
     */
-    def main(args: Array[String]) {
-        val BINSIZE = 1
-        val ALLSAMPLE = 0.05
-        val NEGSAMPLE = 0.01
-        val trainObjFile = "/train-pickle-onebit2/"
-        val testObjFile = "/test-pickle-onebit2/"
 
-        def preprocessAssign(featureSize: Int)(partIndex: Int, data: Iterator[Instance]) = {
-            val partId = partIndex % BINSIZE
-            val sample = data.toList
-            (partId until featureSize by BINSIZE).map(
-                idx => (idx, (idx, sample))
-            ).iterator
-        }
+    // Global constants (TODO: parameterize them)
+    val BINSIZE = 1
+    val ALLSAMPLE = 0.20
+    val NEGSAMPLE = 0.0029
+    // training/testing split
+    val TRAIN_PORTION = 0.75
 
-        def preprocessMergeSort(a: (Int, List[Instance]), b: (Int, List[Instance])) = {
-            if (a._2.size == 0) {
-                b
-            } else if (b._2.size == 0) {
-                a
-            } else {
-                var merged = Array[Instance]()
-                val index = a._1
-                val leftIter = a._2.iterator
-                val rightIter = b._2.iterator
-                var leftItem = leftIter.next
-                var rightItem = rightIter.next
-                var lastLeft =
-                    if (leftItem.X(index) < rightItem.X(index)) {
-                        merged :+= leftItem
-                        true
-                    } else {
-                        merged :+= rightItem
-                        false
-                    }
-                while ((!lastLeft || leftIter.hasNext) && (lastLeft || rightIter.hasNext)) {
-                    if (lastLeft) {
-                        leftItem = leftIter.next
-                    } else {
-                        rightItem = rightIter.next
-                    }
-                    lastLeft =
-                        if (leftItem.X(index) < rightItem.X(index)) {
-                            merged :+= leftItem
-                            true
-                        } else {
-                            merged :+= rightItem
-                            false
-                        }
-                }
-                if (lastLeft) {
-                    merged :+= rightItem
-                } else {
-                    merged :+= leftItem
-                }
-                while (leftIter.hasNext) {
-                    merged :+= leftIter.next
-                }
-                while (rightIter.hasNext) {
-                    merged :+= rightIter.next
-                }
+    // Construction features: P1 and P2 (as in Degroeve's SpliceMachine paper)
+    val FEATURE_TYPE = 2
+    val CENTER = 60
+    val LEFT_WINDOW = 20  // out of 59
+    val RIGHT_WINDOW = 20  // out of 80
+    val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
+    val featureSize = (WINDOW_SIZE) * 4 + {if (FEATURE_TYPE == 1) 0 else (WINDOW_SIZE - 1) * 4 * 4}
+    val indexMap = {
+        val unit = List("A", "C", "G", "T")
+        val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
+        val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
+        val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
 
-                (index, merged.toList)
-            }
-        }
+        if (FEATURE_TYPE == 1) p1.zip(0 until p1.size).toMap
+        else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
+    }
 
-        def preprocessSlices(sliceFrac: Double)(indexData: (Int, List[Instance])) = {
-            val index = indexData._1
-            val data = indexData._2.map(_.X(index)).toVector
-            var last = data(0)
-            for (t <- data) {
-                require(last <= t)
-                last = t
-            }
-            val sliceSize = math.max(1, (indexData._2.size * sliceFrac).floor.toInt)
-            val slices =
-                (sliceSize until data.size by sliceSize).map(
-                    idx => 0.5 * (data(idx - 1) + data(idx))
-                ).distinct.toList :+ Double.MaxValue
-            (indexData._2, index, slices)
-        }
+    def parseOptions(options: Array[String]) = {
+        options.zip(options.slice(1, options.size))
+               .zip(0 until options.size).filter(_._2 % 2 == 0).map(_._1)
+               .map {case (key, value) => (key.slice(2, key.size), value)}
+               .toMap
+    }
 
-        // Feature: P1 + P2
-        val FEATURE_TYPE = 2
-        val CENTER = 60
-        val LEFT_WINDOW = 20 // 59
-        val RIGHT_WINDOW = 20 // 80
-        val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
-        val featureSize =
-            if (FEATURE_TYPE == 1) {
-                (WINDOW_SIZE) * 4
-            } else {
-                (WINDOW_SIZE) * 4 + (WINDOW_SIZE - 1) * 4 * 4
-            }
-        val indexMap = {
-            val unit = List("A", "C", "G", "T")
-            val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
-            val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
-            val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
-
-            if (FEATURE_TYPE == 1) p1.zip(0 until p1.size).toMap
-            else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
-        }
+    def loadTrainData(sc: SparkContext,
+                      loadMode: Int, trainPath: String, trainObjFile: String, testObjFile: String,
+                      nodes: Array[SplitterNode]):
+                (Array[Int], RDD[Instances], RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = {
         def rowToInstance(s: String) = {
             val data = s.slice(1, s.size - 1).split(",")
             val raw = data(1)
@@ -146,153 +86,206 @@ object SpliceSite {
                         window.zip(window.tail).map(t => t._1.toString + t._2)
                     )
                 }
-            }.map(t => indexMap(t._1 + t._2.toString)).sorted
-            var feature = Array[Double]()
-            var last = 0
-            for (i <- 0 until featureSize) {
-                if (last < nonzeros.size && nonzeros(last) == i) {
-                    feature :+= 1.0
-                    last += 1
-                } else {
-                    feature :+= 0.0
+            }.map(t => indexMap(t._1 + t._2.toString)).toArray.sorted
+            (data(0).toInt,
+             new SparseVector(featureSize, nonzeros, nonzeros.map(_ => 1.0)))
+        }
+
+        val splits =
+            if (loadMode == 2){
+                Array(sc.objectFile[(Int, SparseVector)](trainObjFile),
+                      sc.objectFile[(Int, SparseVector)](testObjFile))
+            } else {
+                val balancedData = sc.textFile(trainPath)
+                                     .map(rowToInstance)
+                                     .filter(inst => {
+                                         (inst._1 > 0 || rand() <= NEGSAMPLE)
+                                     })
+                val sampledData: RDD[(Int, SparseVector)] = {
+                    val fraction = ALLSAMPLE
+                    if (loadMode == 1) {
+                        balancedData.filter(_ => rand() <= fraction)
+                    } else {
+                        // TODO: parameterize wfunc
+                        val wfunc = UpdateFunc.adaboostUpdateFunc _
+                        balancedData.mapPartitions {
+                            (iterator: Iterator[(Int, SparseVector)]) => {
+                                val array = iterator.toList
+                                var sampleList = Array[(Int, SparseVector)]()
+                                val size = (array.size * fraction).ceil.toInt
+                                val weights = array.map(t =>
+                                    wfunc(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2))
+                                )
+                                val weightSum = weights.reduce {(a: Double, b: Double) => a + b}
+                                val segsize = weightSum.toDouble / size
+
+                                var curWeight = rand() * segsize // first sample point
+                                var accumWeight = 0.0
+                                for (iw <- array.zip(weights)) {
+                                    while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
+                                        sampleList :+= iw._1
+                                        curWeight += segsize
+                                    }
+                                    accumWeight += iw._2
+                                }
+                                sampleList.toIterator
+                            }
+                        }
+                    }
                 }
+                sampledData.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
             }
-            Instance(data(0).toInt, feature) // .toVector)
-        }
+        val (trainRaw, test): (RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = (splits(0), splits(1))
+        trainRaw.cache()
+        test.cache()
 
-        if (args.size != 9) {
-            println(
-                "Please provide five arguments: training data path, " +
-                "test data path, sampling fraction, number of batches, " +
-                "number of iterations, max depth, boolean flag, model file path, " +
-                "data source type."
-            )
-            return
-        }
+        // TODO: support SIZE > 1
+        // TODO: parameterize sliceFrac
+        val sliceFrac = 0.05
+        val numPartitions = 160
+        val y = trainRaw.map(_._1).collect()
+        val train = trainRaw.zipWithIndex()
+                            .flatMap {case ((y, x), idx) =>
+                                        (0 until x.size).map(k => (k, (x(k), idx.toInt)))}
+                            .groupByKey(numPartitions)
+                            .map {case (index, xAndPtr) => {
+                                val (x, ptr) = xAndPtr.toArray.sorted.unzip
+                                Instances((new DenseVector(x)).toSparse, ptr, index, sliceFrac, true)
+                            }}
+        train.cache()
+        (y, train, trainRaw, test)
+    }
 
+    def main(args: Array[String]) {
+        // Define SparkContext
         val conf = new SparkConf()
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .set("spark.kryoserializer.buffer.mb","24")
         val sc = new SparkContext(conf)
-        val sqlContext = new SQLContext(sc)
+        // TODO: delete checkpoints before exiting
         sc.setCheckpointDir("checkpoints/")
 
-        // training
-        val allData = sc.textFile(args(0), 200)
-                        .map(rowToInstance)
-                        .filter(inst => {
-                            nextDouble() <= ALLSAMPLE &&
-                            (inst.y > 0 || nextDouble() <= NEGSAMPLE)
-                        }).persist(org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK_SER)
-        allData.count()
-        var Array(train, test) = allData.randomSplit(Array(0.75, 0.25))
-        train = train.cache()
-        test = test.cache()
-        train.count()
-        test.count()
+        // Parse and read options
+        val options = parseOptions(args)
+        val trainPath = options("train")
+        // val testPath = options.get("test")
+        val sampleFrac = options("sample-frac").toDouble
+        val T = options("iteration").toInt
+        val depth = options("depth").toInt
+        val algo = options("algorithm").toInt
+        val modelReadPath = options.getOrElse("load-model", "")
+        val modelWritePath = options.getOrElse("save-model", "")
+        val loadMode = options("format").toInt
+        val trainObjFile = options.getOrElse("train-rdd", "")
+        val testObjFile = options.getOrElse("test-rdd", "")
+        val testRefObjFile = options.getOrElse("test-ref-rdd", "")
 
-        val glomTrain = (
-            if (args(8).toInt == 1) {
-                // up-sample positive samples
-                /*
-                val perPart = math.min(featureSize, 200.0) // TODO: make this a variable
-                val posSize = 3000
-                val dupSize = 1  // (perPart * featureSize / posSize).ceil.toInt
-
-                train.flatMap(inst =>
-                    if (inst.y < 0) {
-                        Iterator(inst)
-                    } else {
-                        (0 until dupSize).map(_ => Instance(inst.y, inst.X))
-                    }
-                )
-                */
-                train.mapPartitionsWithIndex(preprocessAssign(featureSize))
-                     .map(t => (t._1, (t._2._1, t._2._2.sortWith(_.X(t._1) < _.X(t._1)))))
-                     .reduceByKey(preprocessMergeSort)
-                     .map(t => preprocessSlices(0.05)(t._2))
-            } else {
-                sc.objectFile[(List[Instance], Int, List[Double])](trainObjFile)
-            }
-        ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
-        val glomTest = (
-            if (args(8).toInt == 1) {
-                // sc.textFile(args(1))
-                  // .sample(false, 0.1)
-                test.coalesce(20)
-                    .glom()
-            } else {
-                sc.objectFile[Array[Instance]](testObjFile)
-            }
-        ).persist(org.apache.spark.storage.StorageLevel.MEMORY_ONLY)  // _SER)
-        if (args(8).toInt == 1) {
-            glomTrain.saveAsObjectFile(trainObjFile)
-            glomTest.saveAsObjectFile(testObjFile)
+        val baseNodes = {
+            if (modelReadPath != "") SplitterNode.load(modelReadPath)
+            else                     Array[SplitterNode]()
         }
 
-        // println("Training data size: " + train.count)
+        val (yLocal, train, trainRaw, test) = loadTrainData(
+            sc, loadMode, trainPath, trainObjFile, testObjFile, baseNodes)
+        val y = sc.broadcast(yLocal)
+        val testRef = (
+            if (testRefObjFile == "") {
+                test
+            } else {
+                sc.objectFile[(Int, SparseVector)](testRefObjFile)
+            }
+        ).persist(StorageLevel.MEMORY_ONLY)
 
-        println("Train partition (set) size: " + glomTrain.count)
-        println("Test partition (set) size: " + glomTest.count)
+        if (loadMode == 1 || loadMode == 3) {
+            if (trainObjFile != "") {
+                trainRaw.saveAsObjectFile(trainObjFile)
+            }
+            if (testObjFile != "") {
+                test.saveAsObjectFile(testObjFile)
+            }
+        }
+
+        println("Train data size: " + trainRaw.count)
+        println("Test data size: " + test.count)
+        println("Test ref data size: " + testRef.count)
         println("Distinct positive samples in the training data: " +
-                glomTrain.filter(_._2 < BINSIZE).map(_._1.count(t => t.y > 0)).reduce(_ + _))
+                trainRaw.filter(_._1 > 0).count)
         println("Distinct negative samples in the training data: " +
-                glomTrain.filter(_._2 < BINSIZE).map(_._1.count(t => t.y < 0)).reduce(_ + _))
+                trainRaw.filter(_._1 < 0).count)
         println("Distinct positive samples in the test data: " +
-                glomTest.map(_.count(t => t.y > 0)).reduce(_ + _))
+                test.filter(_._1 > 0).count)
         println("Distinct negative samples in the test data: " +
-                glomTest.map(_.count(t => t.y < 0)).reduce(_ + _))
+                test.filter(_._1 < 0).count)
         println()
-        allData.unpersist()
-        train.unpersist()
-        test.unpersist()
 
-        /*
-        val reducedGlomTrain = glomTrain.map(t => {
-            val sample = t._1.filter(inst => {
-                if (inst.y > 0) true
-                else if (nextDouble() <= 0.1) true
-                else false
-            })
-            (sample, t._2, t._3)
-        }).cache()
-        println("Sample size: " + reducedGlomTrain.map(_._1.size).reduce(_ + _))
-        */
-
-        // println("Test data size: " + test.count)
-        // println("Positive: " + test.filter(_.y > 0).count)
-        // println("Negative: " + test.filter(_.y < 0).count)
-
-        val nodes = args(6).toInt match {
-            case 1 => Controller.runADTreeWithAdaBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, args(5).toInt)
-            // TODO: added bulk learning option
-            // case 2 => Controller.runADTreeWithBulkAdaboost(rdd, args(3).toInt)
-            case 3 => Controller.runADTreeWithLogitBoost(glomTrain, glomTest, 0.05, args(2).toDouble, args(3).toInt, args(4).toInt, args(5).toInt)
-        }
-        for (t <- nodes) {
-            println(t)
+        val nodes = algo.toInt match {
+            case 1 =>
+                Controller.runADTreeWithAdaBoost(
+                    sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth, baseNodes
+                )
+            /*
+            case 3 =>
+                Controller.runADTreeWithLogitBoost(
+                    sc, train, y, trainRaw, test, sampleFrac, T, depth, baseNodes
+                )
+            */
         }
 
-        // evaluation
-        /*
-        val trainMargin = train.coalesce(20).glom()
-                               .map(_.map(t => SplitterNode.getScore(0, nodes.toList, t) * t.y))
-                               .cache()
-        val trainError = trainMargin.map(_.count(_ <= 1e-8)).reduce(_ + _)
-        val trainTotal = trainMargin.map(_.size).reduce(_ + _)
-        val trainErrorRate = trainError.toDouble / trainTotal
-        // println("Margin: " + trainMargin.sum)
-        println("Training error is " + trainErrorRate)
-        */
+        nodes.foreach(println)
+        SplitterNode.save(nodes, modelWritePath)
         sc.stop()
-
-        SplitterNode.save(nodes, args(7))
     }
+
+    /*
+    // print visualization meta data for JBoost
+    val posTrain = data.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
+    val negTrain = data.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
+    val posTest = glomTest.flatMap(t => t).filter(_.y > 0).takeSample(true, 3000)
+    val negTest = glomTest.flatMap(t => t).filter(_.y < 0).takeSample(true, 3000)
+    val esize = 6000
+
+    val trainFile = new File("trial0.train.boosting.info")
+    val trainWrite = new BufferedWriter(new FileWriter(trainFile))
+    val testFile = new File("trial0.test.boosting.info")
+    val testWrite = new BufferedWriter(new FileWriter(testFile))
+
+    for (i <- 1 to nodes.size) {
+        trainWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
+        testWrite.write(s"iteration=$i : elements=$esize : boosting_params=None (jboost.booster.AdaBoost):\n")
+        var id = 0
+        for (t <- posTrain) {
+            val score = SplitterNode.getScore(0, nodes, t, i)
+            trainWrite.write(s"$id : $score : $score : 1 : \n")
+            id = id + 1
+        }
+        for (t <- negTrain) {
+            val score = SplitterNode.getScore(0, nodes, t, i)
+            val negscore = -score
+            trainWrite.write(s"$id : $negscore : $score : -1 : \n")
+            id = id + 1
+        }
+        id = 0
+        for (t <- posTest) {
+            val score = SplitterNode.getScore(0, nodes, t, i)
+            testWrite.write(s"$id : $score : $score : 1 : \n")
+            id = id + 1
+        }
+        for (t <- negTest) {
+            val score = SplitterNode.getScore(0, nodes, t, i)
+            val negscore = -score
+            testWrite.write(s"$id : $negscore : $score : -1 : \n")
+            id = id + 1
+        }
+    }
+
+    trainWrite.close()
+    testWrite.close()
+    */
 }
 
 // command:
 //
-// spark/bin/spark-submit --class sparkboost.examples.SpliceSite
-// --master spark://ec2-54-152-1-69.compute-1.amazonaws.com:7077
-// --conf spark.executor.extraJavaOptions=-XX:+UseG1GC  ./sparkboost_2.11-0.1.jar
-// /train-1m /test-txt 0.05 1 50 1 ./model.bin 2 > result.txt 2> log.txt
+// ./spark/bin/spark-submit --master spark://ec2-54-152-198-27.compute-1.amazonaws.com:7077
+// --class sparkboost.examples.SpliceSite --conf spark.executor.extraJavaOptions=-XX:+UseG1GC
+// ./sparkboost_2.11-0.1.jar --train /train-txt --sample-frac 0.05 --iteration 500 --depth 2
+// --algorithm 1 --save-model ./model.bin --format 2 --train-rdd /train0 --test-rdd /test0
