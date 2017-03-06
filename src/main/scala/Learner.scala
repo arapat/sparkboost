@@ -18,7 +18,7 @@ object Learner extends Comparison {
     type MinScoreType = (Double, (Double, Double, Double, Double, Double), (Int, Int, Int, Int, Int))
     type NodeInfoType = (Int, Boolean, Int, Double, (Double, Double))
     type ResultType = (MinScoreType, NodeInfoType, Array[Double])
-    val assignAndLabelsTemplate = Array(-1, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
+    val assignAndLabelsTemplate = Array(-1, 0, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
 
     def findBestSplit(
             y: BrAI, w: BrAD, assign: Array[BrAI],
