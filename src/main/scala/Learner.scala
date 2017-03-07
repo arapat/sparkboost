@@ -1,7 +1,7 @@
 package sparkboost
 
 import collection.mutable.ArrayBuffer
-import collection.mutable.Map
+import collection.Map
 import Double.MaxValue
 
 import org.apache.spark.broadcast.Broadcast
@@ -17,7 +17,8 @@ object Learner extends Comparison {
     type BrAD = Broadcast[Array[Double]]
     type ABrNode = Array[Broadcast[SplitterNode]]
     type DoubleTuple6 = (Double, Double, Double, Double, Double, Double)
-    type WeightsMap = Map[Int -> Map[Int -> (DoubleTuple6, DoubleTuple6)]]
+    type IntTuple6 = (Int, Int, Int, Int, Int, Int)
+    type WeightsMap = Map[Int, Map[Int, (DoubleTuple6, IntTuple6)]]
     type MinScoreType = (Double, (Double, Double, Double, Double, Double), (Int, Int, Int, Int, Int))
     type NodeInfoType = (Int, Boolean, Int, Double, (Double, Double))
     type ResultType = (MinScoreType, NodeInfoType, Array[Double])
@@ -25,7 +26,7 @@ object Learner extends Comparison {
 
     def getOverallWeights(y: BrAI, w: BrAD, assign: Array[BrAI], nodes: ABrNode, maxDepth: Int,
                           totalWeight: Double, totalCount: Int)(data: Instances) = {
-        def getWeights(nodeIndex: Int, depth: Int) = {
+        def getWeights(nodeIndex: Int, depth: Int): Array[(Int, (DoubleTuple6, IntTuple6))] = {
             var leftTotalPositiveWeight = 0.0
             var leftTotalPositiveCount = 0
             var leftTotalNegativeWeight = 0.0
@@ -70,7 +71,7 @@ object Learner extends Comparison {
                     rightTotalPositiveWeight, rightTotalNegativeWeight, rightRejectWeight),
                 (leftTotalPositiveCount, leftTotalNegativeCount, leftRejectCount,
                     rightTotalPositiveCount, rightTotalNegativeCount, rightRejectCount)))
-            val childs = nodes.value(nodeIndex).leftChild ++ nodes.value(nodeIndex).rightChild
+            val childs = nodes(nodeIndex).value.leftChild ++ nodes(nodeIndex).value.rightChild
             if (depth + 1 >= maxDepth || childs.size == 0) {
                 Array(ret)
             } else {
@@ -213,7 +214,7 @@ object Learner extends Comparison {
             val curResult = (minScore, (nodeIndex, onLeft, data.index, splitVal,
                                         (leftPredict, rightPredict)), timeLog.toArray)
             val result = if (depth + 1 < maxDepth) {
-                val childs = nodes.value(nodeIndex).leftChild ++ nodes.value(nodeIndex).rightChild
+                val childs = nodes(nodeIndex).value.leftChild ++ nodes(nodeIndex).value.rightChild
                 if (childs.size > 0) {
                     val cResult = childs.map(t => findBest(t, depth + 1))
                                         .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})

@@ -7,6 +7,7 @@ import util.Random.{nextDouble => rand}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.storage.StorageLevel
@@ -69,7 +70,7 @@ object SpliceSite {
 
     def loadTrainData(sc: SparkContext,
                       loadMode: Int, trainPath: String, trainObjFile: String, testObjFile: String,
-                      nodes: Array[SplitterNode]):
+                      nodes: Array[Broadcast[SplitterNode]]):
                 (Array[Int], RDD[Instances], RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = {
         def rowToInstance(s: String) = {
             val data = s.slice(1, s.size - 1).split(",")
@@ -149,11 +150,11 @@ object SpliceSite {
         val train = trainRaw.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
                                 (0 until x.size).map(k =>
-                                    ((idx * batchSize / trainRaw, k), (x(k), idx.toInt)))}
+                                    ((idx * batchSize / trainRawSize, k), (x(k), idx.toInt)))}
                             .groupByKey(numPartitions)
                             .map {case ((batchId, index), xAndPtr) => {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
-                                Instances(batchId, (new DenseVector(x)).toSparse, ptr,
+                                Instances(batchId.toInt, (new DenseVector(x)).toSparse, ptr,
                                           index, sliceFrac, true)
                             }}
         train.cache()
@@ -185,8 +186,8 @@ object SpliceSite {
         val testRefObjFile = options.getOrElse("test-ref-rdd", "")
 
         val baseNodes = {
-            if (modelReadPath != "") SplitterNode.load(modelReadPath)
-            else                     Array[SplitterNode]()
+            if (modelReadPath != "") SplitterNode.load(modelReadPath).map(node => sc.broadcast(node))
+            else                     Array[Broadcast[SplitterNode]]()
         }
 
         val (yLocal, train, trainRaw, test) = loadTrainData(

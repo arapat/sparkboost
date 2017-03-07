@@ -132,7 +132,7 @@ object Controller extends Comparison {
                   lossFunc: LossFunc,
                   weightFunc: WeightFunc,
                   sampleFrac: Double, T: Int, maxDepth: Int,
-                  baseNodes: Array[SplitterNode]): Array[SplitterNode] = {
+                  baseNodes: Array[BrNode]): Array[SplitterNode] = {
         // Report basic meta info about the training data
         val posCount = y.value.count(_ > 0)
         val negCount = y.value.size - posCount
@@ -158,7 +158,7 @@ object Controller extends Comparison {
                 println(s"Root node predicts ($predVal, 0.0)")
                 Array(sc.broadcast(rootNode))
             } else {
-                baseNodes.map(node => sc.broadcast(node))
+                baseNodes
             }
         val initAssignAndWeights = {
             val aMatrix = new ArrayBuffer[Broadcast[Array[Int]]]()
@@ -219,12 +219,13 @@ object Controller extends Comparison {
 
             // add the new node to the nodes list
             newNode.setPredict(leftPred, rightPred)
-            nodes(prtNodeIndex).addChild(onLeft, nodes.size)
-            nodes :+= sc.broadcast(newNode)
+            nodes(prtNodeIndex).value.addChild(onLeft, nodes.size)
+            val brNewNode = sc.broadcast(newNode)
+            nodes :+= brNewNode
 
             // update weights and assignment matrix
             val timerUpdate = System.nanoTime()
-            val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, newNode)
+            val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, brNewNode)
             println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             assign.append(sc.broadcast(newAssign))
             val toDestroy = weights
@@ -238,14 +239,14 @@ object Controller extends Comparison {
                     (System.nanoTime() - timerStart) / SEC)
             println
         }
-        nodes
+        nodes.map(_.value)
     }
 
     def runADTreeWithAdaBoost(sc: SparkContext,
                               train: RDDType, y: Broadcast[Array[Int]],
                               trainRaw: TestRDDType, test: TestRDDType, testRef: TestRDDType,
                               sampleFrac: Double, T: Int, maxDepth: Int,
-                              baseNodes: Array[SplitterNode]) = {
+                              baseNodes: Array[BrNode]) = {
         runADTree(sc, train, y, trainRaw, test, testRef,
                   Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,

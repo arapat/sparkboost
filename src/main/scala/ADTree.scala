@@ -92,7 +92,7 @@ object SplitterNode {
         if (maxNumNodes > 0 && curIndex >= maxNumNodes) {
             0.0
         } else {
-            val node = nodes.value(curIndex)
+            val node = nodes(curIndex).value
             node.check(instance(max(0, node.splitIndex)), node.splitIndex, true) match {
                 case -1 => {
                     node.leftPredict + (
