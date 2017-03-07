@@ -86,7 +86,7 @@ object Learner extends Comparison {
         val nodeWeights = nodeWeightsMap(data.batchId)
         val globalTimeLog = ArrayBuffer[Double]()
 
-        def findBest(nodeIndex: Int, depth: Int): ResultType = {
+        def findBest(node: SplitterNode): ResultType = {
             val tstart = System.nanoTime()
             val timeLog = ArrayBuffer[Double]()
             var t0 = System.nanoTime()
@@ -94,7 +94,7 @@ object Learner extends Comparison {
             val ((leftTotalPositiveWeight, leftTotalNegativeWeight, leftRejectWeight,
                     rightTotalPositiveWeight, rightTotalNegativeWeight, rightRejectWeight),
                  (leftTotalPositiveCount, leftTotalNegativeCount, leftRejectCount,
-                    rightTotalPositiveCount, rightTotalNegativeCount, rightRejectCount)) = nodeWeights(nodeIndex)
+                    rightTotalPositiveCount, rightTotalNegativeCount, rightRejectCount)) = nodeWeights(node.index)
 
             var leftCurrPositiveWeight = 0.0
             var leftCurrPositiveCount = 0
@@ -124,7 +124,7 @@ object Learner extends Comparison {
 
             var idx = 0
             val x = data.x
-            val curAssign = assign(nodeIndex).value
+            val curAssign = assign(node.index).value
 
             timeLog.append(System.nanoTime() - t0)
             t0 = System.nanoTime()
@@ -207,26 +207,13 @@ object Learner extends Comparison {
             timeLog.append(System.nanoTime() - t0)
             t0 = System.nanoTime()
 
-            val curResult = (minScore, (nodeIndex, onLeft, data.index, splitVal,
-                                        (leftPredict, rightPredict)), timeLog.toArray)
-            val result = if (depth + 1 < maxDepth) {
-                val childs = nodes(nodeIndex).value.leftChild ++ nodes(nodeIndex).value.rightChild
-                if (childs.size > 0) {
-                    val cResult = childs.map(t => findBest(t, depth + 1))
-                                        .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
-                    if (curResult._1._1 < cResult._1._1) curResult else cResult
-                } else {
-                    curResult
-                }
-            } else {
-                curResult
-            }
-
             globalTimeLog.append(System.nanoTime() - tstart)
-            result
+            (minScore, (node.index, onLeft, data.index, splitVal,
+                (leftPredict, rightPredict)), timeLog.toArray)
         }
 
-        val result = findBest(0, 0)
+        val result = nodes.filter(_.value.depth < maxDepth).map(node => findBest(node.value))
+                          .reduce((a, b) => if (a._1._1 < b._1._1) a else b)
         val gtLog: Array[Double] =  (globalTimeLog.toArray)
         (result._1, result._2, ((result._3) ++ (Array(9999.0)) ++ gtLog))
         // Will return following tuple:
