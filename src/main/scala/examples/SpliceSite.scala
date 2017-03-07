@@ -138,19 +138,23 @@ object SpliceSite {
         val (trainRaw, test): (RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = (splits(0), splits(1))
         trainRaw.cache()
         test.cache()
+        val trainRawSize = trainRaw.count
 
-        // TODO: support SIZE > 1
+        // TODO: support batchSize > 1
         // TODO: parameterize sliceFrac
+        val batchSize = 1
         val sliceFrac = 0.05
         val numPartitions = 160
         val y = trainRaw.map(_._1).collect()
         val train = trainRaw.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
-                                        (0 until x.size).map(k => (k, (x(k), idx.toInt)))}
+                                (0 until x.size).map(k =>
+                                    ((idx * batchSize / trainRaw, k), (x(k), idx.toInt)))}
                             .groupByKey(numPartitions)
-                            .map {case (index, xAndPtr) => {
+                            .map {case ((batchId, index), xAndPtr) => {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
-                                Instances((new DenseVector(x)).toSparse, ptr, index, sliceFrac, true)
+                                Instances(batchId, (new DenseVector(x)).toSparse, ptr,
+                                          index, sliceFrac, true)
                             }}
         train.cache()
         (y, train, trainRaw, test)

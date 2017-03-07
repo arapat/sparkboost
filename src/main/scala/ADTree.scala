@@ -5,6 +5,7 @@ import math.max
 
 import sparkboost.utils.Comparison
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.Vector
 
 class SplitterNode(val index: Int, val prtIndex: Int, val onLeft: Boolean,
@@ -86,12 +87,12 @@ object SplitterNode {
         nodes
     }
 
-    def getScore(curIndex: Int, nodes: Array[SplitterNode], instance: Vector,
+    def getScore(curIndex: Int, nodes: Array[Broadcast[SplitterNode]], instance: Vector,
                  maxNumNodes: Int = 0): Double = {
         if (maxNumNodes > 0 && curIndex >= maxNumNodes) {
             0.0
         } else {
-            val node = nodes(curIndex)
+            val node = nodes.value(curIndex)
             node.check(instance(max(0, node.splitIndex)), node.splitIndex, true) match {
                 case -1 => {
                     node.leftPredict + (

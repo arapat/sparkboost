@@ -16,12 +16,12 @@ object UpdateFunc {
 
     def logitboostUpdateFunc(y: Int, w: Double, predict: Double) = w / (1.0 + exp(y * predict))
 
-    def update(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: SplitterNode,
+    def update(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: Broadcast[SplitterNode],
                updateFunc: (Int, Double, Double) => Double): (Array[Int], Array[Double]) = {
-        val curIndex = node.splitIndex
-        val curOnLeft = node.onLeft
-        val leftPredict = node.leftPredict
-        val rightPredict = node.rightPredict
+        val curIndex = node.value.splitIndex
+        val curOnLeft = node.value.onLeft
+        val leftPredict = node.value.leftPredict
+        val rightPredict = node.value.rightPredict
         val results = train.filter(_.index == max(0, curIndex)).flatMap(insts =>
             insts.x.toDense.values.zip(insts.ptr).map { case (ix, ipt) => {
                 val iy = y.value(ipt)
@@ -31,7 +31,7 @@ object UpdateFunc {
                     if (faPredict == 0 || faPredict < 0 && !curOnLeft || faPredict > 0 && curOnLeft) {
                         0
                     } else {
-                        node.check(ix, curIndex, true)
+                        node.value.check(ix, curIndex, true)
                     }
                 val predict = if (assign < 0) leftPredict else if (assign > 0) rightPredict else 0.0
                 val nw = updateFunc(iy, iw, predict)
@@ -41,7 +41,7 @@ object UpdateFunc {
         results.unzip
     }
 
-    def adaboostUpdate(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: SplitterNode) = {
+    def adaboostUpdate(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: Broadcast[SplitterNode]) = {
         update(train, y, fa, w, node, adaboostUpdateFunc)
     }
 

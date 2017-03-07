@@ -21,16 +21,17 @@ object Controller extends Comparison {
     val BINSIZE = 1
     type BrAI = Broadcast[Array[Int]]
     type BrAD = Broadcast[Array[Double]]
+    type BrNode = Broadcast[SplitterNode]
     type RDDType = RDD[Instances]
     type TestRDDType = RDD[(Int, SparseVector)]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, (Double, Double))
-    type LearnerFunc = (RDDType, BrAI, BrAD, Array[BrAI], Array[SplitterNode], Int, LossFunc) => LearnerObj
-    type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, SplitterNode) => (Array[Int], Array[Double])
+    type LearnerFunc = (RDDType, BrAI, BrAD, Array[BrAI], Array[BrNode], Int, LossFunc) => LearnerObj
+    type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, BrNode) => (Array[Int], Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 
     def printStats(train: TestRDDType, test: TestRDDType, testRef: TestRDDType,
-                   nodes: Array[SplitterNode],
+                   nodes: Array[BrNode],
                    y: Array[Int], w: Array[Double], iteration: Int) = {
         // manual fix the auPRC computation bug in MLlib
         def adjust(points: Array[(Double, Double)]) = {
@@ -155,16 +156,16 @@ object Controller extends Comparison {
                 val rootNode = SplitterNode(0, -1, true, (-1, 0.0))
                 rootNode.setPredict(predVal, 0.0)
                 println(s"Root node predicts ($predVal, 0.0)")
-                Array(rootNode)
+                Array(sc.broadcast(rootNode))
             } else {
-                baseNodes
+                baseNodes.map(node => sc.broadcast(node))
             }
         val initAssignAndWeights = {
             val aMatrix = new ArrayBuffer[Broadcast[Array[Int]]]()
             var w = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
             val fa = sc.broadcast((0 until y.value.size).map(_ => -1).toArray)
             for (node <- nodes) {
-                val faIdx = node.prtIndex
+                val faIdx = node.value.prtIndex
                 val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
                 val (aVec, nw) = updateFunc(train, y, brFa, w, node)
                 aMatrix.append(sc.broadcast(aVec))
@@ -219,7 +220,7 @@ object Controller extends Comparison {
             // add the new node to the nodes list
             newNode.setPredict(leftPred, rightPred)
             nodes(prtNodeIndex).addChild(onLeft, nodes.size)
-            nodes :+= newNode
+            nodes :+= sc.broadcast(newNode)
 
             // update weights and assignment matrix
             val timerUpdate = System.nanoTime()
