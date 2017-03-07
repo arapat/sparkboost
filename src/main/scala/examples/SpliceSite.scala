@@ -70,7 +70,7 @@ object SpliceSite {
 
     def loadTrainData(sc: SparkContext,
                       loadMode: Int, trainPath: String, trainObjFile: String, testObjFile: String,
-                      nodes: Array[Broadcast[SplitterNode]]):
+                      nodes: Array[SplitterNode]):
                 (Array[Int], RDD[Instances], RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = {
         def rowToInstance(s: String) = {
             val data = s.slice(1, s.size - 1).split(",")
@@ -186,8 +186,8 @@ object SpliceSite {
         val testRefObjFile = options.getOrElse("test-ref-rdd", "")
 
         val baseNodes = {
-            if (modelReadPath != "") SplitterNode.load(modelReadPath).map(node => sc.broadcast(node))
-            else                     Array[Broadcast[SplitterNode]]()
+            if (modelReadPath != "") SplitterNode.load(modelReadPath)
+            else                     Array[SplitterNode]()
         }
 
         val (yLocal, train, trainRaw, test) = loadTrainData(
@@ -226,7 +226,8 @@ object SpliceSite {
         val nodes = algo.toInt match {
             case 1 =>
                 Controller.runADTreeWithAdaBoost(
-                    sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth, baseNodes
+                    sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth,
+                    baseNodes.map(node => sc.broadcast(node))
                 )
             /*
             case 3 =>

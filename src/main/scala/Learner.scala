@@ -26,7 +26,7 @@ object Learner extends Comparison {
 
     def getOverallWeights(y: BrAI, w: BrAD, assign: Array[BrAI], nodes: ABrNode, maxDepth: Int,
                           totalWeight: Double, totalCount: Int)(data: Instances) = {
-        def getWeights(nodeIndex: Int, depth: Int): Array[(Int, (DoubleTuple6, IntTuple6))] = {
+        def getWeights(node: SplitterNode): (Int, (DoubleTuple6, IntTuple6)) = {
             var leftTotalPositiveWeight = 0.0
             var leftTotalPositiveCount = 0
             var leftTotalNegativeWeight = 0.0
@@ -37,7 +37,7 @@ object Learner extends Comparison {
             var rightTotalNegativeWeight = 0.0
             var rightTotalNegativeCount = 0
 
-            val curAssign = assign(nodeIndex).value
+            val curAssign = assign(node.index).value
             var idx = 0
             while (idx < data.ptr.size) {
                 val ptr = data.ptr(idx)
@@ -66,20 +66,16 @@ object Learner extends Comparison {
             val rightRejectWeight = totalWeight - (rightTotalNegativeWeight + rightTotalPositiveWeight)
             val rightRejectCount = totalCount - (rightTotalNegativeCount + rightTotalPositiveCount)
 
-            val ret = (nodeIndex,
+            (node.index,
                 ((leftTotalPositiveWeight, leftTotalNegativeWeight, leftRejectWeight,
                     rightTotalPositiveWeight, rightTotalNegativeWeight, rightRejectWeight),
                 (leftTotalPositiveCount, leftTotalNegativeCount, leftRejectCount,
                     rightTotalPositiveCount, rightTotalNegativeCount, rightRejectCount)))
-            val childs = nodes(nodeIndex).value.leftChild ++ nodes(nodeIndex).value.rightChild
-            if (depth + 1 >= maxDepth || childs.size == 0) {
-                Array(ret)
-            } else {
-                ret +: childs.map(idx => getWeights(idx, depth + 1)).reduce(_ ++ _)
-            }
         }
 
-        (data.batchId, getWeights(0, 0).toMap)
+        (data.batchId, nodes.filter(_.value.depth < maxDepth)
+                            .map(bcNode => getWeights(bcNode.value))
+                            .toMap)
     }
 
     def findBestSplit(
