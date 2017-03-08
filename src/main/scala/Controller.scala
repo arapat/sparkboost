@@ -21,12 +21,13 @@ object Controller extends Comparison {
     val BINSIZE = 1
     type BrAI = Broadcast[Array[Int]]
     type BrAD = Broadcast[Array[Double]]
+    type BrNode = Broadcast[SplitterNode]
     type RDDType = RDD[Instances]
     type TestRDDType = RDD[(Int, SparseVector)]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, (Double, Double))
-    type LearnerFunc = (RDDType, BrAI, BrAD, Array[BrAI], Array[SplitterNode], Int, LossFunc) => LearnerObj
-    type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, SplitterNode) => (Array[Int], Array[Double])
+    type LearnerFunc = (RDDType, BrAI, BrAD, Array[BrAI], Array[BrNode], Int, LossFunc) => LearnerObj
+    type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, BrNode) => (Array[Int], Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 
     def printStats(train: TestRDDType, test: TestRDDType, testRef: TestRDDType,
@@ -131,7 +132,7 @@ object Controller extends Comparison {
                   lossFunc: LossFunc,
                   weightFunc: WeightFunc,
                   sampleFrac: Double, T: Int, maxDepth: Int,
-                  baseNodes: Array[SplitterNode]): Array[SplitterNode] = {
+                  baseNodes: Array[BrNode]): Array[SplitterNode] = {
         // Report basic meta info about the training data
         val posCount = y.value.count(_ > 0)
         val negCount = y.value.size - posCount
@@ -152,19 +153,20 @@ object Controller extends Comparison {
         var nodes =
             if (genRootNode) {
                 val predVal = 0.5 * log(posCount.toDouble / negCount)
-                val rootNode = SplitterNode(0, -1, true, (-1, 0.0))
+                val rootNode = SplitterNode(0, -1, true, 0, (-1, 0.0))
                 rootNode.setPredict(predVal, 0.0)
                 println(s"Root node predicts ($predVal, 0.0)")
-                Array(rootNode)
+                Array(sc.broadcast(rootNode))
             } else {
                 baseNodes
             }
+        var localNodes = nodes.map(_.value)
         val initAssignAndWeights = {
             val aMatrix = new ArrayBuffer[Broadcast[Array[Int]]]()
             var w = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
             val fa = sc.broadcast((0 until y.value.size).map(_ => -1).toArray)
             for (node <- nodes) {
-                val faIdx = node.prtIndex
+                val faIdx = node.value.prtIndex
                 val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
                 val (aVec, nw) = updateFunc(train, y, brFa, w, node)
                 aMatrix.append(sc.broadcast(aVec))
@@ -180,7 +182,7 @@ object Controller extends Comparison {
         val assign = initAssignAndWeights._1
         var weights = initAssignAndWeights._2
 
-        printStats(trainRaw, test, testRef, nodes, y.value, weights.value, 0)
+        printStats(trainRaw, test, testRef, localNodes, y.value, weights.value, 0)
         println()
 
         var iteration = 0
@@ -190,7 +192,8 @@ object Controller extends Comparison {
             iteration = iteration + 1
             val (prtNodeIndex, onLeft, splitIndex, splitVal, learnerPredicts): LearnerObj =
                     learnerFunc(train, y, weights, assign.toArray, nodes.toArray, maxDepth, lossFunc)
-            val newNode = SplitterNode(nodes.size, prtNodeIndex, onLeft, (splitIndex, splitVal))
+            val newNode = SplitterNode(nodes.size, prtNodeIndex, onLeft,
+                                       localNodes(prtNodeIndex).depth + 1, (splitIndex, splitVal))
 
             val prtAssign = assign(prtNodeIndex)
             // compute the predictions of the new node
@@ -218,12 +221,14 @@ object Controller extends Comparison {
 
             // add the new node to the nodes list
             newNode.setPredict(leftPred, rightPred)
-            nodes(prtNodeIndex).addChild(onLeft, nodes.size)
-            nodes :+= newNode
+            localNodes(prtNodeIndex).addChild(onLeft, localNodes.size)
+            val brNewNode = sc.broadcast(newNode)
+            nodes :+= brNewNode
+            localNodes :+= newNode
 
             // update weights and assignment matrix
             val timerUpdate = System.nanoTime()
-            val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, newNode)
+            val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, brNewNode)
             println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             assign.append(sc.broadcast(newAssign))
             val toDestroy = weights
@@ -231,20 +236,20 @@ object Controller extends Comparison {
             toDestroy.destroy()
 
             val timerStats = System.nanoTime()
-            printStats(trainRaw, test, testRef, nodes, y.value, newWeights, iteration)
+            printStats(trainRaw, test, testRef, localNodes, y.value, newWeights, iteration)
             println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             println("Running time for Iteration " + iteration + " is (ms) " +
                     (System.nanoTime() - timerStart) / SEC)
             println
         }
-        nodes
+        localNodes
     }
 
     def runADTreeWithAdaBoost(sc: SparkContext,
                               train: RDDType, y: Broadcast[Array[Int]],
                               trainRaw: TestRDDType, test: TestRDDType, testRef: TestRDDType,
                               sampleFrac: Double, T: Int, maxDepth: Int,
-                              baseNodes: Array[SplitterNode]) = {
+                              baseNodes: Array[BrNode]) = {
         runADTree(sc, train, y, trainRaw, test, testRef,
                   Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,

@@ -5,9 +5,10 @@ import math.max
 
 import sparkboost.utils.Comparison
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.Vector
 
-class SplitterNode(val index: Int, val prtIndex: Int, val onLeft: Boolean,
+class SplitterNode(val index: Int, val prtIndex: Int, val onLeft: Boolean, val depth: Int,
                    val splitIndex: Int, val splitVal: Double)
                         extends java.io.Serializable with Comparison {
     var leftPredict = 0.0
@@ -59,8 +60,8 @@ class SplitterNode(val index: Int, val prtIndex: Int, val onLeft: Boolean,
 }
 
 object SplitterNode {
-    def apply(index: Int, prtIndex: Int, onLeft: Boolean, splitPoint: (Int, Double)) = {
-        new SplitterNode(index, prtIndex, onLeft, splitPoint._1, splitPoint._2)
+    def apply(index: Int, prtIndex: Int, onLeft: Boolean, depth: Int, splitPoint: (Int, Double)) = {
+        new SplitterNode(index, prtIndex, onLeft, depth, splitPoint._1, splitPoint._2)
     }
 
     def save(nodes: Array[SplitterNode], filepath: String) {

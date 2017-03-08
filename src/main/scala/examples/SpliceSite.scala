@@ -7,6 +7,7 @@ import util.Random.{nextDouble => rand}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.storage.StorageLevel
@@ -138,19 +139,24 @@ object SpliceSite {
         val (trainRaw, test): (RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = (splits(0), splits(1))
         trainRaw.cache()
         test.cache()
+        val trainRawSize = trainRaw.count
 
-        // TODO: support SIZE > 1
+        // TODO: support batchSize > 1
         // TODO: parameterize sliceFrac
+        val batchSize = 1
         val sliceFrac = 0.05
         val numPartitions = 160
         val y = trainRaw.map(_._1).collect()
         val train = trainRaw.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
-                                        (0 until x.size).map(k => (k, (x(k), idx.toInt)))}
-                            .groupByKey(numPartitions)
-                            .map {case (index, xAndPtr) => {
+                                (0 until x.size).map(k =>
+                                    ((idx * batchSize / trainRawSize, k), (x(k), idx.toInt)))}
+                            .groupByKey()
+                            .repartition(numPartitions)
+                            .map {case ((batchId, index), xAndPtr) => {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
-                                Instances((new DenseVector(x)).toSparse, ptr, index, sliceFrac, true)
+                                Instances(batchId.toInt, (new DenseVector(x)).toSparse, ptr,
+                                          index, sliceFrac, true)
                             }}
         train.cache()
         (y, train, trainRaw, test)
@@ -221,7 +227,8 @@ object SpliceSite {
         val nodes = algo.toInt match {
             case 1 =>
                 Controller.runADTreeWithAdaBoost(
-                    sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth, baseNodes
+                    sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth,
+                    baseNodes.map(node => sc.broadcast(node))
                 )
             /*
             case 3 =>
