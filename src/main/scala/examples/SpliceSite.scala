@@ -45,10 +45,10 @@ object SpliceSite {
     val TRAIN_PORTION = 0.75
 
     // Construction features: P1 and P2 (as in Degroeve's SpliceMachine paper)
-    val FEATURE_TYPE = 2
+    val FEATURE_TYPE = 1
     val CENTER = 60
-    val LEFT_WINDOW = 20  // out of 59
-    val RIGHT_WINDOW = 20  // out of 80
+    val LEFT_WINDOW = 59  // out of 59
+    val RIGHT_WINDOW = 80  // out of 80
     val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
     val featureSize = (WINDOW_SIZE) * 4 + {if (FEATURE_TYPE == 1) 0 else (WINDOW_SIZE - 1) * 4 * 4}
     val indexMap = {
@@ -73,7 +73,7 @@ object SpliceSite {
                       nodes: Array[SplitterNode]):
                 (Array[Int], RDD[Instances], RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = {
         def rowToInstance(s: String) = {
-            val data = s.slice(1, s.size - 1).split(",")
+            val data = s.slice(1, s.size - 2).split(", u'")
             val raw = data(1)
             val window = (
                 raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
@@ -228,7 +228,7 @@ object SpliceSite {
             case 1 =>
                 Controller.runADTreeWithAdaBoost(
                     sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth,
-                    baseNodes.map(node => sc.broadcast(node))
+                    baseNodes.map(node => sc.broadcast(node)), modelWritePath
                 )
             /*
             case 3 =>

@@ -132,7 +132,7 @@ object Controller extends Comparison {
                   lossFunc: LossFunc,
                   weightFunc: WeightFunc,
                   sampleFrac: Double, T: Int, maxDepth: Int,
-                  baseNodes: Array[BrNode]): Array[SplitterNode] = {
+                  baseNodes: Array[BrNode], writePath: String): Array[SplitterNode] = {
         // Report basic meta info about the training data
         val posCount = y.value.count(_ > 0)
         val negCount = y.value.size - posCount
@@ -240,6 +240,10 @@ object Controller extends Comparison {
             println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             println("Running time for Iteration " + iteration + " is (ms) " +
                     (System.nanoTime() - timerStart) / SEC)
+            if (iteration % 20 == 0) {
+                SplitterNode.save(localNodes, writePath)
+                println("Wrote model to disk at iteration " + iteration)
+            }
             println
         }
         localNodes
@@ -249,11 +253,11 @@ object Controller extends Comparison {
                               train: RDDType, y: Broadcast[Array[Int]],
                               trainRaw: TestRDDType, test: TestRDDType, testRef: TestRDDType,
                               sampleFrac: Double, T: Int, maxDepth: Int,
-                              baseNodes: Array[BrNode]) = {
+                              baseNodes: Array[BrNode], writePath: String) = {
         runADTree(sc, train, y, trainRaw, test, testRef,
                   Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,
-                  sampleFrac, T, maxDepth, baseNodes)
+                  sampleFrac, T, maxDepth, baseNodes, writePath)
     }
 
     /*
