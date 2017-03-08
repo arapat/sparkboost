@@ -59,6 +59,7 @@ object Learner extends Comparison {
                         rightTotalNegativeCount += 1
                     }
                 }
+                idx = idx + 1
             }
 
             val leftRejectWeight = totalWeight - (leftTotalNegativeWeight + leftTotalPositiveWeight)

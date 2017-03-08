@@ -151,7 +151,8 @@ object SpliceSite {
                             .flatMap {case ((y, x), idx) =>
                                 (0 until x.size).map(k =>
                                     ((idx * batchSize / trainRawSize, k), (x(k), idx.toInt)))}
-                            .groupByKey(numPartitions)
+                            .groupByKey()
+                            .repartition(numPartitions)
                             .map {case ((batchId, index), xAndPtr) => {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
                                 Instances(batchId.toInt, (new DenseVector(x)).toSparse, ptr,
