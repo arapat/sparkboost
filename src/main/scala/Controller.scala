@@ -26,7 +26,8 @@ object Controller extends Comparison {
     type TestRDDType = RDD[(Int, SparseVector)]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, (Double, Double))
-    type LearnerFunc = (RDDType, BrAI, BrAD, Array[BrAI], Array[BrNode], Int, LossFunc) => LearnerObj
+    type LearnerFunc = (SparkContext, RDDType, BrAI, BrAD,
+                        Array[BrAI], Array[BrNode], Int, LossFunc) => LearnerObj
     type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, BrNode) => (Array[Int], Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 
@@ -191,7 +192,8 @@ object Controller extends Comparison {
             val timerStart = System.nanoTime()
             iteration = iteration + 1
             val (prtNodeIndex, onLeft, splitIndex, splitVal, learnerPredicts): LearnerObj =
-                    learnerFunc(train, y, weights, assign.toArray, nodes.toArray, maxDepth, lossFunc)
+                    learnerFunc(sc, train, y, weights, assign.toArray,
+                                nodes.toArray, maxDepth, lossFunc)
             val newNode = SplitterNode(nodes.size, prtNodeIndex, onLeft,
                                        localNodes(prtNodeIndex).depth + 1, (splitIndex, splitVal))
 

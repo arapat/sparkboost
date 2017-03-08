@@ -1,9 +1,9 @@
 package sparkboost
 
 import collection.mutable.ArrayBuffer
-import collection.Map
 import Double.MaxValue
 
+import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
@@ -18,7 +18,7 @@ object Learner extends Comparison {
     type ABrNode = Array[Broadcast[SplitterNode]]
     type DoubleTuple6 = (Double, Double, Double, Double, Double, Double)
     type IntTuple6 = (Int, Int, Int, Int, Int, Int)
-    type WeightsMap = Map[Int, Map[Int, (DoubleTuple6, IntTuple6)]]
+    type WeightsMap = collection.Map[Int, Map[Int, (DoubleTuple6, IntTuple6)]]
     type MinScoreType = (Double, (Double, Double, Double, Double, Double), (Int, Int, Int, Int, Int))
     type NodeInfoType = (Int, Boolean, Int, Double, (Double, Double))
     type ResultType = (MinScoreType, NodeInfoType, Array[Double])
@@ -80,12 +80,13 @@ object Learner extends Comparison {
     }
 
     def findBestSplit(
-            y: BrAI, w: BrAD, assign: Array[BrAI], nodeWeightsMap: WeightsMap,
+            y: BrAI, w: BrAD, assign: Array[BrAI], nodeWeightsMap: Broadcast[WeightsMap],
             nodes: ABrNode, maxDepth: Int,
             lossFunc: (Double, Double, Double, Double, Double) => Double
     )(data: Instances) = {
-        val nodeWeights = nodeWeightsMap(data.batchId)
+        val timer = System.nanoTime()
         val globalTimeLog = ArrayBuffer[Double]()
+        val nodeWeights = nodeWeightsMap.value(data.batchId)
 
         def findBest(node: SplitterNode): ResultType = {
             val tstart = System.nanoTime()
@@ -206,17 +207,18 @@ object Learner extends Comparison {
             }
 
             timeLog.append(System.nanoTime() - t0)
-            t0 = System.nanoTime()
 
             globalTimeLog.append(System.nanoTime() - tstart)
             (minScore, (node.index, onLeft, data.index, splitVal,
                 (leftPredict, rightPredict)), timeLog.toArray)
         }
 
-        val result = nodes.filter(_.value.depth < maxDepth).map(node => findBest(node.value))
+        val result = nodes.filter(_.value.depth < maxDepth)
+                          .map(node => findBest(node.value))
                           .reduce((a, b) => if (a._1._1 < b._1._1) a else b)
-        val gtLog: Array[Double] =  (globalTimeLog.toArray)
-        (result._1, result._2, ((result._3) ++ (Array(9999.0)) ++ gtLog))
+        val gtLog: Array[Double] = globalTimeLog.toArray
+        (result._1, result._2,
+            (System.nanoTime() - timer).toDouble +: ((result._3) ++ (Array(9999.0)) ++ gtLog))
         // Will return following tuple:
         // (minScore, nodeInfo)
         // where minScore consists of
@@ -232,6 +234,7 @@ object Learner extends Comparison {
     }
 
     def partitionedGreedySplit(
+            sc: SparkContext,
             train: RDDType, y: BrAI,
             w: BrAD, assign: Array[BrAI],
             nodes: ABrNode, maxDepth: Int,
@@ -243,13 +246,14 @@ object Learner extends Comparison {
         val nodeWeightsMap = train.filter(_.index == 0).map(
             getOverallWeights(y, w, assign, nodes, maxDepth, totalWeight, totalCount)
         ).collectAsMap
+        val bcWeightsMap = sc.broadcast(nodeWeightsMap)
 
         println("Collect weights info took (ms) " + (System.nanoTime() - tStart) / SEC)
         tStart = System.nanoTime()
 
+        val f = findBestSplit(y, w, assign, bcWeightsMap, nodes, maxDepth, lossFunc) _
         val (minScore, nodeInfo, timer) = train.filter(_.active)
-                                               .map(findBestSplit(y, w, assign, nodeWeightsMap,
-                                                                  nodes, maxDepth, lossFunc))
+                                               .map(f)
                                                .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
         println("Node " + nodes.size + " learner info")
         println("Min score: " + "%.2f".format(minScore._1))
