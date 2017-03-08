@@ -132,7 +132,8 @@ object Controller extends Comparison {
                   lossFunc: LossFunc,
                   weightFunc: WeightFunc,
                   sampleFrac: Double, T: Int, maxDepth: Int,
-                  baseNodes: Array[BrNode], writePath: String): Array[SplitterNode] = {
+                  baseNodes: Array[BrNode], writePath: String,
+                  resampled: Boolean): Array[SplitterNode] = {
         // Report basic meta info about the training data
         val posCount = y.value.count(_ > 0)
         val negCount = y.value.size - posCount
@@ -149,9 +150,8 @@ object Controller extends Comparison {
         //
         // In both cases, we need to initialize `weights` vector and `assign` matrix.
         // In addition to that, for case 2 we need to create a root node that always says "YES"
-        val genRootNode = baseNodes.size == 0
         var nodes =
-            if (genRootNode) {
+            if (baseNodes.size == 0) {
                 val predVal = 0.5 * log(posCount.toDouble / negCount)
                 val rootNode = SplitterNode(0, -1, true, 0, (-1, 0.0))
                 rootNode.setPredict(predVal, 0.0)
@@ -170,7 +170,7 @@ object Controller extends Comparison {
                 val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
                 val (aVec, nw) = updateFunc(train, y, brFa, w, node)
                 aMatrix.append(sc.broadcast(aVec))
-                if (genRootNode) {
+                if (!resampled) {
                     val toDestroy = w
                     w = sc.broadcast(nw)
                     toDestroy.destroy()
@@ -253,11 +253,12 @@ object Controller extends Comparison {
                               train: RDDType, y: Broadcast[Array[Int]],
                               trainRaw: TestRDDType, test: TestRDDType, testRef: TestRDDType,
                               sampleFrac: Double, T: Int, maxDepth: Int,
-                              baseNodes: Array[BrNode], writePath: String) = {
+                              baseNodes: Array[BrNode], writePath: String,
+                              resampled: Boolean) = {
         runADTree(sc, train, y, trainRaw, test, testRef,
                   Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,
-                  sampleFrac, T, maxDepth, baseNodes, writePath)
+                  sampleFrac, T, maxDepth, baseNodes, writePath, resampled)
     }
 
     /*

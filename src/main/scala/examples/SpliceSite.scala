@@ -228,7 +228,8 @@ object SpliceSite {
             case 1 =>
                 Controller.runADTreeWithAdaBoost(
                     sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth,
-                    baseNodes.map(node => sc.broadcast(node)), modelWritePath
+                    baseNodes.map(node => sc.broadcast(node)), modelWritePath,
+                    loadMode == 3
                 )
             /*
             case 3 =>
