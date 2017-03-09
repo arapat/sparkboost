@@ -28,6 +28,7 @@ object SpliceSite {
                           3 -> LogitBoost partitioned
     --save-model    - File path to save the model
     --load-model    - File path to load the model
+    --resample-node - The last tree node before resampling (1-base)
     --format        - data format
                           1 -> raw data
                           2 -> objects
@@ -145,7 +146,7 @@ object SpliceSite {
         // TODO: parameterize sliceFrac
         val batchSize = 1
         val sliceFrac = 0.05
-        val numPartitions = 160
+        val numPartitions = 160 * 2
         val y = trainRaw.map(_._1).collect()
         val train = trainRaw.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
@@ -181,6 +182,7 @@ object SpliceSite {
         val algo = options("algorithm").toInt
         val modelReadPath = options.getOrElse("load-model", "")
         val modelWritePath = options.getOrElse("save-model", "")
+        val lastResample = options.getOrElse("resample-node", "0").toInt
         val loadMode = options("format").toInt
         val trainObjFile = options.getOrElse("train-rdd", "")
         val testObjFile = options.getOrElse("test-rdd", "")
@@ -229,7 +231,7 @@ object SpliceSite {
                 Controller.runADTreeWithAdaBoost(
                     sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth,
                     baseNodes.map(node => sc.broadcast(node)), modelWritePath,
-                    loadMode == 3
+                    lastResample
                 )
             /*
             case 3 =>

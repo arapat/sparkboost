@@ -134,7 +134,7 @@ object Controller extends Comparison {
                   weightFunc: WeightFunc,
                   sampleFrac: Double, T: Int, maxDepth: Int,
                   baseNodes: Array[BrNode], writePath: String,
-                  resampled: Boolean): Array[SplitterNode] = {
+                  lastResample: Int): Array[SplitterNode] = {
         // Report basic meta info about the training data
         val posCount = y.value.count(_ > 0)
         val negCount = y.value.size - posCount
@@ -166,16 +166,18 @@ object Controller extends Comparison {
             val aMatrix = new ArrayBuffer[Broadcast[Array[Int]]]()
             var w = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
             val fa = sc.broadcast((0 until y.value.size).map(_ => -1).toArray)
+            var nodeIdx = 0
             for (node <- nodes) {
                 val faIdx = node.value.prtIndex
                 val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
                 val (aVec, nw) = updateFunc(train, y, brFa, w, node)
                 aMatrix.append(sc.broadcast(aVec))
-                if (!resampled) {
+                if (nodeIdx >= lastResample) {
                     val toDestroy = w
                     w = sc.broadcast(nw)
                     toDestroy.destroy()
                 }
+                nodeIdx += 1
             }
             fa.destroy()
             (aMatrix, w)
@@ -256,11 +258,11 @@ object Controller extends Comparison {
                               trainRaw: TestRDDType, test: TestRDDType, testRef: TestRDDType,
                               sampleFrac: Double, T: Int, maxDepth: Int,
                               baseNodes: Array[BrNode], writePath: String,
-                              resampled: Boolean) = {
+                              lastResample: Int) = {
         runADTree(sc, train, y, trainRaw, test, testRef,
                   Learner.partitionedGreedySplit, UpdateFunc.adaboostUpdate,
                   LossFunc.lossfunc, UpdateFunc.adaboostUpdateFunc,
-                  sampleFrac, T, maxDepth, baseNodes, writePath, resampled)
+                  sampleFrac, T, maxDepth, baseNodes, writePath, lastResample)
     }
 
     /*
