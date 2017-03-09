@@ -4,15 +4,25 @@ import scala.io.Source
 import scala.annotation.tailrec
 import util.Random.{nextDouble => rand}
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
+import org.apache.spark.rdd.RDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.storage.StorageLevel
 
 import sparkboost._
+
+class UniformPartitioner(val numOfPartitions: Int, val featureSize: Int) extends Partitioner {
+    def numPartitions() = numOfPartitions
+
+    def getPartition(key: Any): Int = {
+        val (batchId, index) = key.asInstanceOf[(Long, Int)]
+        return (batchId.toInt * featureSize + index) % numOfPartitions
+    }
+}
 
 object SpliceSite {
     /*
@@ -146,14 +156,14 @@ object SpliceSite {
         // TODO: parameterize sliceFrac
         val batchSize = 1
         val sliceFrac = 0.05
-        val numPartitions = 160 * 2
+        val numPartitions = 160
         val y = trainRaw.map(_._1).collect()
         val train = trainRaw.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
                                 (0 until x.size).map(k =>
                                     ((idx * batchSize / trainRawSize, k), (x(k), idx.toInt)))}
                             .groupByKey()
-                            .repartition(numPartitions)
+                            .partitionBy(new UniformPartitioner(numPartitions, featureSize))
                             .map {case ((batchId, index), xAndPtr) => {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
                                 Instances(batchId.toInt, (new DenseVector(x)).toSparse, ptr,
