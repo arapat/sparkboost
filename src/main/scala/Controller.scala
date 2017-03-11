@@ -33,7 +33,8 @@ object Controller extends Comparison {
 
     def printStats(train: TestRDDType, test: TestRDDType, testRef: TestRDDType,
                    nodes: Array[SplitterNode],
-                   y: Array[Int], w: Array[Double], iteration: Int) = {
+                   y: Array[Int], w: Array[Double],
+                   iteration: Int, lastResample: Int) = {
         // manual fix the auPRC computation bug in MLlib
         def adjust(points: Array[(Double, Double)]) = {
             require(points.length == 2)
@@ -56,11 +57,13 @@ object Controller extends Comparison {
 
         // Part 1 - Compute auPRC
         val trainPredictionAndLabels = train.map {case t =>
-            (SplitterNode.getScore(0, nodes, t._2).toDouble, t._1.toDouble)
+            (SplitterNode.getScore(0, nodes, t._2).toDouble -
+                SplitterNode.getScore(lastResample, nodes, t._2).toDouble, t._1.toDouble)
         }.cache()
 
         val testPredictionAndLabels = test.map {case t =>
-            (SplitterNode.getScore(0, nodes, t._2).toDouble, t._1.toDouble)
+            (SplitterNode.getScore(0, nodes, t._2).toDouble -
+                SplitterNode.getScore(lastResample, nodes, t._2).toDouble, t._1.toDouble)
         }.cache()
 
         val testRefPredictionAndLabels = testRef.map {case t =>
@@ -185,7 +188,7 @@ object Controller extends Comparison {
         val assign = initAssignAndWeights._1
         var weights = initAssignAndWeights._2
 
-        printStats(trainRaw, test, testRef, localNodes, y.value, weights.value, 0)
+        printStats(trainRaw, test, testRef, localNodes, y.value, weights.value, 0, lastResample)
         println()
 
         var iteration = 0
@@ -240,7 +243,7 @@ object Controller extends Comparison {
             toDestroy.destroy()
 
             val timerStats = System.nanoTime()
-            printStats(trainRaw, test, testRef, localNodes, y.value, newWeights, iteration)
+            printStats(trainRaw, test, testRef, localNodes, y.value, newWeights, iteration, lastResample)
             println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             println("Running time for Iteration " + iteration + " is (ms) " +
                     (System.nanoTime() - timerStart) / SEC)
