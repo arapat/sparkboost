@@ -28,7 +28,7 @@ object Controller extends Comparison {
     type LearnerObj = (Int, Boolean, Int, Double, (Double, Double))
     type LearnerFunc = (SparkContext, RDDType, BrAI, BrAD,
                         Array[BrAI], Array[BrNode], Int, LossFunc) => LearnerObj
-    type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, BrNode) => (Array[Int], Array[Double])
+    type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, BrNode) => (SparseVector[Int], Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 
     def printStats(train: TestRDDType, test: TestRDDType, testRef: TestRDDType,

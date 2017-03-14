@@ -3,6 +3,8 @@ package sparkboost
 import math.exp
 import math.max
 
+import org.apache.spark.mllib.linalg.DenseVector
+import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
@@ -17,7 +19,7 @@ object UpdateFunc {
     def logitboostUpdateFunc(y: Int, w: Double, predict: Double) = w / (1.0 + exp(y * predict))
 
     def update(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: Broadcast[SplitterNode],
-               updateFunc: (Int, Double, Double) => Double): (Array[Int], Array[Double]) = {
+               updateFunc: (Int, Double, Double) => Double): (SparseVector[Int], Array[Double]) = {
         val curIndex = node.value.splitIndex
         val curOnLeft = node.value.onLeft
         val leftPredict = node.value.leftPredict
@@ -38,7 +40,8 @@ object UpdateFunc {
                 (ipt, (assign, nw))
             }}
         ).sortByKey().map(_._2).collect()
-        results.unzip
+        val (assignDense, nw) = results.unzip
+        (DenseVector(assignDense).toSparse, nw)
     }
 
     def adaboostUpdate(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: Broadcast[SplitterNode]) = {
