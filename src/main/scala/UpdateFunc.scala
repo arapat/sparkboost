@@ -19,7 +19,7 @@ object UpdateFunc {
     def logitboostUpdateFunc(y: Int, w: Double, predict: Double) = w / (1.0 + exp(y * predict))
 
     def update(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: Broadcast[SplitterNode],
-               updateFunc: (Int, Double, Double) => Double): (SparseVector[Int], Array[Double]) = {
+               updateFunc: (Int, Double, Double) => Double): (SparseVector, Array[Double]) = {
         val curIndex = node.value.splitIndex
         val curOnLeft = node.value.onLeft
         val leftPredict = node.value.leftPredict
@@ -41,7 +41,7 @@ object UpdateFunc {
             }}
         ).sortByKey().map(_._2).collect()
         val (assignDense, nw) = results.unzip
-        (DenseVector(assignDense).toSparse, nw)
+        (new DenseVector(assignDense.map(_.toDouble)).toSparse, nw)
     }
 
     def adaboostUpdate(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: Broadcast[SplitterNode]) = {

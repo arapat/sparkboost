@@ -10,6 +10,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.linalg.SparseVector
 
 import java.io._
@@ -21,14 +22,15 @@ object Controller extends Comparison {
     val BINSIZE = 1
     type BrAI = Broadcast[Array[Int]]
     type BrAD = Broadcast[Array[Double]]
+    type BrSV = Broadcast[SparseVector]
     type BrNode = Broadcast[SplitterNode]
     type RDDType = RDD[Instances]
     type TestRDDType = RDD[(Int, SparseVector)]
     type LossFunc = (Double, Double, Double, Double, Double) => Double
     type LearnerObj = (Int, Boolean, Int, Double, (Double, Double))
     type LearnerFunc = (SparkContext, RDDType, BrAI, BrAD,
-                        Array[BrAI], Array[BrNode], Int, LossFunc) => LearnerObj
-    type UpdateFunc = (RDDType, BrAI, BrAI, BrAD, BrNode) => (SparseVector[Int], Array[Double])
+                        Array[BrSV], Array[BrNode], Int, LossFunc) => LearnerObj
+    type UpdateFunc = (RDDType, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 
     def printStats(train: TestRDDType, test: TestRDDType, testRef: TestRDDType,
@@ -166,9 +168,10 @@ object Controller extends Comparison {
             }
         var localNodes = nodes.map(_.value)
         val initAssignAndWeights = {
-            val aMatrix = new ArrayBuffer[Broadcast[Array[Int]]]()
+            val aMatrix = new ArrayBuffer[Broadcast[SparseVector]]()
             var w = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
-            val fa = sc.broadcast((0 until y.value.size).map(_ => -1).toArray)
+            val fa = sc.broadcast(
+                new DenseVector((0 until y.value.size).map(_ => -1.0).toArray).toSparse)
             var nodeIdx = 0
             for (node <- nodes) {
                 val faIdx = node.value.prtIndex
