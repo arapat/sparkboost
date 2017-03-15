@@ -157,15 +157,15 @@ object Learner extends Comparison {
             timeLog.append(System.nanoTime() - t0)
             t0 = System.nanoTime()
             for (i <- 0 until data.splits.size - 1) {
-                leftCurrPositiveWeight += weights((false, true, i))
-                leftCurrPositiveCount += counts((false, true, i))
-                leftCurrNegativeWeight += weights((false, false, i))
-                leftCurrNegativeCount += counts((false, false, i))
+                leftCurrPositiveWeight += weights.getOrElse((false, true, i), 0.0)
+                leftCurrPositiveCount += counts.getOrElse((false, true, i), 0)
+                leftCurrNegativeWeight += weights.getOrElse((false, false, i), 0.0)
+                leftCurrNegativeCount += counts.getOrElse((false, false, i), 0)
 
-                rightCurrPositiveWeight += weights((true, true, i))
-                rightCurrPositiveCount += counts((true, true, i))
-                rightCurrNegativeWeight += weights((true, false, i))
-                rightCurrNegativeCount += counts((true, false, i))
+                rightCurrPositiveWeight += weights.getOrElse((true, true, i), 0.0)
+                rightCurrPositiveCount += counts.getOrElse((true, true, i), 0)
+                rightCurrNegativeWeight += weights.getOrElse((true, false, i), 0.0)
+                rightCurrNegativeCount += counts.getOrElse((true, false, i), 0)
 
                 def updateMinScore(
                     currBest: Double,

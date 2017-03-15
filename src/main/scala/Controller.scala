@@ -60,12 +60,12 @@ object Controller extends Comparison {
         // Part 1 - Compute auPRC
         val trainPredictionAndLabels = train.map {case t =>
             (SplitterNode.getScore(0, nodes, t._2).toDouble -
-                SplitterNode.getScore(lastResample, nodes, t._2).toDouble, t._1.toDouble)
+                SplitterNode.getScore(0, nodes, t._2, lastResample).toDouble, t._1.toDouble)
         }.cache()
 
         val testPredictionAndLabels = test.map {case t =>
             (SplitterNode.getScore(0, nodes, t._2).toDouble -
-                SplitterNode.getScore(lastResample, nodes, t._2).toDouble, t._1.toDouble)
+                SplitterNode.getScore(0, nodes, t._2, lastResample).toDouble, t._1.toDouble)
         }.cache()
 
         val testRefPredictionAndLabels = testRef.map {case t =>
