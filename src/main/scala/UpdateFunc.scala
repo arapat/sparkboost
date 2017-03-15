@@ -13,12 +13,13 @@ object UpdateFunc {
     type RDDType = RDD[Instances]
     type BrAI = Broadcast[Array[Int]]
     type BrAD = Broadcast[Array[Double]]
+    type BrSV = Broadcast[SparseVector]
 
     def adaboostUpdateFunc(y: Int, w: Double, predict: Double) = w * exp(-y * predict)
 
     def logitboostUpdateFunc(y: Int, w: Double, predict: Double) = w / (1.0 + exp(y * predict))
 
-    def update(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: Broadcast[SplitterNode],
+    def update(train: RDDType, y: BrAI, fa: BrSV, w: BrAD, node: Broadcast[SplitterNode],
                updateFunc: (Int, Double, Double) => Double): (SparseVector, Array[Double]) = {
         val curIndex = node.value.splitIndex
         val curOnLeft = node.value.onLeft
@@ -44,7 +45,7 @@ object UpdateFunc {
         (new DenseVector(assignDense.map(_.toDouble)).toSparse, nw)
     }
 
-    def adaboostUpdate(train: RDDType, y: BrAI, fa: BrAI, w: BrAD, node: Broadcast[SplitterNode]) = {
+    def adaboostUpdate(train: RDDType, y: BrAI, fa: BrSV, w: BrAD, node: Broadcast[SplitterNode]) = {
         update(train, y, fa, w, node, adaboostUpdateFunc)
     }
 
