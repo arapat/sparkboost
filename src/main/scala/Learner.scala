@@ -124,10 +124,10 @@ object Learner extends Comparison {
             while (idx < curAssign.values.size) {
                 val ptr = curAssign.indices(idx)
                 val loc = curAssign.values(idx)
-                if (loc) {
+                if (compare(loc) != 0) {
                     val iy = y.value(ptr)
                     val slot = getSlot(data.xVec(ptr))
-                    val key = (loc < 0, iy < 0, slot)
+                    val key = (loc > 0, iy > 0, slot)
                     weights(key) = weights.getOrElse(key, 0.0) + w.value(ptr)
                     counts(key) = counts.getOrElse(key, 0) + 1
                 }
@@ -157,59 +157,74 @@ object Learner extends Comparison {
             timeLog.append(System.nanoTime() - t0)
             t0 = System.nanoTime()
             for (i <- 0 until data.splits.size - 1) {
-                leftCurrPositiveWeight = 0.0
-                leftCurrPositiveCount = 0
-                leftCurrNegativeWeight = 0.0
-                leftCurrNegativeCount = 0
+                leftCurrPositiveWeight += weights((false, true, i))
+                leftCurrPositiveCount += counts((false, true, i))
+                leftCurrNegativeWeight += weights((false, false, i))
+                leftCurrNegativeCount += counts((false, false, i))
 
-                rightCurrPositiveWeight = 0.0
-                rightCurrPositiveCount = 0
-                rightCurrNegativeWeight = 0.0
-                rightCurrNegativeCount = 0
-            
-                // rightCurrNegativeWeight += iw
-                // rightCurrNegativeCount += 1
+                rightCurrPositiveWeight += weights((true, true, i))
+                rightCurrPositiveCount += counts((true, true, i))
+                rightCurrNegativeWeight += weights((true, false, i))
+                rightCurrNegativeCount += counts((true, false, i))
 
-                // Check left tree
-                val leftRemainPositiveWeight = leftTotalPositiveWeight - leftCurrPositiveWeight
-                val leftRemainNegativeWeight = leftTotalNegativeWeight - leftCurrNegativeWeight
-                val score = lossFunc(leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
-                                     leftRemainPositiveWeight, leftRemainNegativeWeight)
-                if (compare(score, minScore._1) < 0) {
-                    val leftRemainPositiveCount = leftTotalPositiveCount - leftCurrPositiveCount
-                    val leftRemainNegativeCount = leftTotalNegativeCount - leftCurrNegativeCount
-                    minScore = (
-                        score,
-                        (leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
-                            leftRemainPositiveWeight, leftRemainNegativeWeight),
-                        (leftRejectCount, leftCurrPositiveCount, leftCurrNegativeCount,
-                            leftRemainPositiveCount, leftRemainNegativeCount)
-                    )
-                    splitVal = leftLastSplitValue
-                    onLeft = true
-                    leftPredict = safeLogRatio(leftCurrPositiveWeight, leftCurrNegativeWeight)
-                    rightPredict = safeLogRatio(leftRemainPositiveWeight, leftRemainNegativeWeight)
+                def updateMinScore(
+                    currBest: Double,
+                    rejectWeight: Double, currPositiveWeight: Double, currNegativeWeight: Double,
+                    totalPositiveWeight: Double, totalNegativeWeight: Double,
+                    rejectCount: Int, currPositiveCount: Int, currNegativeCount: Int,
+                    totalPositiveCount: Int, totalNegativeCount: Int
+                ) = {
+                    val remainPositiveWeight = totalPositiveWeight - currPositiveWeight
+                    val remainNegativeWeight = totalNegativeWeight - currNegativeWeight
+                    var score = lossFunc(rejectWeight, currPositiveWeight, currNegativeWeight,
+                                         remainPositiveWeight, remainNegativeWeight)
+                    val remainPositiveCount = totalPositiveCount - currPositiveCount
+                    val remainNegativeCount = totalNegativeCount - currNegativeCount
+                    if (compare(score, currBest) < 0) {
+                        val minScore = (
+                            score,
+                            (rejectWeight, currPositiveWeight, currNegativeWeight,
+                                remainPositiveWeight, remainNegativeWeight),
+                            (rejectCount, currPositiveCount, currNegativeCount,
+                                remainPositiveCount, remainNegativeCount)
+                        )
+                        val leftPredict = safeLogRatio(currPositiveWeight, currNegativeWeight)
+                        val rightPredict = safeLogRatio(remainPositiveWeight, remainNegativeWeight)
+                        Some((minScore, true, leftPredict, rightPredict))
+                    } else {
+                        None
+                    }
                 }
 
+                // Check left tree
+                updateMinScore(
+                    minScore._1, leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
+                    leftTotalPositiveWeight, leftTotalNegativeWeight,
+                    leftRejectCount, leftCurrPositiveCount, leftCurrNegativeCount,
+                    leftTotalPositiveCount, leftTotalNegativeCount
+                ) match {
+                    case Some((_minScore, _onLeft, _leftPredict, _rightPredict)) => {
+                        minScore = _minScore
+                        onLeft = _onLeft
+                        leftPredict = _leftPredict
+                        rightPredict = _rightPredict
+                    }
+                    case None => Nil
+                }
                 // Check right tree
-                val rightRemainPositiveWeight = rightTotalPositiveWeight - rightCurrPositiveWeight
-                val rightRemainNegativeWeight = rightTotalNegativeWeight - rightCurrNegativeWeight
-                val score = lossFunc(rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
-                                     rightRemainPositiveWeight, rightRemainNegativeWeight)
-                if (compare(score, minScore._1) < 0) {
-                    val rightRemainPositiveCount = rightTotalPositiveCount - rightCurrPositiveCount
-                    val rightRemainNegativeCount = rightTotalNegativeCount - rightCurrNegativeCount
-                    minScore = (
-                        score,
-                        (rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
-                            rightRemainPositiveWeight, rightRemainNegativeWeight),
-                        (rightRejectCount, rightCurrPositiveCount, rightCurrNegativeCount,
-                            rightRemainPositiveCount, rightRemainNegativeCount)
-                    )
-                    splitVal = rightLastSplitValue
-                    onLeft = false
-                    leftPredict = safeLogRatio(rightCurrPositiveWeight, rightCurrNegativeWeight)
-                    rightPredict = safeLogRatio(rightRemainPositiveWeight, rightRemainNegativeWeight)
+                updateMinScore(
+                    minScore._1, rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
+                    rightTotalPositiveWeight, rightTotalNegativeWeight,
+                    rightRejectCount, rightCurrPositiveCount, rightCurrNegativeCount,
+                    rightTotalPositiveCount, rightTotalNegativeCount
+                ) match {
+                    case Some((_minScore, _onLeft, _leftPredict, _rightPredict)) => {
+                        minScore = _minScore
+                        onLeft = _onLeft
+                        leftPredict = _leftPredict
+                        rightPredict = _rightPredict
+                    }
+                    case None => Nil
                 }
             }
             timeLog.append(System.nanoTime() - t0)
