@@ -31,7 +31,7 @@ object UpdateFunc extends Comparison {
                 val iw = w.value(ipt)
                 val faPredict = fa.value(ipt)
                 val assign =
-                    if (compare(faPredict) == 0.0) {
+                    if (compare(faPredict) == 0) {
                         false
                     } else {
                         node.value.check(ix, curIndex, true)

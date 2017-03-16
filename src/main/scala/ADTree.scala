@@ -39,7 +39,7 @@ class SplitterNode(val index: Int, val prtIndex: Int, val depth: Int,
     override def toString() = {
         val nChild = child.size
         val position = if (prtIndex >= 0) {
-            ", positioned under the node $prtIndex,"
+            s", positioned under the node $prtIndex,"
         } else ""
 
         s"Node $index: Index $splitIndex <= $splitVal == $splitEval (predict $pred)" + position +

@@ -157,8 +157,9 @@ object Learner extends Comparison {
                 var totalRejectCount = rejectCount + totalPositiveCount + totalNegativeCount
                                             - positiveCount - negativeCount
                 updateMinScore(
-                    minScore._1, totalRejectWeight, positiveWeight, negativeWeight,
-                    rejectCount, positiveCount, negativeCount
+                    minScore._1,
+                    totalRejectWeight, positiveWeight, negativeWeight,
+                    totalRejectCount, positiveCount, negativeCount
                 ) match {
                     case Some((_minScore, _predict)) => {
                         minScore = _minScore
