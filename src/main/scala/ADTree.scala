@@ -88,8 +88,8 @@ object SplitterNode {
     }
 
     def getScore(curIndex: Int, nodes: Array[SplitterNode], instance: Vector,
-                 maxNumNodes: Int = 0): Double = {
-        if (maxNumNodes > 0 && curIndex >= maxNumNodes) {
+                 maxNumNodes: Int = -1): Double = {
+        if (maxNumNodes >= 0 && curIndex >= maxNumNodes) {
             0.0
         } else {
             val node = nodes(curIndex)

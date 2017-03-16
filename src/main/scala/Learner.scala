@@ -1,11 +1,13 @@
 package sparkboost
 
 import collection.mutable.ArrayBuffer
+import scala.collection.mutable.{Map => MutableMap}
 import Double.MaxValue
 
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.SparseVector
 
 import sparkboost.utils.Comparison
 import sparkboost.utils.Utils.safeLogRatio
@@ -15,6 +17,7 @@ object Learner extends Comparison {
     type RDDType = RDD[Instances]
     type BrAI = Broadcast[Array[Int]]
     type BrAD = Broadcast[Array[Double]]
+    type BrSV = Broadcast[SparseVector]
     type ABrNode = Array[Broadcast[SplitterNode]]
     type DoubleTuple6 = (Double, Double, Double, Double, Double, Double)
     type IntTuple6 = (Int, Int, Int, Int, Int, Int)
@@ -24,7 +27,7 @@ object Learner extends Comparison {
     type ResultType = (MinScoreType, NodeInfoType, Array[Double])
     val assignAndLabelsTemplate = Array(-1, 0, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
 
-    def getOverallWeights(y: BrAI, w: BrAD, assign: Array[BrAI], nodes: ABrNode, maxDepth: Int,
+    def getOverallWeights(y: BrAI, w: BrAD, assign: Array[BrSV], nodes: ABrNode, maxDepth: Int,
                           totalWeight: Double, totalCount: Int)(data: Instances) = {
         def getWeights(node: SplitterNode): (Int, (DoubleTuple6, IntTuple6)) = {
             var leftTotalPositiveWeight = 0.0
@@ -38,10 +41,11 @@ object Learner extends Comparison {
             var rightTotalNegativeCount = 0
 
             val curAssign = assign(node.index).value
+            assert(curAssign.values.size == curAssign.indices.size)
             var idx = 0
-            while (idx < data.ptr.size) {
-                val ptr = data.ptr(idx)
-                val (ia, iy, iw) = (curAssign(ptr), y.value(ptr), w.value(ptr))
+            while (idx < curAssign.values.size) {
+                val ptr = curAssign.indices(idx)
+                val (ia, iy, iw) = (curAssign.values(idx), y.value(ptr), w.value(ptr))
                 if (ia < 0) {
                     if (iy > 0) {
                         leftTotalPositiveWeight += iw
@@ -80,10 +84,24 @@ object Learner extends Comparison {
     }
 
     def findBestSplit(
-            y: BrAI, w: BrAD, assign: Array[BrAI], nodeWeightsMap: Broadcast[WeightsMap],
+            y: BrAI, w: BrAD, assign: Array[BrSV], nodeWeightsMap: Broadcast[WeightsMap],
             nodes: ABrNode, maxDepth: Int,
             lossFunc: (Double, Double, Double, Double, Double) => Double
     )(data: Instances) = {
+        def getSlot(x: Double) = {
+            var left = -1
+            var right = data.splits.size - 1
+            while (left + 1 < right) {
+                val mid = (left + right) / 2
+                if (x <= data.splits(mid)) {
+                    right = mid
+                } else {
+                    left = mid
+                }
+            }
+            right
+        }
+
         val timer = System.nanoTime()
         val globalTimeLog = ArrayBuffer[Double]()
         val nodeWeights = nodeWeightsMap.value(data.batchId)
@@ -98,6 +116,24 @@ object Learner extends Comparison {
                  (leftTotalPositiveCount, leftTotalNegativeCount, leftRejectCount,
                     rightTotalPositiveCount, rightTotalNegativeCount, rightRejectCount)) = nodeWeights(node.index)
 
+            var weights = MutableMap[(Boolean, Boolean, Int), Double]()
+            var counts = MutableMap[(Boolean, Boolean, Int), Int]()
+            val curAssign = assign(node.index).value
+            assert(curAssign.values.size == curAssign.indices.size)
+            var idx = 0
+            while (idx < curAssign.values.size) {
+                val ptr = curAssign.indices(idx)
+                val loc = curAssign.values(idx)
+                if (compare(loc) != 0) {
+                    val iy = y.value(ptr)
+                    val slot = getSlot(data.xVec(ptr))
+                    val key = (loc > 0, iy > 0, slot)
+                    weights(key) = weights.getOrElse(key, 0.0) + w.value(ptr)
+                    counts(key) = counts.getOrElse(key, 0) + 1
+                }
+                idx = idx + 1
+            }
+
             var leftCurrPositiveWeight = 0.0
             var leftCurrPositiveCount = 0
             var leftCurrNegativeWeight = 0.0
@@ -107,12 +143,6 @@ object Learner extends Comparison {
             var rightCurrPositiveCount = 0
             var rightCurrNegativeWeight = 0.0
             var rightCurrNegativeCount = 0
-
-            var leftLastSplitIndex = 0
-            var leftLastSplitValue = data.splits(leftLastSplitIndex)
-
-            var rightLastSplitIndex = 0
-            var rightLastSplitValue = data.splits(rightLastSplitIndex)
 
             var minScore = (
                 Double.MaxValue,
@@ -124,88 +154,79 @@ object Learner extends Comparison {
             var leftPredict = 0.0
             var rightPredict = 0.0
 
-            var idx = 0
-            val x = data.x
-            val curAssign = assign(node.index).value
-
             timeLog.append(System.nanoTime() - t0)
             t0 = System.nanoTime()
+            for (i <- 0 until data.splits.size - 1) {
+                leftCurrPositiveWeight += weights.getOrElse((false, true, i), 0.0)
+                leftCurrPositiveCount += counts.getOrElse((false, true, i), 0)
+                leftCurrNegativeWeight += weights.getOrElse((false, false, i), 0.0)
+                leftCurrNegativeCount += counts.getOrElse((false, false, i), 0)
 
-            while (idx < data.ptr.size) {
-                val ptr = data.ptr(idx)
-                val ix = x(ptr)
-                val iloc = curAssign(ptr)
-                val iy = y.value(ptr)
-                val iw = w.value(ptr)
-                if (iloc < 0) {
-                    // In left tree
-                    if (compare(ix, leftLastSplitValue) > 0) {
-                        val leftRemainPositiveWeight = leftTotalPositiveWeight - leftCurrPositiveWeight
-                        val leftRemainNegativeWeight = leftTotalNegativeWeight - leftCurrNegativeWeight
-                        val score = lossFunc(leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
-                                             leftRemainPositiveWeight, leftRemainNegativeWeight)
-                        if (compare(score, minScore._1) < 0) {
-                            val leftRemainPositiveCount = leftTotalPositiveCount - leftCurrPositiveCount
-                            val leftRemainNegativeCount = leftTotalNegativeCount - leftCurrNegativeCount
-                            minScore = (
-                                score,
-                                (leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
-                                    leftRemainPositiveWeight, leftRemainNegativeWeight),
-                                (leftRejectCount, leftCurrPositiveCount, leftCurrNegativeCount,
-                                    leftRemainPositiveCount, leftRemainNegativeCount)
-                            )
-                            splitVal = leftLastSplitValue
-                            onLeft = true
-                            leftPredict = safeLogRatio(leftCurrPositiveWeight, leftCurrNegativeWeight)
-                            rightPredict = safeLogRatio(leftRemainPositiveWeight, leftRemainNegativeWeight)
-                        }
-                        leftLastSplitIndex += 1
-                        leftLastSplitValue = data.splits(leftLastSplitIndex)
-                    }
-                    if (iy > 0) {
-                        leftCurrPositiveWeight += iw
-                        leftCurrPositiveCount += 1
+                rightCurrPositiveWeight += weights.getOrElse((true, true, i), 0.0)
+                rightCurrPositiveCount += counts.getOrElse((true, true, i), 0)
+                rightCurrNegativeWeight += weights.getOrElse((true, false, i), 0.0)
+                rightCurrNegativeCount += counts.getOrElse((true, false, i), 0)
+
+                def updateMinScore(
+                    currBest: Double,
+                    rejectWeight: Double, currPositiveWeight: Double, currNegativeWeight: Double,
+                    totalPositiveWeight: Double, totalNegativeWeight: Double,
+                    rejectCount: Int, currPositiveCount: Int, currNegativeCount: Int,
+                    totalPositiveCount: Int, totalNegativeCount: Int
+                ) = {
+                    val remainPositiveWeight = totalPositiveWeight - currPositiveWeight
+                    val remainNegativeWeight = totalNegativeWeight - currNegativeWeight
+                    var score = lossFunc(rejectWeight, currPositiveWeight, currNegativeWeight,
+                                         remainPositiveWeight, remainNegativeWeight)
+                    val remainPositiveCount = totalPositiveCount - currPositiveCount
+                    val remainNegativeCount = totalNegativeCount - currNegativeCount
+                    if (compare(score, currBest) < 0) {
+                        val minScore = (
+                            score,
+                            (rejectWeight, currPositiveWeight, currNegativeWeight,
+                                remainPositiveWeight, remainNegativeWeight),
+                            (rejectCount, currPositiveCount, currNegativeCount,
+                                remainPositiveCount, remainNegativeCount)
+                        )
+                        val leftPredict = safeLogRatio(currPositiveWeight, currNegativeWeight)
+                        val rightPredict = safeLogRatio(remainPositiveWeight, remainNegativeWeight)
+                        Some((minScore, true, leftPredict, rightPredict))
                     } else {
-                        leftCurrNegativeWeight += iw
-                        leftCurrNegativeCount += 1
+                        None
                     }
-                } else if (iloc > 0) {
-                    // In right tree
-                    // In left tree
-                    if (compare(ix, rightLastSplitValue) > 0) {
-                        val rightRemainPositiveWeight = rightTotalPositiveWeight - rightCurrPositiveWeight
-                        val rightRemainNegativeWeight = rightTotalNegativeWeight - rightCurrNegativeWeight
-                        val score = lossFunc(rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
-                                             rightRemainPositiveWeight, rightRemainNegativeWeight)
-                        if (compare(score, minScore._1) < 0) {
-                            val rightRemainPositiveCount = rightTotalPositiveCount - rightCurrPositiveCount
-                            val rightRemainNegativeCount = rightTotalNegativeCount - rightCurrNegativeCount
-                            minScore = (
-                                score,
-                                (rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
-                                    rightRemainPositiveWeight, rightRemainNegativeWeight),
-                                (rightRejectCount, rightCurrPositiveCount, rightCurrNegativeCount,
-                                    rightRemainPositiveCount, rightRemainNegativeCount)
-                            )
-                            splitVal = rightLastSplitValue
-                            onLeft = false
-                            leftPredict = safeLogRatio(rightCurrPositiveWeight, rightCurrNegativeWeight)
-                            rightPredict = safeLogRatio(rightRemainPositiveWeight, rightRemainNegativeWeight)
-                        }
-                        rightLastSplitIndex += 1
-                        rightLastSplitValue = data.splits(rightLastSplitIndex)
+                }
+
+                // Check left tree
+                updateMinScore(
+                    minScore._1, leftRejectWeight, leftCurrPositiveWeight, leftCurrNegativeWeight,
+                    leftTotalPositiveWeight, leftTotalNegativeWeight,
+                    leftRejectCount, leftCurrPositiveCount, leftCurrNegativeCount,
+                    leftTotalPositiveCount, leftTotalNegativeCount
+                ) match {
+                    case Some((_minScore, _onLeft, _leftPredict, _rightPredict)) => {
+                        minScore = _minScore
+                        onLeft = _onLeft
+                        leftPredict = _leftPredict
+                        rightPredict = _rightPredict
                     }
-                    if (iy > 0) {
-                        rightCurrPositiveWeight += iw
-                        rightCurrPositiveCount += 1
-                    } else {
-                        rightCurrNegativeWeight += iw
-                        rightCurrNegativeCount += 1
+                    case None => Nil
+                }
+                // Check right tree
+                updateMinScore(
+                    minScore._1, rightRejectWeight, rightCurrPositiveWeight, rightCurrNegativeWeight,
+                    rightTotalPositiveWeight, rightTotalNegativeWeight,
+                    rightRejectCount, rightCurrPositiveCount, rightCurrNegativeCount,
+                    rightTotalPositiveCount, rightTotalNegativeCount
+                ) match {
+                    case Some((_minScore, _onLeft, _leftPredict, _rightPredict)) => {
+                        minScore = _minScore
+                        onLeft = _onLeft
+                        leftPredict = _leftPredict
+                        rightPredict = _rightPredict
                     }
-                } // else if iloc is zero, ignore
-                idx = idx + 1
+                    case None => Nil
+                }
             }
-
             timeLog.append(System.nanoTime() - t0)
 
             globalTimeLog.append(System.nanoTime() - tstart)
@@ -236,7 +257,7 @@ object Learner extends Comparison {
     def partitionedGreedySplit(
             sc: SparkContext,
             train: RDDType, y: BrAI,
-            w: BrAD, assign: Array[BrAI],
+            w: BrAD, assign: Array[BrSV],
             nodes: ABrNode, maxDepth: Int,
             lossFunc: (Double, Double, Double, Double, Double) => Double) = {
         val SEC = 1000000
