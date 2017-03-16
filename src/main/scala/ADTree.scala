@@ -8,60 +8,50 @@ import sparkboost.utils.Comparison
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.Vector
 
-class SplitterNode(val index: Int, val prtIndex: Int, val onLeft: Boolean, val depth: Int,
-                   val splitIndex: Int, val splitVal: Double)
+class SplitterNode(val index: Int, val prtIndex: Int, val depth: Int,
+                   val splitIndex: Int, val splitVal: Double, val splitEval: Boolean)
                         extends java.io.Serializable with Comparison {
-    var leftPredict = 0.0
-    var rightPredict = 0.0
-    var leftChild = List[Int]()
-    var rightChild = List[Int]()
+    var pred = 0.0
+    var child = List[Int]()
 
     def check(value: Double, fIndex: Int, inNode: Boolean) = {
         require(inNode == true)
         require(fIndex == splitIndex)
-        if (splitIndex < 0 || compare(value, splitVal) <= 0) {
-            -1
-        } else {
-            1
-        }
+        splitIndex < 0 || ((compare(value, splitVal) <= 0) == splitEval)
     }
 
     def predict(value: Double, fIndex: Int, inNode: Boolean) = {
-        check(value, fIndex, inNode) match {
-            case -1 => leftPredict
-            case 1 => rightPredict
-        }
-    }
-
-    def setPredict(predict1: Double, predict2: Double) {
-        leftPredict = predict1
-        rightPredict = predict2
-    }
-
-    def addChild(onLeft: Boolean, childIndex: Int) {
-        if (onLeft) {
-            leftChild = childIndex +: leftChild
+        if (check(value, fIndex, inNode)) {
+            pred
         } else {
-            rightChild = childIndex +: rightChild
+            0.0
         }
+    }
+
+    def setPredict(value: Double) {
+        pred = value
+    }
+
+    def addChild(childIndex: Int) {
+        child = childIndex +: child
     }
 
     override def toString() = {
-        val nLeftChild = leftChild.size
-        val nRightChild = rightChild.size
+        val nChild = child.size
         val position = if (prtIndex >= 0) {
-            ", positioned under the " + (if (onLeft) "left" else "right") +
-            s" side of the node $prtIndex,"
+            ", positioned under the node $prtIndex,"
         } else ""
 
-        s"Node $index: Index $splitIndex <= $splitVal ($leftPredict, $rightPredict)" + position +
-        s" has $nLeftChild left and $nRightChild right children."
+        s"Node $index: Index $splitIndex <= $splitVal == $splitEval (predict $pred)" + position +
+        s" has $nChild children."
     }
 }
 
 object SplitterNode {
-    def apply(index: Int, prtIndex: Int, onLeft: Boolean, depth: Int, splitPoint: (Int, Double)) = {
-        new SplitterNode(index, prtIndex, onLeft, depth, splitPoint._1, splitPoint._2)
+    def apply(index: Int, prtIndex: Int, depth: Int,
+                splitPoint: (Int, Double, Boolean)) = {
+        new SplitterNode(index, prtIndex, depth,
+                splitPoint._1, splitPoint._2, splitPoint._3)
     }
 
     def save(nodes: Array[SplitterNode], filepath: String) {
@@ -93,27 +83,17 @@ object SplitterNode {
             0.0
         } else {
             val node = nodes(curIndex)
-            node.check(instance(max(0, node.splitIndex)), node.splitIndex, true) match {
-                case -1 => {
-                    node.leftPredict + (
-                        if (node.leftChild.nonEmpty) {
-                            node.leftChild.map(t => getScore(t, nodes, instance, maxNumNodes))
-                                          .reduce(_ + _)
-                        } else {
-                            0.0
-                        }
-                    )
-                }
-                case 1 => {
-                    node.rightPredict + (
-                        if (node.rightChild.nonEmpty) {
-                            node.rightChild.map(t => getScore(t, nodes, instance, maxNumNodes))
-                                           .reduce(_ + _)
-                        } else {
-                            0.0
-                        }
-                    )
-                }
+            if (node.check(instance(max(0, node.splitIndex)), node.splitIndex, true)) {
+                node.pred + (
+                    if (node.child.nonEmpty) {
+                        node.child.map(t => getScore(t, nodes, instance, maxNumNodes))
+                                  .reduce(_ + _)
+                    } else {
+                        0.0
+                    }
+                )
+            } else {
+                0.0
             }
         }
     }

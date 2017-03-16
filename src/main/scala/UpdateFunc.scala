@@ -8,7 +8,9 @@ import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
-object UpdateFunc {
+import sparkboost.utils.Comparison
+
+object UpdateFunc extends Comparison {
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("UpdateFunc")
     type RDDType = RDD[Instances]
     type BrAI = Broadcast[Array[Int]]
@@ -22,27 +24,25 @@ object UpdateFunc {
     def update(train: RDDType, y: BrAI, fa: BrSV, w: BrAD, node: Broadcast[SplitterNode],
                updateFunc: (Int, Double, Double) => Double): (SparseVector, Array[Double]) = {
         val curIndex = node.value.splitIndex
-        val curOnLeft = node.value.onLeft
-        val leftPredict = node.value.leftPredict
-        val rightPredict = node.value.rightPredict
+        val pred = node.value.pred
         val results = train.filter(_.index == max(0, curIndex)).flatMap(insts =>
             insts.x.toDense.values.zip(insts.ptr).map { case (ix, ipt) => {
                 val iy = y.value(ipt)
                 val iw = w.value(ipt)
                 val faPredict = fa.value(ipt)
                 val assign =
-                    if (faPredict == 0 || faPredict < 0 && !curOnLeft || faPredict > 0 && curOnLeft) {
-                        0
+                    if (compare(faPredict) == 0.0) {
+                        false
                     } else {
                         node.value.check(ix, curIndex, true)
                     }
-                val predict = if (assign < 0) leftPredict else if (assign > 0) rightPredict else 0.0
+                val predict = if (assign) pred else 0.0
                 val nw = updateFunc(iy, iw, predict)
                 (ipt, (assign, nw))
             }}
         ).sortByKey().map(_._2).collect()
         val (assignDense, nw) = results.unzip
-        (new DenseVector(assignDense.map(_.toDouble)).toSparse, nw)
+        (new DenseVector(assignDense.map(t => if (t) 1.0 else 0.0)).toSparse, nw)
     }
 
     def adaboostUpdate(train: RDDType, y: BrAI, fa: BrSV, w: BrAD, node: Broadcast[SplitterNode]) = {
