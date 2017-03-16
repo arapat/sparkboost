@@ -26,10 +26,11 @@ object UpdateFunc extends Comparison {
         val curIndex = node.value.splitIndex
         val pred = node.value.pred
         val results = train.filter(_.index == max(0, curIndex)).flatMap(insts =>
-            insts.x.toDense.values.zip(insts.ptr).map { case (ix, ipt) => {
-                val iy = y.value(ipt)
-                val iw = w.value(ipt)
-                val faPredict = fa.value(ipt)
+            (0 until fa.value.indices.size).map(idx => {
+                val ix = insts.xVec(idx)
+                val iy = y.value(idx)
+                val iw = w.value(idx)
+                val faPredict = fa.value(idx)
                 val assign =
                     if (compare(faPredict) == 0) {
                         false
@@ -37,12 +38,16 @@ object UpdateFunc extends Comparison {
                         node.value.check(ix, curIndex, true)
                     }
                 val predict = if (assign) pred else 0.0
-                val nw = updateFunc(iy, iw, predict)
-                (ipt, (assign, nw))
-            }}
-        ).sortByKey().map(_._2).collect()
-        val (assignDense, nw) = results.unzip
-        (new DenseVector(assignDense.map(t => if (t) 1.0 else 0.0)).toSparse, nw)
+                val nw = updateFunc(iy, iw, predict) - iw
+                (idx, (assign, nw))
+            }).filter(_._2._1)
+        ).sortByKey().collect()
+        val (indices, values) = results.unzip
+        val (assign, weights) = values.unzip
+        val assignVec = new SparseVector(w.value.size, indices, assign.map(t => if (t) 1.0 else 0.0))
+        val wDelta = new SparseVector(w.value.size, indices, weights)
+        val wVec = (0 until w.value.size).map(idx => w.value(idx) + wDelta(idx)).toArray
+        (assignVec, wVec)
     }
 
     def adaboostUpdate(train: RDDType, y: BrAI, fa: BrSV, w: BrAD, node: Broadcast[SplitterNode]) = {
