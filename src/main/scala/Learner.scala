@@ -84,6 +84,25 @@ object Learner extends Comparison {
             right
         }
 
+        def updateMinScore(
+            currBest: Double,
+            rejectWeight: Double, positiveWeight: Double, negativeWeight: Double,
+            rejectCount: Int, positiveCount: Int, negativeCount: Int
+        ) = {
+            var score = lossFunc(rejectWeight, positiveWeight, negativeWeight)
+            if (compare(score, currBest) < 0) {
+                val minScore = (
+                    score,
+                    (rejectWeight, positiveWeight, negativeWeight),
+                    (rejectCount, positiveCount, negativeCount)
+                )
+                val predict = safeLogRatio(positiveWeight, negativeWeight)
+                Some((minScore, predict))
+            } else {
+                None
+            }
+        }
+
         val timer = System.nanoTime()
         val globalTimeLog = ArrayBuffer[Double]()
         val nodeWeights = nodeWeightsMap.value(data.batchId)
@@ -100,8 +119,7 @@ object Learner extends Comparison {
             var counts = MutableMap[(Boolean, Int), Int]()
             val curAssign = assign(node.index).value
             assert(curAssign.values.size == curAssign.indices.size)
-            var idx = 0
-            while (idx < curAssign.values.size) {
+            (0 until curAssign.values.size).map(idx => {
                 val ptr = curAssign.indices(idx)
                 val loc = curAssign.values(idx)
                 if (compare(loc) != 0) {
@@ -111,8 +129,7 @@ object Learner extends Comparison {
                     weights(key) = weights.getOrElse(key, 0.0) + w.value(ptr)
                     counts(key) = counts.getOrElse(key, 0) + 1
                 }
-                idx = idx + 1
-            }
+            })
 
             var positiveWeight = 0.0
             var positiveCount = 0
@@ -132,25 +149,6 @@ object Learner extends Comparison {
                 negativeWeight += weights.getOrElse((false, i), 0.0)
                 negativeCount += counts.getOrElse((false, i), 0)
 
-                def updateMinScore(
-                    currBest: Double,
-                    rejectWeight: Double, positiveWeight: Double, negativeWeight: Double,
-                    rejectCount: Int, positiveCount: Int, negativeCount: Int
-                ) = {
-                    var score = lossFunc(rejectWeight, positiveWeight, negativeWeight)
-                    if (compare(score, currBest) < 0) {
-                        val minScore = (
-                            score,
-                            (rejectWeight, positiveWeight, negativeWeight),
-                            (rejectCount, positiveCount, negativeCount)
-                        )
-                        val predict = safeLogRatio(positiveWeight, negativeWeight)
-                        Some((minScore, predict))
-                    } else {
-                        None
-                    }
-                }
-
                 // Check left tree
                 var totalRejectWeight = rejectWeight + totalPositiveWeight + totalNegativeWeight
                                             - positiveWeight - negativeWeight
@@ -169,15 +167,18 @@ object Learner extends Comparison {
                     }
                     case None => Nil
                 }
+
                 // Check right tree
                 totalRejectWeight = rejectWeight + positiveWeight + negativeWeight
                 totalRejectCount = rejectCount + positiveCount + negativeCount
+                val rPositiveWeight = totalPositiveWeight - positiveWeight
+                val rNegativeWeight = totalNegativeWeight - negativeWeight
+                val rPositiveCount = totalPositiveCount - positiveCount
+                val rNegativeCount = totalNegativeCount - negativeCount
                 updateMinScore(
                     minScore._1,
-                    totalRejectWeight,
-                    totalPositiveWeight - positiveWeight, totalNegativeWeight - negativeWeight,
-                    totalRejectCount,
-                    totalPositiveCount - positiveCount, totalNegativeCount - negativeCount
+                    totalRejectWeight, rPositiveWeight, rNegativeWeight,
+                    totalRejectCount, rPositiveCount, rNegativeCount
                 ) match {
                     case Some((_minScore, _predict)) => {
                         minScore = _minScore
@@ -229,7 +230,7 @@ object Learner extends Comparison {
         ).collectAsMap
         val bcWeightsMap = sc.broadcast(nodeWeightsMap)
 
-        println("Collect weights info took (ms) " + (System.nanoTime() - tStart) / SEC)
+        val timeWeightInfo = (System.nanoTime() - tStart) / SEC
         tStart = System.nanoTime()
 
         val f = findBestSplit(y, w, assign, bcWeightsMap, nodes, maxDepth, lossFunc) _
@@ -237,6 +238,7 @@ object Learner extends Comparison {
                                                .map(f)
                                                .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
         println("Node " + nodes.size + " learner info")
+        println("Collect weights info took (ms) " + timeWeightInfo)
         println("Min score: " + "%.2f".format(minScore._1))
         println("Reject weight/count: "    + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)
         println("Pos weight/count: "  + "%.2f".format(minScore._2._2) + " / " + minScore._3._2)
