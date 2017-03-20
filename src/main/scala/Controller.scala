@@ -214,19 +214,19 @@ object Controller extends Comparison {
                     var negWeight = 0.0
                     var negCount = 0
                     var idx = 0
-                    while (idx < prtAssign.value.indices.size) {
+                    (0 until prtAssign.value.indices.size).foreach(idx => {
+                        val ptr = prtAssign.value.indices(idx)
                         if (compare(prtAssign.value.values(idx)) != 0 &&
-                            (compare(t.xVec(idx), splitVal) <= 0) == splitEval) {
-                            if (y.value(idx) > 0) {
-                                posWeight += weights.value(idx)
+                            (compare(t.xVec(ptr), splitVal) <= 0) == splitEval) {
+                            if (y.value(ptr) > 0) {
+                                posWeight += weights.value(ptr)
                                 posCount += 1
                             } else {
-                                negWeight += weights.value(idx)
+                                negWeight += weights.value(ptr)
                                 negCount += 1
                             }
                         }
-                        idx = idx + 1
-                    }
+                    })
                     (posWeight, posCount, negWeight, negCount)
                 }).reduce {
                     (a: (Double, Int, Double, Int), b: (Double, Int, Double, Int)) =>
@@ -235,7 +235,7 @@ object Controller extends Comparison {
             println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
 
             val pred = 0.5 * safeLogRatio(posWeight, negWeight)
-            println(s"Predicts $pred Father $prtNodeIndex")
+            println(s"Predicts $pred (suggestion $learnerPredicts) Father $prtNodeIndex")
 
             // add the new node to the nodes list
             newNode.setPredict(pred)

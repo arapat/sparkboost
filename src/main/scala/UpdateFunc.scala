@@ -31,12 +31,7 @@ object UpdateFunc extends Comparison {
                 val iy = y.value(idx)
                 val iw = w.value(idx)
                 val faPredict = fa.value(idx)
-                val assign =
-                    if (compare(faPredict) == 0) {
-                        false
-                    } else {
-                        node.value.check(ix, curIndex, true)
-                    }
+                val assign = (compare(faPredict) != 0) && node.value.check(ix, curIndex, true)
                 val predict = if (assign) pred else 0.0
                 val nw = updateFunc(iy, iw, predict) - iw
                 (idx, (assign, nw))

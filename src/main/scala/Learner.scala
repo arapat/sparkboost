@@ -96,7 +96,7 @@ object Learner extends Comparison {
                     (rejectWeight, positiveWeight, negativeWeight),
                     (rejectCount, positiveCount, negativeCount)
                 )
-                val predict = safeLogRatio(positiveWeight, negativeWeight)
+                val predict = 0.5 * safeLogRatio(positiveWeight, negativeWeight)
                 Some((minScore, predict))
             } else {
                 None
