@@ -26,8 +26,8 @@ object Controller extends Comparison {
     type BrNode = Broadcast[SplitterNode]
     type RDDType = RDD[Instances]
     type TestRDDType = RDD[(Int, SparseVector)]
-    type LossFunc = (Double, Double, Double, Double, Double) => Double
-    type LearnerObj = (Int, Boolean, Int, Double, (Double, Double))
+    type LossFunc = (Double, Double, Double) => Double
+    type LearnerObj = (Int, Int, Double, Boolean, Double)
     type LearnerFunc = (SparkContext, RDDType, BrAI, BrAD,
                         Array[BrSV], Array[BrNode], Int, LossFunc) => LearnerObj
     type UpdateFunc = (RDDType, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
@@ -54,7 +54,8 @@ object Controller extends Comparison {
             val positiveSumScores = scores.filter(_._1 > 0).map(_._2).reduce(_ + _)
             val negativeCount = count - positiveCount
             val negativeSumScores = sumScores - positiveSumScores
-            (sumScores / count, positiveSumScores / positiveCount, negativeSumScores / negativeCount)
+            (sumScores / count, positiveSumScores / positiveCount,
+             negativeSumScores / negativeCount, sumScores)
         }
 
         // Part 1 - Compute auPRC
@@ -92,6 +93,7 @@ object Controller extends Comparison {
         println("Training average score = " + lossFuncTrain._1)
         println("Training average score (positive) = " + lossFuncTrain._2)
         println("Training average score (negative) = " + lossFuncTrain._3)
+        println("Verify scores and weights " + lossFuncTrain._4 + " " + w.reduce(_ + _))
         println("Testing auPRC = " + auPRCTest)
         println("Testing average score = " + lossFuncTest._1)
         println("Testing average score (positive) = " + lossFuncTest._2)
@@ -159,8 +161,8 @@ object Controller extends Comparison {
         var nodes =
             if (baseNodes.size == 0) {
                 val predVal = 0.5 * log(posCount.toDouble / negCount)
-                val rootNode = SplitterNode(0, -1, true, 0, (-1, 0.0))
-                rootNode.setPredict(predVal, 0.0)
+                val rootNode = SplitterNode(0, -1, 0, (-1, 0.0, true))
+                rootNode.setPredict(predVal)
                 println(s"Root node predicts ($predVal, 0.0)")
                 Array(sc.broadcast(rootNode))
             } else {
@@ -199,39 +201,47 @@ object Controller extends Comparison {
         while (iteration < T) {
             val timerStart = System.nanoTime()
             iteration = iteration + 1
-            val (prtNodeIndex, onLeft, splitIndex, splitVal, learnerPredicts): LearnerObj =
+            val (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts): LearnerObj =
                     learnerFunc(sc, train, y, weights, assign.toArray,
                                 nodes.toArray, maxDepth, lossFunc)
-            val newNode = SplitterNode(nodes.size, prtNodeIndex, onLeft,
-                                       localNodes(prtNodeIndex).depth + 1, (splitIndex, splitVal))
+            val newNode = SplitterNode(nodes.size, prtNodeIndex, localNodes(prtNodeIndex).depth + 1,
+                                (splitIndex, splitVal, splitEval))
 
             val prtAssign = assign(prtNodeIndex)
             // compute the predictions of the new node
-            val weightsAndCounts =
-                train.filter(_.index == splitIndex).flatMap(t =>
-                    t.ptr.zip(t.x.toDense.values) filter {case (k, ix) => {
-                        val ia = prtAssign.value(k)
-                        ia < 0 && onLeft || ia > 0 && !onLeft
-                    }} map {case (k, ix) =>
-                        ((ix <= splitVal, y.value(k)), (weights.value(k), 1))
-                    }
-                ).reduceByKey {
-                    (a: (Double, Int), b: (Double, Int)) => (a._1 + b._1, a._2 + b._2)
-                }.collectAsMap()
-            println("weightsAndCounts:")
-            println(weightsAndCounts)
+            val (posWeight, posCount, negWeight, negCount) =
+                train.filter(_.index == splitIndex).map(t => {
+                    var posWeight = 0.0
+                    var posCount = 0
+                    var negWeight = 0.0
+                    var negCount = 0
+                    var idx = 0
+                    (0 until prtAssign.value.indices.size).foreach(idx => {
+                        val ptr = prtAssign.value.indices(idx)
+                        if (compare(prtAssign.value.values(idx)) != 0 &&
+                            (compare(t.xVec(ptr), splitVal) <= 0) == splitEval) {
+                            if (y.value(ptr) > 0) {
+                                posWeight += weights.value(ptr)
+                                posCount += 1
+                            } else {
+                                negWeight += weights.value(ptr)
+                                negCount += 1
+                            }
+                        }
+                    })
+                    (posWeight, posCount, negWeight, negCount)
+                }).reduce {
+                    (a: (Double, Int, Double, Int), b: (Double, Int, Double, Int)) =>
+                        (a._1 + b._1, a._2 + b._2, a._3 + b._3, a._4 + b._4)
+                }
+            println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
 
-            val leftPositiveWeight = weightsAndCounts.getOrElse((true, 1), (0.0, 0))._1
-            val leftNegativeWeight = weightsAndCounts.getOrElse((true, -1), (0.0, 0))._1
-            val rightPositiveWeight = weightsAndCounts.getOrElse((false, 1), (0.0, 0))._1
-            val rightNegativeWeight = weightsAndCounts.getOrElse((false, -1), (0.0, 0))._1
-            val leftPred = 0.5 * safeLogRatio(leftPositiveWeight, leftNegativeWeight)
-            val rightPred = 0.5 * safeLogRatio(rightPositiveWeight, rightNegativeWeight)
-            println(s"Predicts ($leftPred, $rightPred) Father $prtNodeIndex")
+            val pred = 0.5 * safeLogRatio(posWeight, negWeight)
+            println(s"Predicts $pred (suggestion $learnerPredicts) Father $prtNodeIndex")
 
             // add the new node to the nodes list
-            newNode.setPredict(leftPred, rightPred)
-            localNodes(prtNodeIndex).addChild(onLeft, localNodes.size)
+            newNode.setPredict(pred)
+            localNodes(prtNodeIndex).addChild(localNodes.size)
             val brNewNode = sc.broadcast(newNode)
             nodes :+= brNewNode
             localNodes :+= newNode
@@ -241,6 +251,7 @@ object Controller extends Comparison {
             val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, brNewNode)
             println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             assign.append(sc.broadcast(newAssign))
+            println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
             val toDestroy = weights
             weights = sc.broadcast(newWeights)
             toDestroy.destroy()

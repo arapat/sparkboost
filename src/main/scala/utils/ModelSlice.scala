@@ -27,13 +27,15 @@ object ModelSlice {
 
         val nodes = SplitterNode.load(modelReadPath)
         val ret = nodes.slice(0, slice).map(node => {
-            val unode = SplitterNode(node.index, node.prtIndex, node.onLeft, node.depth,
-                                     (node.splitIndex, node.splitVal))
-            unode.setPredict(node.leftPredict, node.rightPredict)
-            unode.leftChild = node.leftChild.filter(_ < slice)
-            unode.rightChild = node.rightChild.filter(_ < slice)
+            val unode = SplitterNode(node.index, node.prtIndex, node.depth,
+                                     (node.splitIndex, node.splitVal, node.splitEval))
+            unode.setPredict(node.pred)
+            unode.child = node.child.filter(_ < slice)
             unode
         })
         SplitterNode.save(ret, modelWritePath)
     }
 }
+
+// sbt "run-main sparkboost.utils.ModelSlice --load-model <model-path>
+// --save-model <model-path> --slice 400"
