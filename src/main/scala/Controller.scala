@@ -54,7 +54,8 @@ object Controller extends Comparison {
             val positiveSumScores = scores.filter(_._1 > 0).map(_._2).reduce(_ + _)
             val negativeCount = count - positiveCount
             val negativeSumScores = sumScores - positiveSumScores
-            (sumScores / count, positiveSumScores / positiveCount, negativeSumScores / negativeCount)
+            (sumScores / count, positiveSumScores / positiveCount,
+             negativeSumScores / negativeCount, sumScores)
         }
 
         // Part 1 - Compute auPRC
@@ -92,6 +93,7 @@ object Controller extends Comparison {
         println("Training average score = " + lossFuncTrain._1)
         println("Training average score (positive) = " + lossFuncTrain._2)
         println("Training average score (negative) = " + lossFuncTrain._3)
+        println("Verify scores and weights " + lossFuncTrain._4 + " " + w.reduce(_ + _))
         println("Testing auPRC = " + auPRCTest)
         println("Testing average score = " + lossFuncTest._1)
         println("Testing average score (positive) = " + lossFuncTest._2)
@@ -249,6 +251,7 @@ object Controller extends Comparison {
             val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, brNewNode)
             println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
             assign.append(sc.broadcast(newAssign))
+            println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
             val toDestroy = weights
             weights = sc.broadcast(newWeights)
             toDestroy.destroy()

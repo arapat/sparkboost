@@ -38,7 +38,7 @@ object Learner extends Comparison {
             val curAssign = assign(node.index).value
             assert(curAssign.values.size == curAssign.indices.size)
             var idx = 0
-            while (idx < curAssign.values.size) {
+            (0 until curAssign.values.size).foreach(idx => {
                 val ptr = curAssign.indices(idx)
                 if (compare(curAssign.values(idx)) != 0) {
                     if (y.value(ptr) > 0) {
@@ -49,8 +49,7 @@ object Learner extends Comparison {
                         totalNegativeCount += 1
                     }
                 }
-                idx = idx + 1
-            }
+            })
 
             val rejectWeight = totalWeight - (totalNegativeWeight + totalPositiveWeight)
             val rejectCount = totalCount - (totalNegativeCount + totalPositiveCount)

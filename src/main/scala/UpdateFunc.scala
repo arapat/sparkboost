@@ -27,16 +27,17 @@ object UpdateFunc extends Comparison {
         val pred = node.value.pred
         val results = train.filter(_.index == max(0, curIndex)).flatMap(insts =>
             (0 until fa.value.indices.size).map(idx => {
-                val ix = insts.xVec(idx)
-                val iy = y.value(idx)
-                val iw = w.value(idx)
-                val faPredict = fa.value(idx)
+                val ptr = fa.value.indices(idx)
+                val faPredict = fa.value.values(idx)
+                val ix = insts.xVec(ptr)
+                val iy = y.value(ptr)
+                val iw = w.value(ptr)
                 val assign = (compare(faPredict) != 0) && node.value.check(ix, curIndex, true)
                 val predict = if (assign) pred else 0.0
                 val nw = updateFunc(iy, iw, predict) - iw
-                (idx, (assign, nw))
+                (ptr, (assign, nw))
             }).filter(_._2._1)
-        ).sortByKey().collect()
+        ).collect()
         val (indices, values) = results.unzip
         val (assign, weights) = values.unzip
         val assignVec = new SparseVector(w.value.size, indices, assign.map(t => if (t) 1.0 else 0.0))
