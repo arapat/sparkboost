@@ -36,3 +36,6 @@ object ModelSlice {
         SplitterNode.save(ret, modelWritePath)
     }
 }
+
+// sbt "run-main sparkboost.utils.ModelSlice --load-model <model-path>
+// --save-model <model-path> --slice 400"
