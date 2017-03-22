@@ -233,21 +233,23 @@ object Learner extends Comparison {
         tStart = System.nanoTime()
 
         val f = findBestSplit(y, w, assign, bcWeightsMap, nodes, maxDepth, lossFunc) _
-        val (minScore, nodeInfo, timer) = train.filter(_.active)
-                                               .map(f)
-                                               .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
+        // suggests: List((minScore, nodeInfo, timer))
+        val suggests = train.filter(_.active)
+                            .map(f)
+                            .sortBy(_._1._1)
+                            .take(100)  // TODO: Make this a parameter
         println("Node " + nodes.size + " learner info")
         println("Collect weights info took (ms) " + timeWeightInfo)
-        println("Min score: " + "%.2f".format(minScore._1))
-        println("Reject weight/count: "    + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)
-        println("Pos weight/count: "  + "%.2f".format(minScore._2._2) + " / " + minScore._3._2)
-        println("Neg weight/count: "  + "%.2f".format(minScore._2._3) + " / " + minScore._3._3)
+        // println("Min score: " + "%.2f".format(minScore._1))
+        // println("Reject weight/count: " + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)
+        // println("Pos weight/count: "  + "%.2f".format(minScore._2._2) + " / " + minScore._3._2)
+        // println("Neg weight/count: "  + "%.2f".format(minScore._2._3) + " / " + minScore._3._3)
 
         println("FindWeakLearner took (ms) " + (System.nanoTime() - tStart) / SEC)
-        print("Timer details: ")
-        timer.foreach(k => print(k / SEC + ", "))
+        // print("Timer details: ")
+        // timer.foreach(k => print(k / SEC + ", "))
         println
 
-        nodeInfo
+        suggests.map(_._2).toList
     }
 }
