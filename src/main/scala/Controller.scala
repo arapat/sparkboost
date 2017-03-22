@@ -230,6 +230,7 @@ object Controller extends Comparison {
 
         var iteration = 0
         while (iteration < math.ceil(T.toDouble / R)) {
+            println("Batch " + iteration)
             val timerStart = System.nanoTime()
             iteration = iteration + 1
 
@@ -240,7 +241,8 @@ object Controller extends Comparison {
             val pTrain = train.filter(t => suggests.contains(t.index)).cache
 
             // Iteratively, we select and convert `R` suggestions into weak learners
-            (0 until R).foreach(_ => {
+            (0 until R).foreach(iter2 => {
+                println("Node " + (iteration * R + iter2 + 1))
                 val sumWeight = weights.value.reduce(_ + _)
                 val (
                     minScore,
