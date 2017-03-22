@@ -238,7 +238,7 @@ object Learner extends Comparison {
                             .map(f)
                             .sortBy(_._1._1)
                             .take(100)  // TODO: Make this a parameter
-        println("Node " + nodes.size + " learner info")
+        // println("Node " + nodes.size + " learner info")
         println("Collect weights info took (ms) " + timeWeightInfo)
         // println("Min score: " + "%.2f".format(minScore._1))
         // println("Reject weight/count: " + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)

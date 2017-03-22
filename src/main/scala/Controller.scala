@@ -242,7 +242,7 @@ object Controller extends Comparison {
 
             // Iteratively, we select and convert `R` suggestions into weak learners
             (0 until R).foreach(iter2 => {
-                println("Node " + (iteration * R + iter2 + 1))
+                println("Node " + ((iteration - 1) * R + iter2 + 1))
                 val sumWeight = weights.value.reduce(_ + _)
                 val (
                     minScore,

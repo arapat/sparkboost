@@ -124,21 +124,23 @@ object SpliceSite {
                             (iterator: Iterator[(Int, SparseVector)]) => {
                                 val array = iterator.toList
                                 var sampleList = Array[(Int, SparseVector)]()
-                                val size = (array.size * fraction).ceil.toInt
-                                val weights = array.map(t =>
-                                    wfunc(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2))
-                                )
-                                val weightSum = weights.reduce {(a: Double, b: Double) => a + b}
-                                val segsize = weightSum.toDouble / size
+                                if (array.size > 0) {
+                                    val size = (array.size * fraction).ceil.toInt
+                                    val weights = array.map(t =>
+                                        wfunc(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2))
+                                    )
+                                    val weightSum = weights.reduce {(a: Double, b: Double) => a + b}
+                                    val segsize = weightSum.toDouble / size
 
-                                var curWeight = rand() * segsize // first sample point
-                                var accumWeight = 0.0
-                                for (iw <- array.zip(weights)) {
-                                    while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
-                                        sampleList :+= iw._1
-                                        curWeight += segsize
+                                    var curWeight = rand() * segsize // first sample point
+                                    var accumWeight = 0.0
+                                    for (iw <- array.zip(weights)) {
+                                        while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
+                                            sampleList :+= iw._1
+                                            curWeight += segsize
+                                        }
+                                        accumWeight += iw._2
                                     }
-                                    accumWeight += iw._2
                                 }
                                 sampleList.toIterator
                             }
