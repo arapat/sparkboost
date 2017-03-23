@@ -242,7 +242,8 @@ object Controller extends Comparison {
 
             // Iteratively, we select and convert `R` suggestions into weak learners
             (0 until R).foreach(iter2 => {
-                println("Node " + ((iteration - 1) * R + iter2 + 1))
+                val curIter = (iteration - 1) * R + iter2 + 1
+                println("Node " + curIter)
                 val sumWeight = weights.value.reduce(_ + _)
                 val (
                     minScore,
@@ -289,7 +290,7 @@ object Controller extends Comparison {
                 toDestroy.destroy()
 
                 val timerStats = System.nanoTime()
-                printStats(trainRaw, test, testRef, localNodes, y.value, newWeights, iteration, lastResample)
+                printStats(trainRaw, test, testRef, localNodes, y.value, newWeights, curIter, lastResample)
                 println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
                 println("Running time for Iteration " + iteration + " is (ms) " +
                         (System.nanoTime() - timerStart) / SEC)
