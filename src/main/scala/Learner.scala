@@ -198,8 +198,8 @@ object Learner extends Comparison {
                           .map(node => findBest(node.value))
                           .reduce((a, b) => if (a._1._1 < b._1._1) a else b)
         val gtLog: Array[Double] = globalTimeLog.toArray
-        (result._1, result._2,
-            (System.nanoTime() - timer).toDouble +: ((result._3) ++ (Array(9999.0)) ++ gtLog))
+        List((result._1, result._2,
+            (System.nanoTime() - timer).toDouble +: ((result._3) ++ (Array(9999.0)) ++ gtLog)))
         // Will return following tuple:
         // (minScore, nodeInfo)
         // where minScore consists of
@@ -212,6 +212,20 @@ object Learner extends Comparison {
         // and nodeInfo consists of
         //
         //     (bestNodeIndex, splitIndex, splitVal, splitEval, predict)
+    }
+
+    def takeTopK(K: Int)(xs: List[ResultType], ys: List[ResultType]): List[ResultType] = {
+        var xs1 = xs
+        var ys1 = ys
+        var ret = List[ResultType]()
+        while (ret.size < K && xs1.size > 0 && ys1.size > 0) {
+            (xs1, ys1) match {
+                case (x :: xs2, y :: ys2) =>
+                    if (x._1._1 < y._1._1) { ret = x +: ret; xs1 = xs2 }
+                    else                   { ret = y +: ret; ys1 = ys2 }
+            }
+        }
+        ret.reverse ++ xs1.take(K - ret.size) ++ ys1.take(K - ret.size)
     }
 
     def partitionedGreedySplit(
@@ -233,21 +247,22 @@ object Learner extends Comparison {
         tStart = System.nanoTime()
 
         val f = findBestSplit(y, w, assign, bcWeightsMap, nodes, maxDepth, lossFunc) _
-        val (minScore, nodeInfo, timer) = train.filter(_.active)
-                                               .map(f)
-                                               .reduce((a, b) => {if (a._1._1 < b._1._1) a else b})
-        println("Node " + nodes.size + " learner info")
+        // suggests: List((minScore, nodeInfo, timer))
+        val suggests = train.filter(_.active)
+                            .map(f)
+                            .reduce(takeTopK(100))  // TODO: Make this (100) a parameter
+        // println("Node " + nodes.size + " learner info")
         println("Collect weights info took (ms) " + timeWeightInfo)
-        println("Min score: " + "%.2f".format(minScore._1))
-        println("Reject weight/count: "    + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)
-        println("Pos weight/count: "  + "%.2f".format(minScore._2._2) + " / " + minScore._3._2)
-        println("Neg weight/count: "  + "%.2f".format(minScore._2._3) + " / " + minScore._3._3)
+        // println("Min score: " + "%.2f".format(minScore._1))
+        // println("Reject weight/count: " + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)
+        // println("Pos weight/count: "  + "%.2f".format(minScore._2._2) + " / " + minScore._3._2)
+        // println("Neg weight/count: "  + "%.2f".format(minScore._2._3) + " / " + minScore._3._3)
 
         println("FindWeakLearner took (ms) " + (System.nanoTime() - tStart) / SEC)
-        print("Timer details: ")
-        timer.foreach(k => print(k / SEC + ", "))
+        // print("Timer details: ")
+        // timer.foreach(k => print(k / SEC + ", "))
         println
 
-        nodeInfo
+        suggests.map(_._2).toList
     }
 }

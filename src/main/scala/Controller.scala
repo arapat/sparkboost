@@ -19,7 +19,9 @@ import sparkboost.utils.Comparison
 import sparkboost.utils.Utils.safeLogRatio
 
 object Controller extends Comparison {
+    val R = 30  // TODO: Make this a parameter
     val BINSIZE = 1
+    val SEC = 1000000
     type BrAI = Broadcast[Array[Int]]
     type BrAD = Broadcast[Array[Double]]
     type BrSV = Broadcast[SparseVector]
@@ -27,7 +29,8 @@ object Controller extends Comparison {
     type RDDType = RDD[Instances]
     type TestRDDType = RDD[(Int, SparseVector)]
     type LossFunc = (Double, Double, Double) => Double
-    type LearnerObj = (Int, Int, Double, Boolean, Double)
+    type SuggestType = (Int, Int, Double, Boolean, Double)
+    type LearnerObj = List[SuggestType]
     type LearnerFunc = (SparkContext, RDDType, BrAI, BrAD,
                         Array[BrSV], Array[BrNode], Int, LossFunc) => LearnerObj
     type UpdateFunc = (RDDType, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
@@ -196,76 +199,108 @@ object Controller extends Comparison {
         printStats(trainRaw, test, testRef, localNodes, y.value, weights.value, 0, lastResample)
         println()
 
+        def evaluate(t: Instances, suggests: Map[Int, LearnerObj], sumWeight: Double) = {
+            suggests(t.index).map(sgst => {
+                val (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts) = sgst
+                val prtAssign = assign(prtNodeIndex)
+                var posWeight = 0.0
+                var posCount = 0
+                var negWeight = 0.0
+                var negCount = 0
+                (0 until prtAssign.value.indices.size).foreach(idx => {
+                    val ptr = prtAssign.value.indices(idx)
+                    if (compare(prtAssign.value.values(idx)) != 0 &&
+                        (compare(t.xVec(ptr), splitVal) <= 0) == splitEval) {
+                        if (y.value(ptr) > 0) {
+                            posWeight += weights.value(ptr)
+                            posCount += 1
+                        } else {
+                            negWeight += weights.value(ptr)
+                            negCount += 1
+                        }
+                    }
+                })
+                (
+                    lossFunc(sumWeight - posWeight - negWeight, posWeight, negWeight),
+                    (posWeight, posCount, negWeight, negCount),
+                    (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts)
+                )
+            }).reduce((a, b) => if (a._1 < b._1) a else b)
+        }
+
         var iteration = 0
-        val SEC = 1000000
-        while (iteration < T) {
+        while (iteration < math.ceil(T.toDouble / R)) {
+            println("Batch " + iteration)
             val timerStart = System.nanoTime()
             iteration = iteration + 1
-            val (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts): LearnerObj =
-                    learnerFunc(sc, train, y, weights, assign.toArray,
-                                nodes.toArray, maxDepth, lossFunc)
-            val newNode = SplitterNode(nodes.size, prtNodeIndex, localNodes(prtNodeIndex).depth + 1,
-                                (splitIndex, splitVal, splitEval))
 
-            val prtAssign = assign(prtNodeIndex)
-            // compute the predictions of the new node
-            val (posWeight, posCount, negWeight, negCount) =
-                train.filter(_.index == splitIndex).map(t => {
-                    var posWeight = 0.0
-                    var posCount = 0
-                    var negWeight = 0.0
-                    var negCount = 0
-                    var idx = 0
-                    (0 until prtAssign.value.indices.size).foreach(idx => {
-                        val ptr = prtAssign.value.indices(idx)
-                        if (compare(prtAssign.value.values(idx)) != 0 &&
-                            (compare(t.xVec(ptr), splitVal) <= 0) == splitEval) {
-                            if (y.value(ptr) > 0) {
-                                posWeight += weights.value(ptr)
-                                posCount += 1
-                            } else {
-                                negWeight += weights.value(ptr)
-                                negCount += 1
-                            }
-                        }
-                    })
-                    (posWeight, posCount, negWeight, negCount)
-                }).reduce {
-                    (a: (Double, Int, Double, Int), b: (Double, Int, Double, Int)) =>
-                        (a._1 + b._1, a._2 + b._2, a._3 + b._3, a._4 + b._4)
+            // LearnerFunc gives 100 suggestions
+            val suggests: Map[Int, LearnerObj] = learnerFunc(
+                sc, train, y, weights, assign.toArray, nodes.toArray, maxDepth, lossFunc
+            ).groupBy(_._2)
+            val pTrain = train.filter(t => suggests.contains(t.index)).cache
+
+            // Iteratively, we select and convert `R` suggestions into weak learners
+            (0 until R).foreach(iter2 => {
+                val curIter = (iteration - 1) * R + iter2 + 1
+                println("Node " + curIter)
+                val sumWeight = weights.value.reduce(_ + _)
+                val (
+                    minScore,
+                    (posWeight, posCount, negWeight, negCount),
+                    (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts)
+                ) = pTrain.map(t => evaluate(t, suggests, sumWeight))
+                          .reduce((a, b) => if (a._1 < b._1) a else b)
+
+                /*
+                TODO:
+                The prediction here is computed based on the statistics collected on just a single
+                partition. It is okay when a single partition actually has all training data.
+                But if it only has partial data, we may need to add something like below here:
+                ```
+                    reduce {
+                        (a: (Double, Int, Double, Int), b: (Double, Int, Double, Int)) =>
+                            (a._1 + b._1, a._2 + b._2, a._3 + b._3, a._4 + b._4)
+                    }
+                ```
+                */
+
+                println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
+
+                val pred = 0.5 * safeLogRatio(posWeight, negWeight)
+                println(s"Predicts $pred (suggestion $learnerPredicts) Father $prtNodeIndex")
+
+                // add the new node to the nodes list
+                val newNode = SplitterNode(nodes.size, prtNodeIndex, localNodes(prtNodeIndex).depth + 1,
+                                           (splitIndex, splitVal, splitEval))
+                newNode.setPredict(pred)
+                localNodes(prtNodeIndex).addChild(localNodes.size)
+                val brNewNode = sc.broadcast(newNode)
+                nodes :+= brNewNode
+                localNodes :+= newNode
+
+                // update weights and assignment matrix
+                val timerUpdate = System.nanoTime()
+                val (newAssign, newWeights) = updateFunc(train, y, assign(prtNodeIndex), weights, brNewNode)
+                println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
+                assign.append(sc.broadcast(newAssign))
+                println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
+                val toDestroy = weights
+                weights = sc.broadcast(newWeights)
+                toDestroy.destroy()
+
+                val timerStats = System.nanoTime()
+                printStats(trainRaw, test, testRef, localNodes, y.value, newWeights, curIter, lastResample)
+                println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
+                println("Running time for Iteration " + iteration + " is (ms) " +
+                        (System.nanoTime() - timerStart) / SEC)
+                if (iteration % 20 == 0) {
+                    SplitterNode.save(localNodes, writePath)
+                    println("Wrote model to disk at iteration " + iteration)
                 }
-            println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
-
-            val pred = 0.5 * safeLogRatio(posWeight, negWeight)
-            println(s"Predicts $pred (suggestion $learnerPredicts) Father $prtNodeIndex")
-
-            // add the new node to the nodes list
-            newNode.setPredict(pred)
-            localNodes(prtNodeIndex).addChild(localNodes.size)
-            val brNewNode = sc.broadcast(newNode)
-            nodes :+= brNewNode
-            localNodes :+= newNode
-
-            // update weights and assignment matrix
-            val timerUpdate = System.nanoTime()
-            val (newAssign, newWeights) = updateFunc(train, y, prtAssign, weights, brNewNode)
-            println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
-            assign.append(sc.broadcast(newAssign))
-            println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
-            val toDestroy = weights
-            weights = sc.broadcast(newWeights)
-            toDestroy.destroy()
-
-            val timerStats = System.nanoTime()
-            printStats(trainRaw, test, testRef, localNodes, y.value, newWeights, iteration, lastResample)
-            println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
-            println("Running time for Iteration " + iteration + " is (ms) " +
-                    (System.nanoTime() - timerStart) / SEC)
-            if (iteration % 20 == 0) {
-                SplitterNode.save(localNodes, writePath)
-                println("Wrote model to disk at iteration " + iteration)
-            }
-            println
+                println
+            })
+            pTrain.unpersist()
         }
         localNodes
     }
