@@ -202,11 +202,11 @@ class Controller(
         if (trainAvgScores.size > queueSize) {
             trainAvgScores.dequeue()
         }
-        trainAvgScores.size >= queueSize && improve < minImproveFact
+        trainAvgScores.size >= queueSize && compare(improve, minImproveFact) < 0
     }
 
     def isOverfit(avgScore: Double) = {
-        if (testAvgScores.size > 0 && testAvgScores.head > avgScore) {
+        if (testAvgScores.size > 0 && compare(testAvgScores.head, avgScore) > 0) {
             testAvgScores.clear()
         }
         testAvgScores.enqueue(avgScore)
@@ -254,6 +254,7 @@ class Controller(
         val y = sc.broadcast(baseTrain.map(_._1).collect)
         val trainCSC = baseToCSCFunc(baseTrain)
         setDatasets(baseTrain, trainCSC, y, test)
+        lastResample = localNodes.size
     }
 
     def runADTree(): Array[SplitterNode] = {
@@ -321,7 +322,8 @@ class Controller(
             val pTrain = train.filter(t => suggests.contains(t.index)).cache
 
             // Iteratively, we select and convert `R` suggestions into weak learners
-            (0 until admitSize).foreach(_ => {
+            var admitted = 0
+            while (admitted < admitSize) {
                 curIter += 1
                 println("Node " + localNodes.size)
                 val sumWeight = weights.value.reduce(_ + _)
@@ -354,6 +356,7 @@ class Controller(
                 val brNewNode = sc.broadcast(newNode)
                 nodes :+= brNewNode
                 localNodes :+= newNode
+                admitted += 1
 
                 println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
                 println("Depth: " + newNode.depth)
@@ -384,16 +387,19 @@ class Controller(
                     println("Underfitting occurs at iteration " + localNodes.size +
                         s": increasing tree depth from $depth to " + (depth + 1))
                     depth += 1
+                    admitted = admitSize  // To break out the while loop
                     println
                 } else if (isOverfit(curTestAvgScore)) {
                     println("Overfitting occurs at iteration " + localNodes.size +
                         ": resampling data")
                     overfitRollback()
                     resample()
+                    setMetaData()
                     depth = 1
+                    admitted = admitSize  // To break out the while loop
                     println
                 }
-            })
+            }
             pTrain.unpersist()
         }
         localNodes
