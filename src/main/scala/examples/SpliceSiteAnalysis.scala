@@ -17,30 +17,6 @@ object SpliceSiteAnalysis {
     */
     type TestRDDType = RDD[(Int, SparseVector)]
 
-    // Global constants (TODO: parameterize them)
-    val BINSIZE = 1
-    val ALLSAMPLE = 0.20
-    val NEGSAMPLE = 0.0029
-    // training/testing split
-    val TRAIN_PORTION = 0.75
-
-    // Construction features: P1 and P2 (as in Degroeve's SpliceMachine paper)
-    val FEATURE_TYPE = 1
-    val CENTER = 60
-    val LEFT_WINDOW = 59  // out of 59
-    val RIGHT_WINDOW = 80  // out of 80
-    val WINDOW_SIZE = LEFT_WINDOW + RIGHT_WINDOW
-    val featureSize = (WINDOW_SIZE) * 4 + {if (FEATURE_TYPE == 1) 0 else (WINDOW_SIZE - 1) * 4 * 4}
-    val indexMap = {
-        val unit = List("A", "C", "G", "T")
-        val unit2 = unit.map(t => unit.map(t + _)).reduce(_ ++ _)
-        val p1 = (0 until WINDOW_SIZE).map(idx => unit.map(idx + _)).reduce(_ ++ _)
-        val p2 = (0 until (WINDOW_SIZE - 1)).map(idx => unit2.map(idx + _)).reduce(_ ++ _)
-
-        if (FEATURE_TYPE == 1) p1.zip(0 until p1.size).toMap
-        else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
-    }
-
     def parseOptions(options: Array[String]) = {
         options.zip(options.slice(1, options.size))
                .zip(0 until options.size).filter(_._2 % 2 == 0).map(_._1)
@@ -69,34 +45,12 @@ object SpliceSiteAnalysis {
         println("Testing PR = " + metrics.pr.collect.toList)
     }
 
-    def rowToInstance(s: String) = {
-        val data = s.slice(1, s.size - 2).split(", u'")
-        val raw = data(1)
-        val window = (
-            raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
-            raw.slice(CENTER + 1, CENTER + RIGHT_WINDOW + 1)
-        )
-        val nonzeros = {
-            if (FEATURE_TYPE == 1) (0 until WINDOW_SIZE).zip(window)
-            else {
-                (0 until WINDOW_SIZE).zip(window) ++
-                (0 until WINDOW_SIZE).zip(
-                    window.zip(window.tail).map(t => t._1.toString + t._2)
-                )
-            }
-        }.map(t => indexMap(t._1 + t._2.toString)).toArray.sorted
-        (data(0).toInt,
-         new SparseVector(featureSize, nonzeros, nonzeros.map(_ => 1.0)))
-    }
-
     def main(args: Array[String]) {
         // Define SparkContext
         val conf = new SparkConf()
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .set("spark.kryoserializer.buffer.mb","24")
         val sc = new SparkContext(conf)
-        // TODO: delete checkpoints before exiting
-        sc.setCheckpointDir("checkpoints/")
 
         // Parse and read options
         val options = parseOptions(args)
@@ -104,7 +58,7 @@ object SpliceSiteAnalysis {
         val modelReadPath = options("load-model")
 
         val nodes = SplitterNode.load(modelReadPath)
-        val data = sc.textFile(testPath).map(rowToInstance).cache()
+        val data = sc.textFile(testPath).map(InstanceFactory.rowToInstance).cache()
         println("Distinct positive samples in the training data (test data): " +
             data.filter(_._1 > 0).count)
         println("Distinct negative samples in the training data (test data): " +

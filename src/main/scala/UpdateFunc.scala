@@ -17,9 +17,9 @@ object UpdateFunc extends Comparison {
     type BrAD = Broadcast[Array[Double]]
     type BrSV = Broadcast[SparseVector]
 
-    def adaboostUpdateFunc(y: Int, w: Double, predict: Double) = w * exp(-y * predict)
+    def adaboostWeightUpdate(y: Int, w: Double, predict: Double) = w * exp(-y * predict)
 
-    def logitboostUpdateFunc(y: Int, w: Double, predict: Double) = w / (1.0 + exp(y * predict))
+    def logitboostWeightUpdate(y: Int, w: Double, predict: Double) = w / (1.0 + exp(y * predict))
 
     def update(train: RDDType, y: BrAI, fa: BrSV, w: BrAD, node: Broadcast[SplitterNode],
                updateFunc: (Int, Double, Double) => Double): (SparseVector, Array[Double]) = {
@@ -47,7 +47,7 @@ object UpdateFunc extends Comparison {
     }
 
     def adaboostUpdate(train: RDDType, y: BrAI, fa: BrSV, w: BrAD, node: Broadcast[SplitterNode]) = {
-        update(train, y, fa, w, node, adaboostUpdateFunc)
+        update(train, y, fa, w, node, adaboostWeightUpdate)
     }
 
     /*

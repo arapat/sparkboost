@@ -24,37 +24,7 @@ class UniformPartitioner(val numOfPartitions: Int, val featureSize: Int) extends
     }
 }
 
-object SpliceSite {
-    /*
-    Commandline options:
-
-    --train         - file path to the training data
-    --sample-frac   - fraction for sampling
-    --iteration     - number of iterations
-    --depth         - max depth of the tree
-    --algorithm     - algorithm selection
-                          1 -> AdaBoost partitioned
-                          2 -> AdaBoost non-partitioned
-                          3 -> LogitBoost partitioned
-    --save-model    - File path to save the model
-    --load-model    - File path to load the model
-    --resample-node - The last tree node before resampling (1-base)
-    --format        - data format
-                          1 -> raw data
-                          2 -> objects
-                          3 -> sample by model
-    --train-rdd     - path to save training data RDD (row-based)
-    --test-rdd      - path to save testing data RDD
-    --test-ref-rdd  - path to save referenced testing data RDD
-    */
-
-    // Global constants (TODO: parameterize them)
-    val BINSIZE = 1
-    val ALLSAMPLE = 0.20
-    val NEGSAMPLE = 0.0029
-    // training/testing split
-    val TRAIN_PORTION = 0.75
-
+object InstanceFactory {
     // Construction features: P1 and P2 (as in Degroeve's SpliceMachine paper)
     val FEATURE_TYPE = 1
     val CENTER = 60
@@ -72,6 +42,68 @@ object SpliceSite {
         else (p1 ++ p2).zip(0 until (p1.size + p2.size)).toMap
     }
 
+    def rowToInstance(s: String) = {
+        val data = s.slice(1, s.size - 2).split(", u'")
+        val raw = data(1)
+        val window = (
+            raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
+            raw.slice(CENTER + 1, CENTER + RIGHT_WINDOW + 1)
+        )
+        val nonzeros = {
+            if (FEATURE_TYPE == 1) (0 until WINDOW_SIZE).zip(window)
+            else {
+                (0 until WINDOW_SIZE).zip(window) ++
+                (0 until WINDOW_SIZE).zip(
+                    window.zip(window.tail).map(t => t._1.toString + t._2)
+                )
+            }
+        }.map(t => indexMap(t._1 + t._2.toString)).toArray.sorted
+        (data(0).toInt,
+         new SparseVector(featureSize, nonzeros, nonzeros.map(_ => 1.0)))
+    }
+}
+
+object SpliceSite {
+    /*
+    Commandline options:
+
+    Required:
+        --train            - file path to the training data
+        --test             - file path to the test data
+        --sample-frac      - fraction for sampling for a single batch
+        --num-slices       - number of slices a feature dimension to be divded into
+        --max-iteration    - maximum number of iterations (0 for unlimited)
+        --algorithm        - algorithm selection
+                                 1 -> AdaBoost
+                                 2 -> LogitBoost (not supported yet)
+        --save-model       - file path to save the model
+        --save-train-rdd   - file path to save training data RDD (row-based)
+        --save-test-rdd    - file path to save test data RDD
+        --data-source      - source of data
+                                 1 -> read from text files and get a new sample
+                                 2 -> read from object files of an existing sample (requires additional parameters, see below)
+        --candidate-splits - number of candidates split points to select in each batch
+        --admit-splits     - number of split points to be added to the tree for each batch of candidates
+        --improve          - percentage of improvement expected for re-sampling (0.0, 1.0)
+
+    Optional:
+        --load-model       - file path to load the model
+        --last-resample    - the last tree node before resampling (1-based)
+        --last-depth       - the depth of the tree before existing
+
+    If "--data-source" is set to 2, the following optional parameters are required.
+
+        --load-train-rdd   - path to read training data RDD (row-based)
+        --load-test-rdd    - path to save testing data RDD
+    */
+
+    // TODO: support BINSIZE > 1
+    val BINSIZE = 1
+    // training/testing split
+    val TRAIN_PORTION = 0.75
+
+    type BaseInstance = (Int, SparseVector)
+
     def parseOptions(options: Array[String]) = {
         options.zip(options.slice(1, options.size))
                .zip(0 until options.size).filter(_._2 % 2 == 0).map(_._1)
@@ -79,100 +111,61 @@ object SpliceSite {
                .toMap
     }
 
-    def loadTrainData(sc: SparkContext,
-                      loadMode: Int, trainPath: String, trainObjFile: String, testObjFile: String,
-                      nodes: Array[SplitterNode]):
-                (Array[Int], RDD[Instances], RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = {
-        def rowToInstance(s: String) = {
-            val data = s.slice(1, s.size - 2).split(", u'")
-            val raw = data(1)
-            val window = (
-                raw.slice(CENTER - 1 - LEFT_WINDOW, CENTER - 1) ++
-                raw.slice(CENTER + 1, CENTER + RIGHT_WINDOW + 1)
-            )
-            val nonzeros = {
-                if (FEATURE_TYPE == 1) (0 until WINDOW_SIZE).zip(window)
-                else {
-                    (0 until WINDOW_SIZE).zip(window) ++
-                    (0 until WINDOW_SIZE).zip(
-                        window.zip(window.tail).map(t => t._1.toString + t._2)
-                    )
-                }
-            }.map(t => indexMap(t._1 + t._2.toString)).toArray.sorted
-            (data(0).toInt,
-             new SparseVector(featureSize, nonzeros, nonzeros.map(_ => 1.0)))
-        }
+    def sampleData(sc: SparkContext, trainPath: String, sampleFrac: Double, getWeight: (Int, Double, Double) => Double)
+                  (nodes: Array[SplitterNode]) = {
+        val weightedSample = sc.textFile(trainPath).map(InstanceFactory.rowToInstance)
+                               .mapPartitions((iterator: Iterator[BaseInstance]) => {
+            val array = iterator.toList
+            var sampleList = Array[BaseInstance]()
+            if (array.size > 0) {
+                val size = (array.size * sampleFrac).ceil.toInt
+                val weights = array.map(t =>
+                    getWeight(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2))
+                )
+                val weightSum = weights.reduce {(a: Double, b: Double) => a + b}
+                val segsize = weightSum.toDouble / size
 
-        val splits =
-            if (loadMode == 2){
-                Array(sc.objectFile[(Int, SparseVector)](trainObjFile),
-                      sc.objectFile[(Int, SparseVector)](testObjFile))
-            } else {
-                val balancedData = sc.textFile(trainPath)
-                                     .map(rowToInstance)
-                                     .filter(inst => {
-                                         (inst._1 > 0 || rand() <= NEGSAMPLE)
-                                     })
-                val sampledData: RDD[(Int, SparseVector)] = {
-                    val fraction = ALLSAMPLE
-                    if (loadMode == 1) {
-                        balancedData.filter(_ => rand() <= fraction)
-                    } else {
-                        // TODO: parameterize wfunc
-                        val wfunc = UpdateFunc.adaboostUpdateFunc _
-                        balancedData.mapPartitions {
-                            (iterator: Iterator[(Int, SparseVector)]) => {
-                                val array = iterator.toList
-                                var sampleList = Array[(Int, SparseVector)]()
-                                if (array.size > 0) {
-                                    val size = (array.size * fraction).ceil.toInt
-                                    val weights = array.map(t =>
-                                        wfunc(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2))
-                                    )
-                                    val weightSum = weights.reduce {(a: Double, b: Double) => a + b}
-                                    val segsize = weightSum.toDouble / size
-
-                                    var curWeight = rand() * segsize // first sample point
-                                    var accumWeight = 0.0
-                                    for (iw <- array.zip(weights)) {
-                                        while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
-                                            sampleList :+= iw._1
-                                            curWeight += segsize
-                                        }
-                                        accumWeight += iw._2
-                                    }
-                                }
-                                sampleList.toIterator
-                            }
-                        }
+                var curWeight = rand() * segsize // first sample point
+                var accumWeight = 0.0
+                for (iw <- array.zip(weights)) {
+                    while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
+                        sampleList :+= iw._1
+                        curWeight += segsize
                     }
+                    accumWeight += iw._2
                 }
-                sampledData.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
             }
-        val (trainRaw, test): (RDD[(Int, SparseVector)], RDD[(Int, SparseVector)]) = (splits(0), splits(1))
-        trainRaw.cache()
-        test.cache()
-        val trainRawSize = trainRaw.count
+            sampleList.toIterator
+        }).cache()
+        val sampleSize = weightedSample.count
+        val posCount = weightedSample.filter(_._1 > 0).count
+        val posRatio = posCount.toDouble / (sampleSize - posCount)
+        val balancedData = weightedSample.filter(_._1 > 0 || rand() <= posRatio)
 
-        // TODO: support batchSize > 1
-        // TODO: parameterize sliceFrac
-        val batchSize = 1
-        val sliceFrac = 0.05
-        val numPartitions = 160
-        val y = trainRaw.map(_._1).collect()
-        val train = trainRaw.zipWithIndex()
+        val splits = balancedData.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
+        val (train, test): (RDD[BaseInstance], RDD[BaseInstance]) = (splits(0), splits(1))
+        train.cache()
+        test.cache()
+        (train, test)
+    }
+
+    // Row store to Column Store Compression
+    def baseToCSC(train: RDD[BaseInstance], numSlices: Int, numPartitions: Int) = {
+        val trainSize = train.count
+        val y = train.map(_._1).collect()
+        val trainCSC = train.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
                                 (0 until x.size).map(k =>
-                                    ((idx * batchSize / trainRawSize, k), (x(k), idx.toInt)))}
+                                    ((idx * BINSIZE / trainSize, k), (x(k), idx.toInt)))}
                             .groupByKey()
-                            .partitionBy(new UniformPartitioner(numPartitions, featureSize))
+                            .partitionBy(new UniformPartitioner(numPartitions, InstanceFactory.featureSize))
                             .map {case ((batchId, index), xAndPtr) => {
                                 val (x, ptr) = xAndPtr.toArray.sorted.unzip
                                 Instances(batchId.toInt, (new DenseVector(x)).toSparse, ptr,
-                                          index, sliceFrac, true)
+                                          index, numSlices, true)
                             }}
-        train.cache()
-        (y, train, trainRaw, test)
+        trainCSC.cache()
+        trainCSC
     }
 
     def main(args: Array[String]) {
@@ -181,57 +174,54 @@ object SpliceSite {
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .set("spark.kryoserializer.buffer.mb","24")
         val sc = new SparkContext(conf)
-        // TODO: delete checkpoints before exiting
-        sc.setCheckpointDir("checkpoints/")
 
         // Parse and read options
         val options = parseOptions(args)
         val trainPath = options("train")
-        // val testPath = options.get("test")
+        val testPath = options("test")
         val sampleFrac = options("sample-frac").toDouble
-        val T = options("iteration").toInt
-        val depth = options("depth").toInt
+        val numSlices = options("num-slices").toInt
+        val maxIters = options("max-iteration").toInt
         val algo = options("algorithm").toInt
+        val modelWritePath = options("save-model")
+        val trainSavePath = options("save-train-rdd")
+        val testSavePath = options("save-test-rdd")
+        val source = options("data-source").toInt
+        val candidateSize = options("candidate-splits").toInt
+        val admitSize = options("admit-splits").toInt
+        val improveFact = options("improve").toDouble
+        // Optional options
         val modelReadPath = options.getOrElse("load-model", "")
-        val modelWritePath = options.getOrElse("save-model", "")
         val lastResample = options.getOrElse("resample-node", "0").toInt
-        val loadMode = options("format").toInt
-        val trainObjFile = options.getOrElse("train-rdd", "")
-        val testObjFile = options.getOrElse("test-rdd", "")
-        val testRefObjFile = options.getOrElse("test-ref-rdd", "")
+        val lastDepth = options.getOrElse("last-depth", "1").toInt
 
         val baseNodes = {
             if (modelReadPath != "") SplitterNode.load(modelReadPath)
             else                     Array[SplitterNode]()
         }
-
-        val (yLocal, train, trainRaw, test) = loadTrainData(
-            sc, loadMode, trainPath, trainObjFile, testObjFile, baseNodes)
-        val y = sc.broadcast(yLocal)
-        val testRef = (
-            if (testRefObjFile == "") {
-                test
+        val curSampleFunc = sampleData(sc, trainPath, sampleFrac, UpdateFunc.adaboostWeightUpdate) _
+        val (train, test) =
+            if (source == 2) {
+                val trainObjFile = options("load-train-rdd")
+                val testObjFile = options("load-test-rdd")
+                (sc.objectFile[BaseInstance](trainObjFile), sc.objectFile[BaseInstance](testObjFile))
             } else {
-                sc.objectFile[(Int, SparseVector)](testRefObjFile)
+                curSampleFunc(baseNodes)
             }
-        ).persist(StorageLevel.MEMORY_ONLY)
+        val y = sc.broadcast(train.map(_._1).collect)
+        val trainCSC = baseToCSC(train, numSlices, sc.defaultParallelism)
+        val testRef = sc.textFile(testPath).map(InstanceFactory.rowToInstance).cache()
 
-        if (loadMode == 1 || loadMode == 3) {
-            if (trainObjFile != "") {
-                trainRaw.saveAsObjectFile(trainObjFile)
-            }
-            if (testObjFile != "") {
-                test.saveAsObjectFile(testObjFile)
-            }
-        }
+        train.saveAsObjectFile(trainSavePath)
+        test.saveAsObjectFile(testSavePath)
 
-        println("Train data size: " + trainRaw.count)
+        println("Train data size: " + train.count)
         println("Test data size: " + test.count)
-        println("Test ref data size: " + testRef.count)
+        println("Referenced test data size: " + testRef.count)
         println("Distinct positive samples in the training data: " +
-                trainRaw.filter(_._1 > 0).count)
+                train.filter(_._1 > 0).count)
         println("Distinct negative samples in the training data: " +
-                trainRaw.filter(_._1 < 0).count)
+                train.filter(_._1 < 0).count)
         println("Distinct positive samples in the test data: " +
                 test.filter(_._1 > 0).count)
         println("Distinct negative samples in the test data: " +
@@ -239,18 +229,26 @@ object SpliceSite {
         println()
 
         val nodes = algo.toInt match {
-            case 1 =>
-                Controller.runADTreeWithAdaBoost(
-                    sc, train, y, trainRaw, test, testRef, sampleFrac, T, depth,
-                    baseNodes.map(node => sc.broadcast(node)), modelWritePath,
-                    lastResample
+            case 1 => {
+                val controller = new Controller(
+                    sc,
+                    curSampleFunc,
+                    Learner.partitionedGreedySplit,
+                    UpdateFunc.adaboostUpdate,
+                    LossFunc.lossfunc,
+                    UpdateFunc.adaboostWeightUpdate,
+                    trainPath,
+                    improveFact,
+                    candidateSize,
+                    admitSize,
+                    modelWritePath,
+                    maxIters
                 )
-            /*
-            case 3 =>
-                Controller.runADTreeWithLogitBoost(
-                    sc, train, y, trainRaw, test, sampleFrac, T, depth, baseNodes
-                )
-            */
+                controller.setDatasets(train, trainCSC, y, test, testRef)
+                controller.setNodes(baseNodes, lastResample, lastDepth)
+                controller.runADTree
+            }
+            // TODO: Support LogitBoost
         }
 
         nodes.foreach(println)
@@ -259,7 +257,9 @@ object SpliceSite {
     }
 
     /*
+
     // print visualization meta data for JBoost
+
     val posTrain = data.flatMap(_._1).filter(_.y > 0).takeSample(true, 3000)
     val negTrain = data.flatMap(_._1).filter(_.y < 0).takeSample(true, 3000)
     val posTest = glomTest.flatMap(t => t).filter(_.y > 0).takeSample(true, 3000)

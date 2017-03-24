@@ -11,17 +11,19 @@ class Instances(val batchId: Int, val x: SparseVector, val ptr: Array[Int],
 }
 
 object Instances {
-    def createSlices(sliceFrac: Double, x: Array[Double]) = {
+    def createSlices(numSlices: Int, x: Array[Double]) = {
         // assume values are sorted
-        val sliceSize = math.max(1, (x.size * sliceFrac).floor.toInt)
-        (sliceSize until x.size by sliceSize).map(
-            idx => 0.5 * (x(idx - 1) + x(idx))
-        ).distinct.toArray :+ Double.MaxValue
+        var distinct = Array[Double](x(0))
+        x.foreach(ix => if (ix != distinct.head) distinct = ix +: distinct)
+        val sliceSize = math.max(1, (distinct.size.toDouble / numSlices).floor.toInt)
+        (sliceSize until distinct.size by sliceSize).map(
+            idx => 0.5 * (distinct(idx - 1) + distinct(idx))
+        ).toArray :+ Double.MaxValue
     }
 
     def apply(batchId: Int, x: SparseVector, ptr: Array[Int],
-              index: Int, sliceFrac: Double, active: Boolean) = {
-        val slices = createSlices(sliceFrac, x.toDense.values)
+              index: Int, numSlices: Int, active: Boolean) = {
+        val slices = createSlices(numSlices, x.toDense.values)
         new Instances(batchId, x, ptr, index, slices, active)
     }
 }
