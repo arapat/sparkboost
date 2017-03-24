@@ -3,7 +3,8 @@ package sparkboost
 import math.log
 import math.exp
 import util.Random.{nextDouble => rand}
-import scala.collection.mutable.ArrayBuffer
+import collection.mutable.ArrayBuffer
+import collection.mutable.Queue
 
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
@@ -19,7 +20,15 @@ import sparkboost.utils.Utils.safeLogRatio
 
 object Type {
     type BaseInstance = (Int, SparseVector)
+    type ColRDD = RDD[Instances]
+    type BaseRDD = RDD[BaseInstance]
+    type BrAI = Broadcast[Array[Int]]
+    type BrAD = Broadcast[Array[Double]]
+    type BrSV = Broadcast[SparseVector]
+    type BrNode = Broadcast[SplitterNode]
+
     type SampleFunc = Array[SplitterNode] => (RDD[BaseInstance], RDD[BaseInstance])
+    type BaseToCSCFunc = RDD[BaseInstance] => ColRDD
     type LossFunc = (Double, Double, Double) => Double
     type Suggest = (Int, Int, Double, Boolean, Double)
     type LearnerObj = List[Suggest]
@@ -27,24 +36,18 @@ object Type {
                         Array[BrSV], Array[BrNode], Int, LossFunc) => LearnerObj
     type UpdateFunc = (ColRDD, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
-
-    type BrAI = Broadcast[Array[Int]]
-    type BrAD = Broadcast[Array[Double]]
-    type BrSV = Broadcast[SparseVector]
-    type BrNode = Broadcast[SplitterNode]
-    type ColRDD = RDD[Instances]
-    type BaseRDD = RDD[BaseInstance]
 }
 
 class Controller(
     val sc: SparkContext,
     val sampleFunc: Type.SampleFunc,
+    val baseToCSCFunc: Type.BaseToCSCFunc,
     val learnerFunc: Type.LearnerFunc,
     val updateFunc: Type.UpdateFunc,
     val lossFunc: Type.LossFunc,
     val weightFunc: Type.WeightFunc,
     val trainPath: String,
-    val improveFact: Double,
+    val minImproveFact: Double,
     val candidateSize: Int,
     val admitSize: Int,
     val modelWritePath: String,
@@ -67,13 +70,28 @@ class Controller(
     var localNodes: Array[SplitterNode] = null
     var lastResample = 0
 
+    val trainAvgScores = new Queue[Double]()
+    val testAvgScores = new Queue[Double]()
+    val queueSize = admitSize * 3
+
     def setDatasets(baseTrain: Type.BaseRDD, train: Type.ColRDD, y: Type.BrAI,
-                    test: Type.BaseRDD, testRef: Type.BaseRDD) {
+                    test: Type.BaseRDD, testRef: Type.BaseRDD = null) {
+        if (this.baseTrain != null) {
+            this.baseTrain.unpersist()
+            this.train.unpersist()
+            this.y.destroy()
+            this.test.unpersist()
+        }
         this.baseTrain = baseTrain
         this.train = train
         this.y = y
         this.test = test
-        this.testRef = testRef
+        if (testRef != null) {
+            if (this.testRef != null) {
+                this.testRef.unpersist()
+            }
+            this.testRef = testRef
+        }
     }
 
     def setNodes(nodes: Array[SplitterNode], lastResample: Int, lastDepth: Int) {
@@ -178,26 +196,64 @@ class Controller(
         (lossFuncTrain._1, lossFuncTest._1)
     }
 
-    def getInitData() = {
-        val aMatrix = new ArrayBuffer[Broadcast[SparseVector]]()
-        var w = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
+    def isUnderfit(avgScore: Double) = {
+        trainAvgScores.enqueue(avgScore)
+        val improve = (trainAvgScores.head - trainAvgScores.last) / trainAvgScores.head
+        if (trainAvgScores.size > queueSize) {
+            trainAvgScores.dequeue()
+        }
+        trainAvgScores.size >= queueSize && improve < minImproveFact
+    }
+
+    def isOverfit(avgScore: Double) = {
+        if (testAvgScores.size > 0 && testAvgScores.head > avgScore) {
+            testAvgScores.clear()
+        }
+        testAvgScores.enqueue(avgScore)
+        testAvgScores.size >= queueSize
+    }
+
+    def overfitRollback() {
+        val k = localNodes.size - testAvgScores.size + 1
+        println("Rollback due to overfitting from " + localNodes.size + s" nodes to $k nodes")
+        (k until nodes.size).foreach { i => nodes(i).destroy() }
+        nodes = nodes.take(k)
+        localNodes = localNodes.take(k)
+    }
+
+    def setMetaData() {
+        assign = new ArrayBuffer[Broadcast[SparseVector]]()
+        weights = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
         val fa = sc.broadcast(
             new DenseVector((0 until y.value.size).map(_ => -1.0).toArray).toSparse)
         var nodeIdx = 0
         for (node <- nodes) {
             val faIdx = node.value.prtIndex
-            val brFa = if (faIdx < 0) fa else aMatrix(faIdx)
-            val (aVec, nw) = updateFunc(train, y, brFa, w, node)
-            aMatrix.append(sc.broadcast(aVec))
+            val brFa = if (faIdx < 0) fa else assign(faIdx)
+            val (aVec, w) = updateFunc(train, y, brFa, weights, node)
+            assign.append(sc.broadcast(aVec))
             if (nodeIdx >= lastResample) {
-                val toDestroy = w
-                w = sc.broadcast(nw)
+                val toDestroy = weights
+                weights = sc.broadcast(w)
                 toDestroy.destroy()
             }
             nodeIdx += 1
         }
         fa.destroy()
-        (aMatrix, w)
+
+        trainAvgScores.clear()
+        testAvgScores.clear()
+        val (trainAvgScore, testAvgScore) = printStats(0)
+        isUnderfit(trainAvgScore)
+        isOverfit(testAvgScore)
+        println()
+    }
+
+    def resample() {
+        val (baseTrain, test) = sampleFunc(localNodes)
+        val y = sc.broadcast(baseTrain.map(_._1).collect)
+        val trainCSC = baseToCSCFunc(baseTrain)
+        setDatasets(baseTrain, trainCSC, y, test)
     }
 
     def runADTree(): Array[SplitterNode] = {
@@ -247,12 +303,8 @@ class Controller(
             localNodes = Array(rootNode)
             println(s"Root node predicts ($predVal, 0.0)")
         }
-        val initData = getInitData()
-        assign = initData._1
-        weights = initData._2
 
-        printStats(0)
-        println()
+        setMetaData()
 
         var batch = 0
         var curIter = 0
@@ -317,9 +369,9 @@ class Controller(
                 weights = sc.broadcast(newWeights)
                 toDestroy.destroy()
 
-                val timerStats = System.nanoTime()
-                val (trainAvgScore, testAvgScore) = printStats(curIter)
-                println("printStats took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
+                val timerPrint = System.nanoTime()
+                val (curTrainAvgScore, curTestAvgScore) = printStats(curIter)
+                println("printStats took (ms) " + (System.nanoTime() - timerPrint) / SEC)
                 println("Running time for Iteration " + curIter + " is (ms) " +
                         (System.nanoTime() - timerStart) / SEC)
                 if (curIter % 100 == 0) {
@@ -327,6 +379,20 @@ class Controller(
                     println("Wrote model to disk at iteration " + curIter)
                 }
                 println
+
+                if (isUnderfit(curTrainAvgScore)) {
+                    println("Underfitting occurs at iteration " + localNodes.size +
+                        s": increasing tree depth from $depth to " + (depth + 1))
+                    depth += 1
+                    println
+                } else if (isOverfit(curTestAvgScore)) {
+                    println("Overfitting occurs at iteration " + localNodes.size +
+                        ": resampling data")
+                    overfitRollback()
+                    resample()
+                    depth = 1
+                    println
+                }
             })
             pTrain.unpersist()
         }

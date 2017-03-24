@@ -168,7 +168,7 @@ object SpliceSite {
     }
 
     // Row store to Column Store Compression
-    def baseToCSC(train: RDD[BaseInstance], numSlices: Int, numPartitions: Int) = {
+    def baseToCSC(numSlices: Int, numPartitions: Int)(train: RDD[BaseInstance]) = {
         val trainSize = train.count
         val y = train.map(_._1).collect()
         val trainCSC = train.zipWithIndex()
@@ -218,6 +218,7 @@ object SpliceSite {
             else                     Array[SplitterNode]()
         }
         val curSampleFunc = sampleData(sc, trainPath, sampleFrac, UpdateFunc.adaboostWeightUpdate) _
+        val curBaseToCSCFunc = baseToCSC(numSlices, sc.defaultParallelism) _
         val (train, test) =
             if (source == 2) {
                 val trainObjFile = options("load-train-rdd")
@@ -227,7 +228,7 @@ object SpliceSite {
                 curSampleFunc(baseNodes)
             }
         val y = sc.broadcast(train.map(_._1).collect)
-        val trainCSC = baseToCSC(train, numSlices, sc.defaultParallelism)
+        val trainCSC = curBaseToCSCFunc(train)
         val testRef = sc.textFile(testPath).map(InstanceFactory.rowToInstance).cache()
 
         train.saveAsObjectFile(trainSavePath)
@@ -251,6 +252,7 @@ object SpliceSite {
                 val controller = new Controller(
                     sc,
                     curSampleFunc,
+                    curBaseToCSCFunc,
                     Learner.partitionedGreedySplit,
                     UpdateFunc.adaboostUpdate,
                     LossFunc.lossfunc,
