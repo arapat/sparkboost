@@ -113,39 +113,57 @@ object SpliceSite {
 
     def sampleData(sc: SparkContext, trainPath: String, sampleFrac: Double, getWeight: (Int, Double, Double) => Double)
                   (nodes: Array[SplitterNode]) = {
-        val weightedSample = sc.textFile(trainPath).map(InstanceFactory.rowToInstance)
-                               .mapPartitions((iterator: Iterator[BaseInstance]) => {
-            val array = iterator.toList
-            var sampleList = Array[BaseInstance]()
-            if (array.size > 0) {
-                val size = (array.size * sampleFrac).ceil.toInt
-                val weights = array.map(t =>
-                    getWeight(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2))
-                )
-                val weightSum = weights.reduce {(a: Double, b: Double) => a + b}
-                val segsize = weightSum.toDouble / size
+        val weightsTrain = sc.textFile(trainPath).map(InstanceFactory.rowToInstance)
+                             .map(t =>
+                                (getWeight(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2)), t)
+                             ).cache
 
-                var curWeight = rand() * segsize // first sample point
-                var accumWeight = 0.0
-                for (iw <- array.zip(weights)) {
-                    while (accumWeight <= curWeight && curWeight < accumWeight + iw._2) {
-                        sampleList :+= iw._1
-                        curWeight += segsize
+        val sumWeight = weightsTrain.map(_._1).reduce(_ + _)
+        val posWeight = weightsTrain.filter(_._2._1 > 0).map(_._1).reduce(_ + _)
+        val negWeight = sumWeight - posWeight
+        val posScale = negWeight / sumWeight
+        val negScale = posWeight / sumWeight
+        val scaledSumWeight = 2 * posWeight * negWeight / sumWeight
+
+        val sampleSize = (weightsTrain.count * sampleFrac).ceil.toInt
+        val segSize = scaledSumWeight / sampleSize
+        val offset = rand() * segSize
+
+        val partitionSum = weightsTrain.mapPartitions((iterator: Iterator[(Double, BaseInstance)]) => {
+            List(
+                iterator.map { case (w, t) => (if (t._1 > 0) posScale else negScale) * w }
+                        .fold(0.0)(_ + _)
+            ).toIterator
+        }).collect().toArray.scanLeft(0.0)(_ + _)
+        val weightedSample = weightsTrain.mapPartitionsWithIndex(
+            (index: Int, iterator: Iterator[(Double, BaseInstance)]) => {
+                val array = iterator.toList
+                var sampleList = List[BaseInstance]()
+                if (array.size > 0) {
+                    var accumWeight = partitionSum(index) - offset
+                    var accumIndex = (accumWeight / segSize).floor.toInt
+                    for (iw <- array) {
+                        accumWeight += (if (iw._2._1 > 0) posScale else negScale) * iw._1
+                        val end = (accumWeight / segSize).floor.toInt
+                        if (end >= 0) {
+                            for (_ <- 0 until (end - accumIndex)) {
+                                sampleList = iw._2 +: sampleList
+                            }
+                        }
+                        accumIndex = end
                     }
-                    accumWeight += iw._2
                 }
+                sampleList.toIterator
             }
-            sampleList.toIterator
-        }).cache()
-        val sampleSize = weightedSample.count
-        val posCount = weightedSample.filter(_._1 > 0).count
-        val posRatio = posCount.toDouble / (sampleSize - posCount)
-        val balancedData = weightedSample.filter(_._1 > 0 || rand() <= posRatio)
+        ).cache()
 
-        val splits = balancedData.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
+        val splits = weightedSample.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
         val (train, test): (RDD[BaseInstance], RDD[BaseInstance]) = (splits(0), splits(1))
         train.cache()
         test.cache()
+        train.count
+        test.count
+        weightsTrain.unpersist()
         (train, test)
     }
 
