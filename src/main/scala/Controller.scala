@@ -117,6 +117,7 @@ class Controller(
             val positiveSumScores = scores.filter(_._1 > 0).map(_._2).reduce(_ + _)
             val negativeCount = count - positiveCount
             val negativeSumScores = sumScores - positiveSumScores
+            scores.unpersist()
             (sumScores / count, positiveSumScores / positiveCount,
              negativeSumScores / negativeCount, sumScores)
         }
@@ -192,6 +193,9 @@ class Controller(
         println("Effective count = " + effectiveCount)
         println("Positive effective count = " + effectiveCountPositive)
         println("Negative effective count = " + effectiveCountNegative)
+        trainPredictionAndLabels.unpersist()
+        testPredictionAndLabels.unpersist()
+        testRefPredictionAndLabels.unpersist()
         (lossFuncTrain._1, lossFuncTest._1)
     }
 

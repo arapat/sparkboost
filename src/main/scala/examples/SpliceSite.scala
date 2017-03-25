@@ -87,6 +87,7 @@ object SpliceSite {
         --improve          - percentage of improvement expected for re-sampling (0.0, 1.0)
 
     Optional:
+        --cores            - number of cores available for this job
         --load-model       - file path to load the model
         --last-resample    - the last tree node before resampling (1-based)
         --last-depth       - the depth of the tree before existing
@@ -158,6 +159,8 @@ object SpliceSite {
 
         val splits = weightedSample.randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
         val (train, test): (RDD[BaseInstance], RDD[BaseInstance]) = (splits(0), splits(1))
+        train.setName("sampled train data")
+        test.setName("sampled test data")
         train.cache()
         test.cache()
         train.count
@@ -181,6 +184,7 @@ object SpliceSite {
                                 Instances(batchId.toInt, (new DenseVector(x)).toSparse, ptr,
                                           index, numSlices, true)
                             }}
+        trainCSC.setName("sampled train CSC data")
         trainCSC.cache()
         trainCSC
     }
@@ -208,17 +212,22 @@ object SpliceSite {
         val admitSize = options("admit-splits").toInt
         val improveFact = options("improve").toDouble
         // Optional options
+        val numCores = options.getOrElse("cores", sc.defaultParallelism.toString).toInt
         val modelReadPath = options.getOrElse("load-model", "")
         val lastResample = options.getOrElse("resample-node", "0").toInt
         val lastDepth = options.getOrElse("last-depth", "1").toInt
+        println(s"Number of cores is set to $numCores")
 
-        val trainInstance = sc.textFile(trainPath).map(InstanceFactory.rowToInstance).cache()
+        val trainInstance = sc.textFile(trainPath, minPartitions=numCores)
+                              .map(InstanceFactory.rowToInstance)
+                              .cache()
+        trainInstance.setName("all train data")
         val baseNodes = {
             if (modelReadPath != "") SplitterNode.load(modelReadPath)
             else                     Array[SplitterNode]()
         }
         val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate) _
-        val curBaseToCSCFunc = baseToCSC(numSlices, sc.defaultParallelism) _
+        val curBaseToCSCFunc = baseToCSC(numSlices, numCores) _
         val (train, test) =
             if (source == 2) {
                 val trainObjFile = options("load-train-rdd")
@@ -227,9 +236,14 @@ object SpliceSite {
             } else {
                 curSampleFunc(baseNodes)
             }
+        train.setName("sampled train data")
+        test.setName("sampled test data")
         val y = sc.broadcast(train.map(_._1).collect)
         val trainCSC = curBaseToCSCFunc(train)
-        val testRef = sc.textFile(testPath).map(InstanceFactory.rowToInstance).cache()
+        val testRef = sc.textFile(testPath, minPartitions=numCores)
+                        .map(InstanceFactory.rowToInstance)
+                        .cache()
+        testRef.setName("all test data")
 
         if (source == 1) {
             train.saveAsObjectFile(trainSavePath)
@@ -331,6 +345,6 @@ object SpliceSite {
 // ./spark/bin/spark-submit --master spark://ec2-54-89-40-11.compute-1.amazonaws.com:7077 \
 // --class sparkboost.examples.SpliceSite --conf spark.executor.extraJavaOptions=-XX:+UseG1GC \
 // ./sparkboost_2.11-0.1.jar --train /train-txt --test /test-txt --sample-frac 0.001 \
-// --num-slices 2 --max-iteration 0 --algorithm 1 --save-model ./model.bin \
+// --cores 80 --num-slices 2 --max-iteration 0 --algorithm 1 --save-model ./model.bin \
 // --save-train-rdd /train0 --save-test-rdd /test0 --data-source 1 \
 // --candidate-splits 100 --admit-splits 30 --improve 0.01
