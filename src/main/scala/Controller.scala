@@ -148,9 +148,14 @@ class Controller(
         var auPRCTestRef = auPRCTest
         var lossFuncTestRef = lossFuncTest
         if (test.id != testRef.id) {
-            testRefMetrics = new BinaryClassificationMetrics(testRefPredictionAndLabels)
-            auPRCTestRef = testRefMetrics.areaUnderPR + adjust(testRefMetrics.pr.take(2))
-            lossFuncTestRef = getLossFunc(testRefPredictionAndLabels)
+            if (iteration % 100 == 0) {
+                testRefMetrics = new BinaryClassificationMetrics(testRefPredictionAndLabels)
+                auPRCTestRef = testRefMetrics.areaUnderPR + adjust(testRefMetrics.pr.take(2))
+                lossFuncTestRef = getLossFunc(testRefPredictionAndLabels)
+            } else {
+                auPRCTestRef = Double.NaN
+                lossFuncTestRef = (Double.NaN, Double.NaN, Double.NaN, Double.NaN)
+            }
         }
 
         println("Training auPRC = " + auPRCTrain)
