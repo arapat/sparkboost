@@ -39,20 +39,19 @@ object Type {
 }
 
 class Controller(
-    val sc: SparkContext,
+    @transient val sc: SparkContext,
     val sampleFunc: Type.SampleFunc,
     val baseToCSCFunc: Type.BaseToCSCFunc,
     val learnerFunc: Type.LearnerFunc,
     val updateFunc: Type.UpdateFunc,
     val lossFunc: Type.LossFunc,
     val weightFunc: Type.WeightFunc,
-    val trainPath: String,
     val minImproveFact: Double,
     val candidateSize: Int,
     val admitSize: Int,
     val modelWritePath: String,
     val maxIters: Int
-) extends Comparison {
+) extends java.io.Serializable with Comparison {
     val SEC = 1000000
 
     var baseTrain: Type.BaseRDD = null
@@ -123,19 +122,19 @@ class Controller(
         }
 
         // Part 1 - Compute auPRC
-        val trainPredictionAndLabels = baseTrain.map {case t =>
+        val trainPredictionAndLabels = baseTrain.map(t =>
             (SplitterNode.getScore(0, localNodes, t._2).toDouble -
                 SplitterNode.getScore(0, localNodes, t._2, lastResample).toDouble, t._1.toDouble)
-        }.cache()
+        ).cache()
 
-        val testPredictionAndLabels = test.map {case t =>
+        val testPredictionAndLabels = test.map(t =>
             (SplitterNode.getScore(0, localNodes, t._2).toDouble -
                 SplitterNode.getScore(0, localNodes, t._2, lastResample).toDouble, t._1.toDouble)
-        }.cache()
+        ).cache()
 
-        val testRefPredictionAndLabels = testRef.map {case t =>
+        val testRefPredictionAndLabels = testRef.map(t =>
             (SplitterNode.getScore(0, localNodes, t._2).toDouble, t._1.toDouble)
-        }.cache()
+        ).cache()
 
         val trainMetrics = new BinaryClassificationMetrics(trainPredictionAndLabels)
         val auPRCTrain = trainMetrics.areaUnderPR + adjust(trainMetrics.pr.take(2))

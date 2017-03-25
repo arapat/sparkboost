@@ -111,12 +111,11 @@ object SpliceSite {
                .toMap
     }
 
-    def sampleData(sc: SparkContext, trainPath: String, sampleFrac: Double, getWeight: (Int, Double, Double) => Double)
+    def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, getWeight: (Int, Double, Double) => Double)
                   (nodes: Array[SplitterNode]) = {
-        val weightsTrain = sc.textFile(trainPath).map(InstanceFactory.rowToInstance)
-                             .map(t =>
-                                (getWeight(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2)), t)
-                             ).cache
+        val weightsTrain = trainInstance.map(t =>
+                            (getWeight(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2)), t)
+                           ).cache
 
         val sumWeight = weightsTrain.map(_._1).reduce(_ + _)
         val posWeight = weightsTrain.filter(_._2._1 > 0).map(_._1).reduce(_ + _)
@@ -213,11 +212,12 @@ object SpliceSite {
         val lastResample = options.getOrElse("resample-node", "0").toInt
         val lastDepth = options.getOrElse("last-depth", "1").toInt
 
+        val trainInstance = sc.textFile(trainPath).map(InstanceFactory.rowToInstance).cache()
         val baseNodes = {
             if (modelReadPath != "") SplitterNode.load(modelReadPath)
             else                     Array[SplitterNode]()
         }
-        val curSampleFunc = sampleData(sc, trainPath, sampleFrac, UpdateFunc.adaboostWeightUpdate) _
+        val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate) _
         val curBaseToCSCFunc = baseToCSC(numSlices, sc.defaultParallelism) _
         val (train, test) =
             if (source == 2) {
@@ -231,8 +231,10 @@ object SpliceSite {
         val trainCSC = curBaseToCSCFunc(train)
         val testRef = sc.textFile(testPath).map(InstanceFactory.rowToInstance).cache()
 
-        train.saveAsObjectFile(trainSavePath)
-        test.saveAsObjectFile(testSavePath)
+        if (source == 1) {
+            train.saveAsObjectFile(trainSavePath)
+            test.saveAsObjectFile(testSavePath)
+        }
 
         println("Train data size: " + train.count)
         println("Test data size: " + test.count)
@@ -257,7 +259,6 @@ object SpliceSite {
                     UpdateFunc.adaboostUpdate,
                     LossFunc.lossfunc,
                     UpdateFunc.adaboostWeightUpdate,
-                    trainPath,
                     improveFact,
                     candidateSize,
                     admitSize,
@@ -327,7 +328,9 @@ object SpliceSite {
 
 // command:
 //
-// ./spark/bin/spark-submit --master spark://ec2-54-152-198-27.compute-1.amazonaws.com:7077
-// --class sparkboost.examples.SpliceSite --conf spark.executor.extraJavaOptions=-XX:+UseG1GC
-// ./sparkboost_2.11-0.1.jar --train /train-txt --sample-frac 0.05 --iteration 500 --depth 2
-// --algorithm 1 --save-model ./model.bin --format 2 --train-rdd /train0 --test-rdd /test0
+// ./spark/bin/spark-submit --master spark://ec2-54-89-40-11.compute-1.amazonaws.com:7077 \
+// --class sparkboost.examples.SpliceSite --conf spark.executor.extraJavaOptions=-XX:+UseG1GC \
+// ./sparkboost_2.11-0.1.jar --train /train-txt --test /test-txt --sample-frac 0.001 \
+// --num-slices 2 --max-iteration 0 --algorithm 1 --save-model ./model.bin \
+// --save-train-rdd /train0 --save-test-rdd /test0 --data-source 1 \
+// --candidate-splits 100 --admit-splits 30 --improve 0.01
