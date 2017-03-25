@@ -71,7 +71,7 @@ class Controller(
 
     val trainAvgScores = new Queue[Double]()
     val testAvgScores = new Queue[Double]()
-    val queueSize = admitSize * 3
+    val queueSize = admitSize * 15
 
     def setDatasets(baseTrain: Type.BaseRDD, train: Type.ColRDD, y: Type.BrAI,
                     test: Type.BaseRDD, testRef: Type.BaseRDD = null) {
@@ -205,7 +205,7 @@ class Controller(
     }
 
     def isOverfit(avgScore: Double) = {
-        if (testAvgScores.size > 0 && compare(testAvgScores.head, avgScore) > 0) {
+        if (testAvgScores.size > 0 && compare(testAvgScores.head, avgScore) >= 0) {
             testAvgScores.clear()
         }
         testAvgScores.enqueue(avgScore)
