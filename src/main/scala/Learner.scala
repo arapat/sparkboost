@@ -253,9 +253,12 @@ object Learner extends Comparison {
 
         val f = findBestSplit(y, w, assign, bcWeightsMap, nodes, maxDepth, lossFunc) _
         // suggests: List((minScore, nodeInfo, timer))
-        val suggests = train.filter(_.active)
-                            .map(f)
-                            .reduce(takeTopK(candidateSize))
+        val allSplits = train.filter(_.active)
+                             .map(f)
+                             .cache()
+        val effectCandidateSize = if (candidateSize < 0) (allSplits.count * 0.1).ceil.toInt else candidateSize
+        val suggests = allSplits.reduce(takeTopK((effectCandidateSize)))
+        allSplits.unpersist()
         // println("Node " + nodes.size + " learner info")
         println("Collect weights info took (ms) " + timeWeightInfo)
         // println("Min score: " + "%.2f".format(minScore._1))

@@ -341,7 +341,7 @@ class Controller(
             ).groupBy(_._2)
             val pTrain = train.filter(t => suggests.contains(t.index)).cache
             var effectAdmitSize =
-                    if (candidateSize < 0) (suggests.map(_._2.size).reduce(_ + _) * 0.1).floor.toInt
+                    if (candidateSize < 0) (suggests.map(_._2.size).reduce(_ + _) * 0.3).ceil.toInt
                     else                   admitSize
 
             // Iteratively, we select and convert `R` suggestions into weak learners
