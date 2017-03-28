@@ -33,7 +33,7 @@ object Type {
     type Suggest = (Int, Int, Double, Boolean, Double)
     type LearnerObj = List[Suggest]
     type LearnerFunc = (SparkContext, ColRDD, BrAI, BrAD,
-                        Array[BrSV], Array[BrNode], Int, LossFunc) => LearnerObj
+                        Array[BrSV], Array[BrNode], Int, Int, LossFunc) => LearnerObj
     type UpdateFunc = (ColRDD, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 }
@@ -337,7 +337,7 @@ class Controller(
 
             // LearnerFunc gives 100 suggestions
             val suggests: Map[Int, Type.LearnerObj] = learnerFunc(
-                sc, train, y, weights, assign.toArray, nodes.toArray, depth, lossFunc
+                sc, train, y, weights, assign.toArray, nodes.toArray, depth, candidateSize, lossFunc
             ).groupBy(_._2)
             val pTrain = train.filter(t => suggests.contains(t.index)).cache
 

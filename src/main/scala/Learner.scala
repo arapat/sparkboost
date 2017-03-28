@@ -233,6 +233,7 @@ object Learner extends Comparison {
             train: RDDType, y: BrAI,
             w: BrAD, assign: Array[BrSV],
             nodes: ABrNode, maxDepth: Int,
+            candidateSize: Int,
             lossFunc: (Double, Double, Double) => Double) = {
         val SEC = 1000000
         var tStart = System.nanoTime()
@@ -250,7 +251,7 @@ object Learner extends Comparison {
         // suggests: List((minScore, nodeInfo, timer))
         val suggests = train.filter(_.active)
                             .map(f)
-                            .reduce(takeTopK(100))  // TODO: Make this (100) a parameter
+                            .reduce(takeTopK(candidateSize))
         // println("Node " + nodes.size + " learner info")
         println("Collect weights info took (ms) " + timeWeightInfo)
         // println("Min score: " + "%.2f".format(minScore._1))
