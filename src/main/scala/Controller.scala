@@ -407,6 +407,7 @@ class Controller(
                     println("Underfitting occurs at iteration " + localNodes.size +
                         s": increasing tree depth from $depth to " + (depth + 1))
                     depth += 1
+                    trainAvgScores.clear()
                     admitted = admitSize  // To break out the while loop
                     println
                 } else if (isOverfit(curTestAvgScore)) {
