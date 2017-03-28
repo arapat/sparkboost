@@ -263,6 +263,18 @@ class Controller(
         val trainCSC = baseToCSCFunc(baseTrain)
         setDatasets(baseTrain, trainCSC, y, test)
         lastResample = localNodes.size
+
+        println("Train data size: " + baseTrain.count)
+        println("Test data size: " + test.count)
+        println("Distinct positive samples in the training data: " +
+                baseTrain.filter(_._1 > 0).count)
+        println("Distinct negative samples in the training data: " +
+                baseTrain.filter(_._1 < 0).count)
+        println("Distinct positive samples in the test data: " +
+                test.filter(_._1 > 0).count)
+        println("Distinct negative samples in the test data: " +
+                test.filter(_._1 < 0).count)
+        println()
     }
 
     def runADTree(): Array[SplitterNode] = {
