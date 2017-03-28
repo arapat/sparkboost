@@ -218,14 +218,18 @@ object Learner extends Comparison {
         var xs1 = xs
         var ys1 = ys
         var ret = List[ResultType]()
-        while (ret.size < K && xs1.size > 0 && ys1.size > 0) {
+        while ((K < 0 || ret.size < K) && xs1.size > 0 && ys1.size > 0) {
             (xs1, ys1) match {
                 case (x :: xs2, y :: ys2) =>
                     if (x._1._1 < y._1._1) { ret = x +: ret; xs1 = xs2 }
                     else                   { ret = y +: ret; ys1 = ys2 }
             }
         }
-        ret.reverse ++ xs1.take(K - ret.size) ++ ys1.take(K - ret.size)
+        if (K < 0) {
+            ret.reverse ++ xs1 ++ ys1
+        } else {
+            ret.reverse ++ xs1.take(K - ret.size) ++ ys1.take(K - ret.size)
+        }
     }
 
     def partitionedGreedySplit(

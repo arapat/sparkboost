@@ -69,9 +69,9 @@ class Controller(
     var localNodes: Array[SplitterNode] = null
     var lastResample = 0
 
-    val trainAvgScores = new Queue[Double]()
-    val testAvgScores = new Queue[Double]()
-    val queueSize = admitSize * 15
+    val trainAvgScores = new Queue[(Int, Double)]()
+    val testAvgScores = new Queue[(Int, Double)]()
+    val queueBatchLimit = 15
 
     def setDatasets(baseTrain: Type.BaseRDD, train: Type.ColRDD, y: Type.BrAI,
                     test: Type.BaseRDD, testRef: Type.BaseRDD = null) {
@@ -204,21 +204,21 @@ class Controller(
         (lossFuncTrain._1, lossFuncTest._1)
     }
 
-    def isUnderfit(avgScore: Double) = {
-        trainAvgScores.enqueue(avgScore)
-        val improve = (trainAvgScores.head - trainAvgScores.last) / trainAvgScores.head
-        if (trainAvgScores.size > queueSize) {
+    def isUnderfit(batch: Int, avgScore: Double) = {
+        trainAvgScores.enqueue((batch, avgScore))
+        while (batch - trainAvgScores.head._1 >= queueBatchLimit) {
             trainAvgScores.dequeue()
         }
-        trainAvgScores.size >= queueSize && compare(improve, minImproveFact) < 0
+        val improve = (trainAvgScores.head._2 - avgScore) / trainAvgScores.head._2
+        batch - trainAvgScores.head._1 >= queueBatchLimit - 1 && compare(improve, minImproveFact) < 0
     }
 
-    def isOverfit(avgScore: Double) = {
-        if (testAvgScores.size > 0 && compare(testAvgScores.head, avgScore) >= 0) {
+    def isOverfit(batch: Int, avgScore: Double) = {
+        if (testAvgScores.size > 0 && compare(testAvgScores.head._2, avgScore) >= 0) {
             testAvgScores.clear()
         }
-        testAvgScores.enqueue(avgScore)
-        testAvgScores.size >= queueSize
+        testAvgScores.enqueue((batch, avgScore))
+        batch - trainAvgScores.head._1 >= queueBatchLimit - 1
     }
 
     def overfitRollback() {
@@ -229,7 +229,7 @@ class Controller(
         localNodes = localNodes.take(k)
     }
 
-    def setMetaData() {
+    def setMetaData(batch: Int) {
         assign = new ArrayBuffer[Broadcast[SparseVector]]()
         weights = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
         val fa = sc.broadcast(
@@ -252,8 +252,8 @@ class Controller(
         trainAvgScores.clear()
         testAvgScores.clear()
         val (trainAvgScore, testAvgScore) = printStats(0)
-        isUnderfit(trainAvgScore)
-        isOverfit(testAvgScore)
+        isUnderfit(batch, trainAvgScore)
+        isOverfit(batch, testAvgScore)
         println()
     }
 
@@ -325,7 +325,7 @@ class Controller(
             println(s"Root node predicts ($predVal, 0.0)")
         }
 
-        setMetaData()
+        setMetaData(0)
 
         var batch = 0
         var curIter = 0
@@ -340,10 +340,13 @@ class Controller(
                 sc, train, y, weights, assign.toArray, nodes.toArray, depth, candidateSize, lossFunc
             ).groupBy(_._2)
             val pTrain = train.filter(t => suggests.contains(t.index)).cache
+            var effectAdmitSize =
+                    if (candidateSize < 0) (suggests.map(_._2.size).reduce(_ + _) * 0.1).floor.toInt
+                    else                   admitSize
 
             // Iteratively, we select and convert `R` suggestions into weak learners
             var admitted = 0
-            while (admitted < admitSize) {
+            while (admitted < effectAdmitSize) {
                 curIter += 1
                 println("Node " + localNodes.size)
                 val sumWeight = weights.value.reduce(_ + _)
@@ -403,21 +406,21 @@ class Controller(
                 }
                 println
 
-                if (isUnderfit(curTrainAvgScore)) {
+                if (isUnderfit(batch, curTrainAvgScore)) {
                     println("Underfitting occurs at iteration " + localNodes.size +
                         s": increasing tree depth from $depth to " + (depth + 1))
                     depth += 1
                     trainAvgScores.clear()
-                    admitted = admitSize  // To break out the while loop
+                    admitted = effectAdmitSize  // To break out the while loop
                     println
-                } else if (isOverfit(curTestAvgScore)) {
+                } else if (isOverfit(batch, curTestAvgScore)) {
                     println("Overfitting occurs at iteration " + localNodes.size +
                         ": resampling data")
                     overfitRollback()
                     resample()
-                    setMetaData()
+                    setMetaData(batch)
                     depth = 1
-                    admitted = admitSize  // To break out the while loop
+                    admitted = effectAdmitSize  // To break out the while loop
                     println
                 }
             }
