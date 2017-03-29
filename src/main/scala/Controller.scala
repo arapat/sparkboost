@@ -71,7 +71,7 @@ class Controller(
 
     val trainAvgScores = new Queue[(Int, Double)]()
     val testAvgScores = new Queue[(Int, Double)]()
-    val queueBatchLimit = 15
+    val queueBatchLimit = 30
 
     def setDatasets(baseTrain: Type.BaseRDD, train: Type.ColRDD, y: Type.BrAI,
                     test: Type.BaseRDD, testRef: Type.BaseRDD = null) {
@@ -343,6 +343,7 @@ class Controller(
             var effectAdmitSize =
                     if (candidateSize < 0) (suggests.map(_._2.size).reduce(_ + _) * 0.3).ceil.toInt
                     else                   admitSize
+            println("Number of splits to be selected: " + effectAdmitSize)
 
             // Iteratively, we select and convert `R` suggestions into weak learners
             var admitted = 0

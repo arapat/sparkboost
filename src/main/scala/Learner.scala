@@ -260,6 +260,7 @@ object Learner extends Comparison {
         val suggests = allSplits.reduce(takeTopK((effectCandidateSize)))
         allSplits.unpersist()
         // println("Node " + nodes.size + " learner info")
+        println("Number of candidates: " + suggests.size)
         println("Collect weights info took (ms) " + timeWeightInfo)
         // println("Min score: " + "%.2f".format(minScore._1))
         // println("Reject weight/count: " + "%.2f".format(minScore._2._1) + " / " + minScore._3._1)
