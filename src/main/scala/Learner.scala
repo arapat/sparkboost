@@ -196,10 +196,13 @@ object Learner extends Comparison {
 
         val result = nodes.filter(_.value.depth < maxDepth)
                           .map(node => findBest(node.value))
-                          .reduce((a, b) => if (a._1._1 < b._1._1) a else b)
-        val gtLog: Array[Double] = globalTimeLog.toArray
-        List((result._1, result._2,
-            (System.nanoTime() - timer).toDouble +: ((result._3) ++ (Array(9999.0)) ++ gtLog)))
+                          .sortBy(_._1._1)
+                          .toList
+        result
+                          // .reduce((a, b) => if (a._1._1 < b._1._1) a else b)
+        // val gtLog: Array[Double] = globalTimeLog.toArray
+        // List((result._1, result._2,
+          //  (System.nanoTime() - timer).toDouble +: ((result._3) ++ (Array(9999.0)) ++ gtLog)))
         // Will return following tuple:
         // (minScore, nodeInfo)
         // where minScore consists of
@@ -256,7 +259,9 @@ object Learner extends Comparison {
         val allSplits = train.filter(_.active)
                              .map(f)
                              .cache()
-        val effectCandidateSize = if (candidateSize < 0) (allSplits.count * 0.1).ceil.toInt else candidateSize
+        val effectCandidateSize =
+            if (candidateSize < 0) (allSplits.map(_.size).reduce(_ + _) * 0.1).ceil.toInt
+            else                   candidateSize
         val suggests = allSplits.reduce(takeTopK((effectCandidateSize)))
         allSplits.unpersist()
         // println("Node " + nodes.size + " learner info")
