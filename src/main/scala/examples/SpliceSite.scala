@@ -195,6 +195,7 @@ object SpliceSite {
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .set("spark.kryoserializer.buffer.mb","24")
         val sc = new SparkContext(conf)
+        sc.setCheckpointDir("/checkpoint/")
 
         // Parse and read options
         val options = parseOptions(args)
