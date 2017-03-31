@@ -218,7 +218,7 @@ class Controller(
             testAvgScores.clear()
         }
         testAvgScores.enqueue((batch, avgScore))
-        batch - trainAvgScores.head._1 >= queueBatchLimit - 1
+        batch - testAvgScores.head._1 >= queueBatchLimit - 1
     }
 
     def overfitRollback() {
