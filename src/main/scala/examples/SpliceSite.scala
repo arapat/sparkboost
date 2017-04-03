@@ -84,9 +84,10 @@ object SpliceSite {
                                  2 -> read from object files of an existing sample (requires additional parameters, see below)
         --candidate-splits - number of candidates split points to select in each batch
         --admit-splits     - number of split points to be added to the tree for each batch of candidates
-        --improve          - percentage of improvement expected for re-sampling (0.0, 1.0)
+        --improve          - percentage of improvement expected for re-sampling range in (0.0, 1.0)
 
     Optional:
+        --improve-window   - number of iterations to wait before declaring overfitting/underfitting
         --cores            - number of cores available for this job
         --load-model       - file path to load the model
         --last-resample    - the last tree node before resampling (1-based)
@@ -213,6 +214,7 @@ object SpliceSite {
         val admitSize = options("admit-splits").toInt
         val improveFact = options("improve").toDouble
         // Optional options
+        val improveWindow = options.getOrElse("improve-window", "100").toInt
         val numCores = options.getOrElse("cores", sc.defaultParallelism.toString).toInt
         val modelReadPath = options.getOrElse("load-model", "")
         val lastResample = options.getOrElse("resample-node", "0").toInt
@@ -275,6 +277,7 @@ object SpliceSite {
                     LossFunc.lossfunc,
                     UpdateFunc.adaboostWeightUpdate,
                     improveFact,
+                    improveWindow,
                     candidateSize,
                     admitSize,
                     modelWritePath,

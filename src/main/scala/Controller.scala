@@ -47,6 +47,7 @@ class Controller(
     val lossFunc: Type.LossFunc,
     val weightFunc: Type.WeightFunc,
     val minImproveFact: Double,
+    val improveWindow: Int,
     val candidateSize: Int,
     val admitSize: Int,
     val modelWritePath: String,
@@ -71,7 +72,6 @@ class Controller(
 
     val trainAvgScores = new Queue[(Int, Double)]()
     val testAvgScores = new Queue[(Int, Double)]()
-    val queueBatchLimit = 30
 
     def setDatasets(baseTrain: Type.BaseRDD, train: Type.ColRDD, y: Type.BrAI,
                     test: Type.BaseRDD, testRef: Type.BaseRDD = null) {
@@ -206,11 +206,11 @@ class Controller(
 
     def isUnderfit(batch: Int, avgScore: Double) = {
         trainAvgScores.enqueue((batch, avgScore))
-        while (batch - trainAvgScores.head._1 >= queueBatchLimit) {
+        while (trainAvgScores.size > improveWindow) {
             trainAvgScores.dequeue()
         }
         val improve = (trainAvgScores.head._2 - avgScore) / trainAvgScores.head._2
-        batch - trainAvgScores.head._1 >= queueBatchLimit - 1 && compare(improve, minImproveFact) < 0
+        trainAvgScores.size >= improveWindow && compare(improve, minImproveFact) < 0
     }
 
     def isOverfit(batch: Int, avgScore: Double) = {
@@ -218,7 +218,7 @@ class Controller(
             testAvgScores.clear()
         }
         testAvgScores.enqueue((batch, avgScore))
-        batch - testAvgScores.head._1 >= queueBatchLimit - 1
+        testAvgScores.size >= improveWindow
     }
 
     def overfitRollback() {
