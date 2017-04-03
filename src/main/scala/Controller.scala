@@ -171,7 +171,7 @@ class Controller(
         println("Testing (ref) average score = " + lossFuncTestRef._1)
         println("Testing (ref) average score (positive) = " + lossFuncTestRef._2)
         println("Testing (ref) average score (negative) = " + lossFuncTestRef._3)
-        if (iteration % 100 == 0) {
+        if (iteration % 1000 == 0) {
             println("Training PR = " + trainMetrics.pr.collect.toList)
             println("Testing PR = " + testMetrics.pr.collect.toList)
             println("Testing (ref) PR = " + testRefMetrics.pr.collect.toList)
