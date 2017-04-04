@@ -227,6 +227,7 @@ class Controller(
         (k until nodes.size).foreach { i => nodes(i).destroy() }
         nodes = nodes.take(k)
         localNodes = localNodes.take(k)
+        localNodes.foreach{ i => i.child = i.child.filter(_ < k) }
     }
 
     def setMetaData(batch: Int) {
