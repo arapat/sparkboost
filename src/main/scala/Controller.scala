@@ -413,6 +413,7 @@ class Controller(
                         s": increasing tree depth from $depth to " + (depth + 1))
                     depth += 1
                     trainAvgScores.clear()
+                    testAvgScores.clear()
                     admitted = effectAdmitSize  // To break out the while loop
                     println
                 } else if (isOverfit(batch, curTestAvgScore)) {
