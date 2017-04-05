@@ -210,7 +210,10 @@ class Controller(
             trainAvgScores.dequeue()
         }
         val improve = (trainAvgScores.head._2 - avgScore) / trainAvgScores.head._2
-        trainAvgScores.size >= improveWindow && compare(improve, minImproveFact) < 0
+        trainAvgScores.size >= improveWindow && (
+            compare(minImproveFact) == 0 && compare(improve) > 0 ||
+            compare(improve, minImproveFact) < 0
+        )
     }
 
     def isOverfit(batch: Int, avgScore: Double) = {
@@ -309,7 +312,8 @@ class Controller(
                 (
                     lossFunc(sumWeight - posWeight - negWeight, posWeight, negWeight),
                     (posWeight, posCount, negWeight, negCount),
-                    (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts)
+                    (prtNodeIndex, splitIndex, splitVal, splitEval,
+                        0.5 * safeLogRatio(posWeight, negWeight))
                 )
             }).reduce((a, b) => if (a._1 < b._1) a else b)
         }

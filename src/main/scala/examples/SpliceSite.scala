@@ -113,7 +113,8 @@ object SpliceSite {
                .toMap
     }
 
-    def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, getWeight: (Int, Double, Double) => Double)
+    def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, getWeight: (Int, Double, Double) => Double,
+                   trainSavePath: String, testSavePath: String)
                   (nodes: Array[SplitterNode]) = {
         val weightsTrain = trainInstance.map(t =>
                             (getWeight(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2)), t)
@@ -164,8 +165,19 @@ object SpliceSite {
         test.setName("sampled test data")
         train.cache()
         test.cache()
-        train.count
-        test.count
+
+        val hadoopConf = new org.apache.hadoop.conf.Configuration()
+        val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI("hdfs://localhost:9000"), hadoopConf)
+        try {
+            hdfs.delete(new org.apache.hadoop.fs.Path(trainSavePath), true)
+            hdfs.delete(new org.apache.hadoop.fs.Path(testSavePath), true)
+        } catch {
+            case _ : Throwable => {
+            }
+        }
+        train.saveAsObjectFile(trainSavePath)
+        test.saveAsObjectFile(testSavePath)
+
         weightsTrain.unpersist()
         (train, test)
     }
@@ -229,7 +241,8 @@ object SpliceSite {
             if (modelReadPath != "") SplitterNode.load(modelReadPath)
             else                     Array[SplitterNode]()
         }
-        val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate) _
+        val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate,
+                                trainSavePath, testSavePath) _
         val curBaseToCSCFunc = baseToCSC(numSlices, numCores) _
         val (train, test) =
             if (source == 2) {
@@ -247,11 +260,6 @@ object SpliceSite {
                         .map(InstanceFactory.rowToInstance)
                         .cache()
         testRef.setName("all test data")
-
-        if (source == 1) {
-            train.saveAsObjectFile(trainSavePath)
-            test.saveAsObjectFile(testSavePath)
-        }
 
         println("Train data size: " + train.count)
         println("Test data size: " + test.count)
