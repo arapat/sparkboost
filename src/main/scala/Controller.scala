@@ -346,8 +346,8 @@ class Controller(
             ).groupBy(_._2)
             val pTrain = train.filter(t => suggests.contains(t.index)).cache
             var effectAdmitSize =
-                    if (candidateSize < 0) (suggests.map(_._2.size).reduce(_ + _) * 0.3).ceil.toInt
-                    else                   admitSize
+                    if (candidateSize <= 0) (suggests.map(_._2.size).reduce(_ + _) * 0.3).ceil.toInt
+                    else                    admitSize
             println("Number of splits to be selected: " + effectAdmitSize)
 
             // Iteratively, we select and convert `R` suggestions into weak learners
