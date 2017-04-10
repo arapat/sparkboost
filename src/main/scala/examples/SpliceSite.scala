@@ -90,6 +90,7 @@ object SpliceSite {
         --improve-window   - number of iterations to wait before declaring overfitting/underfitting
         --cores            - number of cores available for this job
         --load-model       - file path to load the model
+        --model-length     - length of the loaded model (for handling rollback)
         --last-resample    - the last tree node before resampling (1-based)
         --last-depth       - the depth of the tree before existing
 
@@ -114,7 +115,7 @@ object SpliceSite {
     }
 
     def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, getWeight: (Int, Double, Double) => Double,
-                   trainSavePath: String, testSavePath: String)
+                   url: String, trainSavePath: String, testSavePath: String)
                   (nodes: Array[SplitterNode]) = {
         val weightsTrain = trainInstance.map(t =>
                             (getWeight(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2)), t)
@@ -167,16 +168,19 @@ object SpliceSite {
         test.cache()
 
         val hadoopConf = new org.apache.hadoop.conf.Configuration()
-        val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI("hdfs://localhost:9000"), hadoopConf)
+        val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI(s"hdfs://$url"), hadoopConf)
         try {
             hdfs.delete(new org.apache.hadoop.fs.Path(trainSavePath), true)
             hdfs.delete(new org.apache.hadoop.fs.Path(testSavePath), true)
+            train.saveAsObjectFile(trainSavePath)
+            test.saveAsObjectFile(testSavePath)
+            println("Re-sampled data saved.")
         } catch {
-            case _ : Throwable => {
+            case e : Throwable => {
+                println("Failed to save the resampled data.")
+                println("Error: " + e)
             }
         }
-        train.saveAsObjectFile(trainSavePath)
-        test.saveAsObjectFile(testSavePath)
 
         weightsTrain.unpersist()
         (train, test)
@@ -229,6 +233,7 @@ object SpliceSite {
         val improveWindow = options.getOrElse("improve-window", "100").toInt
         val numCores = options.getOrElse("cores", sc.defaultParallelism.toString).toInt
         val modelReadPath = options.getOrElse("load-model", "")
+        val modelLength = options.getOrElse("model-length", "0").toInt
         val lastResample = options.getOrElse("resample-node", "0").toInt
         val lastDepth = options.getOrElse("last-depth", "1").toInt
         println(s"Number of cores is set to $numCores")
@@ -237,11 +242,16 @@ object SpliceSite {
                               .map(InstanceFactory.rowToInstance)
                               .cache()
         trainInstance.setName("all train data")
-        val baseNodes = {
+        val loadNodes = {
             if (modelReadPath != "") SplitterNode.load(modelReadPath)
             else                     Array[SplitterNode]()
         }
+        val baseNodes = {
+            if (modelLength > 0) loadNodes.take(modelLength)
+            else                 loadNodes
+        }
         val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate,
+                                sc.master.split("://")(1).split(":")(0) + ":9000",
                                 trainSavePath, testSavePath) _
         val curBaseToCSCFunc = baseToCSC(numSlices, numCores) _
         val (train, test) =

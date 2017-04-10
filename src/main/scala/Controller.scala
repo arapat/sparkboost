@@ -211,7 +211,7 @@ class Controller(
         }
         val improve = (trainAvgScores.head._2 - avgScore) / trainAvgScores.head._2
         trainAvgScores.size >= improveWindow && (
-            compare(minImproveFact) == 0 && compare(improve) > 0 ||
+            compare(minImproveFact) == 0 && compare(improve) <= 0 ||
             compare(improve, minImproveFact) < 0
         )
     }
