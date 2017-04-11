@@ -24,7 +24,7 @@ object Learner extends Comparison {
     type WeightsMap = collection.Map[Int, Map[Int, (DoubleTuple3, IntTuple3)]]
     type MinScoreType = (Double, (Double, Double, Double), (Int, Int, Int))
     type NodeInfoType = (Int, Int, Double, Boolean, Double)
-    type ResultType = (MinScoreType, NodeInfoType, Array[Double])
+    type ResultType = (MinScoreType, NodeInfoType, (Long, Long))
     val assignAndLabelsTemplate = Array(-1, 0, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
 
     def getOverallWeights(y: BrAI, w: BrAD, assign: Array[BrSV], nodes: ABrNode, maxDepth: Int,
@@ -103,13 +103,14 @@ object Learner extends Comparison {
         }
 
         val timer = System.nanoTime()
-        val globalTimeLog = ArrayBuffer[Double]()
+
         val nodeWeights = nodeWeightsMap.value(data.batchId)
 
+        // time stamp
+        val timeStamp1 = System.nanoTime() - timer
+
         def findBest(node: SplitterNode): ResultType = {
-            val tstart = System.nanoTime()
-            val timeLog = ArrayBuffer[Double]()
-            var t0 = System.nanoTime()
+            val timer = System.nanoTime()
 
             val ((totalPositiveWeight, totalNegativeWeight, rejectWeight),
                  (totalPositiveCount, totalNegativeCount, rejectCount)) = nodeWeights(node.index)
@@ -130,6 +131,9 @@ object Learner extends Comparison {
                 }
             })
 
+            // time stamp
+            val timeStamp1 = System.nanoTime() - timer
+
             var positiveWeight = 0.0
             var positiveCount = 0
             var negativeWeight = 0.0
@@ -140,8 +144,6 @@ object Learner extends Comparison {
             var splitEval = true
             var predict = 0.0
 
-            timeLog.append(System.nanoTime() - t0)
-            t0 = System.nanoTime()
             for (i <- 0 until data.splits.size - 1) {
                 positiveWeight += weights.getOrElse((true, i), 0.0)
                 positiveCount += counts.getOrElse((true, i), 0)
@@ -188,21 +190,23 @@ object Learner extends Comparison {
                     case None => Nil
                 }
             }
-            timeLog.append(System.nanoTime() - t0)
 
-            globalTimeLog.append(System.nanoTime() - tstart)
-            (minScore, (node.index, data.index, splitVal, splitEval, predict), timeLog.toArray)
+            // time stamp
+            val timeStamp2 = System.nanoTime() - timer - timeStamp1
+
+            (minScore, (node.index, data.index, splitVal, splitEval, predict),
+                (timeStamp1, timeStamp2))
         }
 
         val result = nodes.filter(_.value.depth < maxDepth)
                           .map(node => findBest(node.value))
                           .sortBy(_._1._1)
                           .toList
-        result
-                          // .reduce((a, b) => if (a._1._1 < b._1._1) a else b)
-        // val gtLog: Array[Double] = globalTimeLog.toArray
-        // List((result._1, result._2,
-          //  (System.nanoTime() - timer).toDouble +: ((result._3) ++ (Array(9999.0)) ++ gtLog)))
+
+        val timeStamp2 = System.nanoTime() - timer - timeStamp1
+
+        (result, (timeStamp1, timeStamp2) +: result.map(_._3).toList)
+
         // Will return following tuple:
         // (minScore, nodeInfo)
         // where minScore consists of
@@ -259,10 +263,16 @@ object Learner extends Comparison {
         val allSplits = train.filter(_.active)
                              .map(f)
                              .cache()
+
+        println("findBestSplit timer sample:")
+        (allSplits.first._2).foreach(tp =>
+            print("(" + tp._1 / SEC + ", " + tp._2 / SEC + "), "))
+        println
+
         val effectCandidateSize =
-            if (candidateSize < 0) (allSplits.map(_.size).reduce(_ + _) * 0.1).ceil.toInt
+            if (candidateSize < 0) (allSplits.map(_._1.size).reduce(_ + _) * 0.1).ceil.toInt
             else                   candidateSize
-        val suggests = allSplits.reduce(takeTopK((effectCandidateSize)))
+        val suggests = allSplits.map(_._1).reduce(takeTopK((effectCandidateSize)))
         allSplits.unpersist()
         // println("Node " + nodes.size + " learner info")
         println("Number of candidates: " + suggests.size)

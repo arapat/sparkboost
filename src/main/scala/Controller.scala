@@ -356,12 +356,24 @@ class Controller(
                 curIter += 1
                 println("Node " + localNodes.size)
                 val sumWeight = weights.value.reduce(_ + _)
+
+                val timer = System.nanoTime()
+
+                val pTrainMap = pTrain.map(t => evaluate(t, suggests, sumWeight)).cache()
+                pTrainMap.count
+
+                val timeStamp1 = System.nanoTime - timer
+                println("Search time for Map (ms): " + timeStamp1 / SEC)
+
                 val (
                     minScore,
                     (posWeight, posCount, negWeight, negCount),
                     (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts)
-                ) = pTrain.map(t => evaluate(t, suggests, sumWeight))
-                          .reduce((a, b) => if (a._1 < b._1) a else b)
+                ) = pTrainMap.reduce((a, b) => if (a._1 < b._1) a else b)
+
+                val timeStamp2 = System.nanoTime - timer - timeStamp1
+                println("Search time for Reduce (ms): " + timeStamp2 / SEC)
+                pTrainMap.unpersist()
 
                 /*
                 TODO:
