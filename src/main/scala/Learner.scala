@@ -265,14 +265,22 @@ object Learner extends Comparison {
                              .cache()
 
         println("findBestSplit timer sample:")
+        val timerFirst = System.nanoTime()
         (allSplits.first._2).foreach(tp =>
             print("(" + tp._1 / SEC + ", " + tp._2 / SEC + "), "))
+        println("first method takes (ms) " + (System.nanoTime - timerFirst) / SEC)
         println
 
+        val timerReduce1 = System.nanoTime
         val effectCandidateSize =
             if (candidateSize < 0) (allSplits.map(_._1.size).reduce(_ + _) * 0.1).ceil.toInt
             else                   candidateSize
+        println("reduce1 takes (ms) " + (System.nanoTime - timerReduce1) / SEC)
+
+        val timerReduce2 = System.nanoTime
         val suggests = allSplits.map(_._1).reduce(takeTopK((effectCandidateSize)))
+        println("reduce2 takes (ms) " + (System.nanoTime - timerReduce2) / SEC)
+
         allSplits.unpersist()
         // println("Node " + nodes.size + " learner info")
         println("Number of candidates: " + suggests.size)
