@@ -24,7 +24,7 @@ object Learner extends Comparison {
     type WeightsMap = collection.Map[Int, Map[Int, (DoubleTuple3, IntTuple3)]]
     type MinScoreType = (Double, (Double, Double, Double), (Int, Int, Int))
     type NodeInfoType = (Int, Int, Double, Boolean, Double)
-    type ResultType = (MinScoreType, NodeInfoType, (Long, Long))
+    type ResultType = (MinScoreType, NodeInfoType, (Long, Long, Long))
     val assignAndLabelsTemplate = Array(-1, 0, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
 
     def getOverallWeights(y: BrAI, w: BrAD, assign: Array[BrSV], nodes: ABrNode, maxDepth: Int,
@@ -69,6 +69,8 @@ object Learner extends Comparison {
             nodes: ABrNode, maxDepth: Int,
             lossFunc: (Double, Double, Double) => Double
     )(data: Instances) = {
+        val timer = System.currentTimeMillis()
+
         def getSlot(x: Double) = {
             var left = -1
             var right = data.splits.size - 1
@@ -102,15 +104,13 @@ object Learner extends Comparison {
             }
         }
 
-        val timer = System.nanoTime()
-
         val nodeWeights = nodeWeightsMap.value(data.batchId)
 
         // time stamp
-        val timeStamp1 = System.nanoTime() - timer
+        val timeStamp1 = System.currentTimeMillis() - timer
 
         def findBest(node: SplitterNode): ResultType = {
-            val timer = System.nanoTime()
+            val timer = System.currentTimeMillis()
 
             val ((totalPositiveWeight, totalNegativeWeight, rejectWeight),
                  (totalPositiveCount, totalNegativeCount, rejectCount)) = nodeWeights(node.index)
@@ -132,7 +132,7 @@ object Learner extends Comparison {
             })
 
             // time stamp
-            val timeStamp1 = System.nanoTime() - timer
+            val timeStamp1 = System.currentTimeMillis() - timer
 
             var positiveWeight = 0.0
             var positiveCount = 0
@@ -192,10 +192,10 @@ object Learner extends Comparison {
             }
 
             // time stamp
-            val timeStamp2 = System.nanoTime() - timer - timeStamp1
+            val timeStamp2 = System.currentTimeMillis() - timer - timeStamp1
 
             (minScore, (node.index, data.index, splitVal, splitEval, predict),
-                (timeStamp1, timeStamp2))
+                (timeStamp1, timeStamp2, timer))
         }
 
         val result = nodes.filter(_.value.depth < maxDepth)
@@ -203,9 +203,9 @@ object Learner extends Comparison {
                           .sortBy(_._1._1)
                           .toList
 
-        val timeStamp2 = System.nanoTime() - timer - timeStamp1
+        val timeStamp2 = System.currentTimeMillis() - timer - timeStamp1
 
-        (result, (timeStamp1, timeStamp2) +: result.map(_._3).toList)
+        (result, (timeStamp1, timeStamp2, timer) +: result.map(_._3).toList)
 
         // Will return following tuple:
         // (minScore, nodeInfo)
@@ -246,8 +246,7 @@ object Learner extends Comparison {
             nodes: ABrNode, maxDepth: Int,
             candidateSize: Int,
             lossFunc: (Double, Double, Double) => Double) = {
-        val SEC = 1000000
-        var tStart = System.nanoTime()
+        var tStart = System.currentTimeMillis()
         val totalWeight = w.value.sum
         val totalCount = w.value.size
         val nodeWeightsMap = train.filter(_.index == 0).map(
@@ -255,8 +254,8 @@ object Learner extends Comparison {
         ).collectAsMap
         val bcWeightsMap = sc.broadcast(nodeWeightsMap)
 
-        val timeWeightInfo = (System.nanoTime() - tStart) / SEC
-        tStart = System.nanoTime()
+        val timeWeightInfo = System.currentTimeMillis() - tStart
+        tStart = System.currentTimeMillis()
 
         val f = findBestSplit(y, w, assign, bcWeightsMap, nodes, maxDepth, lossFunc) _
         // suggests: List((minScore, nodeInfo, timer))
@@ -264,25 +263,25 @@ object Learner extends Comparison {
                              .map(f)
                              .cache()
 
-        val timerMap = System.nanoTime()
+        val timerMap = System.currentTimeMillis()
         allSplits.count
-        println("allSplits map takes (ms) " + (System.nanoTime - timerMap) / SEC)
+        println("allSplits map took (ms) " + (System.currentTimeMillis - timerMap))
         val slowest = allSplits.map(_._2).reduce((a, b) =>
-            if ((a.head._1 + a.head._2) > (b.head._1 + b.head._2)) a else b
+            if ((a.head._1 + a.head._2 + a.head._3) > (b.head._1 + b.head._2 + b.head._3)) a else b
         )
-        val (init, process) = slowest.head
+        val (init, process, startTime) = slowest.head
         val unexplained = process - slowest.tail.map(t => t._1 + t._2).reduce(_ + _)
-        println("Slowest worker: (" + init / SEC + ", " + process / SEC + "), unexplained " + unexplained / SEC)
+        println("Slowest worker: started " + (startTime - timerMap) + " ms later (" + init + ", " + process + "), unexplained " + unexplained)
 
-        val timerReduce1 = System.nanoTime
+        val timerReduce1 = System.currentTimeMillis
         val effectCandidateSize =
             if (candidateSize < 0) (allSplits.map(_._1.size).reduce(_ + _) * 0.1).ceil.toInt
             else                   candidateSize
-        println("reduce1 takes (ms) " + (System.nanoTime - timerReduce1) / SEC)
+        println("reduce1 takes (ms) " + (System.currentTimeMillis - timerReduce1))
 
-        val timerReduce2 = System.nanoTime
+        val timerReduce2 = System.currentTimeMillis
         val suggests = allSplits.map(_._1).reduce(takeTopK((effectCandidateSize)))
-        println("reduce2 takes (ms) " + (System.nanoTime - timerReduce2) / SEC)
+        println("reduce2 takes (ms) " + (System.currentTimeMillis - timerReduce2))
 
         allSplits.unpersist()
         // println("Node " + nodes.size + " learner info")
@@ -293,9 +292,9 @@ object Learner extends Comparison {
         // println("Pos weight/count: "  + "%.2f".format(minScore._2._2) + " / " + minScore._3._2)
         // println("Neg weight/count: "  + "%.2f".format(minScore._2._3) + " / " + minScore._3._3)
 
-        println("FindWeakLearner took (ms) " + (System.nanoTime() - tStart) / SEC)
+        println("FindWeakLearner took (ms) " + (System.currentTimeMillis() - tStart))
         // print("Timer details: ")
-        // timer.foreach(k => print(k / SEC + ", "))
+        // timer.foreach(k => print(k + ", "))
         println
 
         suggests.map(_._2).toList
