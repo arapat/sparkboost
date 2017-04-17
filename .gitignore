@@ -4,4 +4,4 @@ checkpoints/
 result/
 *.csv
 .ipynb_checkpoints
-
+.env
