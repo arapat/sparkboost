@@ -69,24 +69,43 @@ def draw_logo(all_scores):
 
 
 def getScores(filepath, leftBound=None, rightBound=None):
-    scoresMap = {}
+    posScoresMap = {}
+    negScoresMap = {}
 
     with open(filepath) as f:
         for line in f:
             index, depth, score, name = line.strip().split(", ")
-            pos, base = int(name[3:-1]), name[-1]
+            score = float(score)
+            name = name.strip().split()
+            isornot, name = name[0], name[1]
+            pos, base = int(name[:-1]), name[-1]
+
+            scoresMap = posScoresMap
+            if score < 0:
+                scoresMap = negScoresMap
             if pos not in scoresMap:
                 scoresMap[pos] = {}
-            scoresMap[pos][base] = scoresMap[pos].get(base, 0.0) + abs(float(score))
+            scoresMap[pos][base] = scoresMap[pos].get(base, {})
+            scoresMap[pos][base][isornot] = scoresMap.get(isornot, 0.0) + abs(float(score))
 
-    scores = []
-    rng = range(0, max(scoresMap.keys()) + 1)
-    if leftBound is not None and rightBound is not None:
-        rng = range(leftBound, rightBound + 1)
-    for i in rng:  # range(0, max(scoresMap.keys()) + 1):
-        if i not in scoresMap:
-            scoresMap[i] = {}
-        for c in ['A', 'C', 'G', 'T']:
-            scoresMap[i][c] = scoresMap[i].get(c, 0.0) + 0.0
-        scores.append(sorted(scoresMap[i].items(), key=itemgetter(1)))
-    return scores
+    posScores, negScores = [], []
+
+    for scoresMap, scores in [(posScoresMap, posScores), (negScoresMap, negScores)]:
+        rng = range(0, max(scoresMap.keys()) + 1)
+        if leftBound is not None and rightBound is not None:
+            rng = range(leftBound, rightBound + 1)
+        maxRsum = 0.0
+        for i in rng:  # range(0, max(scoresMap.keys()) + 1):
+            if i not in scoresMap:
+                scoresMap[i] = {}
+            r = []
+            for c in ['A', 'C', 'G', 'T']:
+                for isornot in ["is", "isnot"]:
+                    r.append((c, isornot, scoresMap[i].get(c, {}).get(isornot, 0.0)))
+            maxRsum = max(maxRsum, sum(map(itemgetter(2), r)))
+            scores.append(sorted(r, key=itemgetter(2)))
+        for idx in range(len(scores)):
+            for j in range(len(scores[idx])):
+                ir = scores[idx][j]
+                scores[idx][j] = (ir[0], ir[1], ir[2] / maxRsum)
+    return posScores, negScores
