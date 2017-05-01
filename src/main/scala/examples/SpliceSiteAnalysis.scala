@@ -12,10 +12,17 @@ object SpliceSiteAnalysis {
     /*
     Commandline options:
 
-    --test          - file path to the test data
-    --load-model    - File path to load the model
+        --load-model    - File path to load the model
+        --type          - Operation type:
+                            1 -> get testing PR
+                            2 -> get model description
+
+    Optional:
+        --test          - file path to the test data (required for "--type 1")
+        --max-node      - maximum number of nodes to use in the loaded model
     */
     type TestRDDType = RDD[(Int, SparseVector)]
+    val nodeName = InstanceFactory.indexMap.map(_.swap)
 
     def parseOptions(options: Array[String]) = {
         options.zip(options.slice(1, options.size))
@@ -50,27 +57,48 @@ object SpliceSiteAnalysis {
         val conf = new SparkConf()
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .set("spark.kryoserializer.buffer.mb","24")
-        val sc = new SparkContext(conf)
-
         // Parse and read options
         val options = parseOptions(args)
-        val testPath = options("test")
+        val op = options("type").toInt
         val modelReadPath = options("load-model")
+        val allNodes = SplitterNode.load(modelReadPath)
+        val maxNode = options.getOrElse("max-node", allNodes.size.toString).toInt
+        val nodes = allNodes.take(maxNode)
 
-        val nodes = SplitterNode.load(modelReadPath)
-        val data = sc.textFile(testPath).map(InstanceFactory.rowToInstance).cache()
-        println("Distinct positive samples in the training data (test data): " +
-            data.filter(_._1 > 0).count)
-        println("Distinct negative samples in the training data (test data): " +
-            data.filter(_._1 < 0).count)
-        printStats(data, nodes)
+        def desc(index: Int): String = {
+            if (index <= 0) {
+                ""
+            } else {
+                val prtDesc = desc(nodes(index).prtIndex)
+                val sel =
+                    if (1.0 <= nodes(index).splitVal == nodes(index).splitEval) {
+                        "is "
+                    } else {
+                        "isnot "
+                    }
+                val icon = nodeName(nodes(index).splitIndex)
+                if (prtDesc == "") {
+                    sel + icon
+                } else {
+                    prtDesc + " and " + sel + icon
+                }
+            }
+        }
 
-        sc.stop()
+        if (op == 1) {
+            val sc = new SparkContext(conf)
+            val testPath = options("test")
+            val data = sc.textFile(testPath).map(InstanceFactory.rowToInstance).cache()
+            println("Distinct positive samples in the training data (test data): " +
+                data.filter(_._1 > 0).count)
+            println("Distinct negative samples in the training data (test data): " +
+                data.filter(_._1 < 0).count)
+            printStats(data, nodes)
+            sc.stop()
+        } else {
+            nodes.sortBy(-_.pred.abs).foreach(node => {
+                println(node.index + ", " + node.depth + ", " + node.pred + ", " + desc(node.index))
+            })
+        }
     }
 }
-
-// command:
-//
-// ./spark/bin/spark-submit --master spark://ec2-54-152-198-27.compute-1.amazonaws.com:7077
-// --class sparkboost.examples.SpliceSite --conf spark.executor.extraJavaOptions=-XX:+UseG1GC
-// ./sparkboost_2.11-0.1.jar --test /test-txt --load-model ./model.bin
