@@ -15,6 +15,16 @@ import org.apache.spark.storage.StorageLevel
 
 import sparkboost._
 
+
+/*
+Download data from S3:
+
+    s3helper.open_bucket("ucsd-data")
+    s3helper.s3_to_hdfs("splice-sites/test-txt/", "/test-txt/")
+    s3helper.s3_to_hdfs("splice-sites/train-50m-txt/", "/train-txt")
+
+*/
+
 class UniformPartitioner(val numOfPartitions: Int, val featureSize: Int) extends Partitioner {
     def numPartitions() = numOfPartitions
 
