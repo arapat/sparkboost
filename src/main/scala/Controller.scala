@@ -70,8 +70,8 @@ class Controller(
     var localNodes: Array[SplitterNode] = null
     var lastResample = 0
 
-    val trainAvgScores = new Queue[(Int, Double)]()
-    val testAvgScores = new Queue[(Int, Double)]()
+    val trainAvgScores = new Queue[Double]()
+    val testAvgScores = new Queue[Double]()
 
     def setDatasets(baseTrain: Type.BaseRDD, train: Type.ColRDD, y: Type.BrAI,
                     test: Type.BaseRDD, testRef: Type.BaseRDD = null) {
@@ -204,23 +204,23 @@ class Controller(
         (lossFuncTrain._1, lossFuncTest._1)
     }
 
-    def isUnderfit(batch: Int, avgScore: Double) = {
-        trainAvgScores.enqueue((batch, avgScore))
+    def isUnderfit(avgScore: Double) = {
+        trainAvgScores.enqueue(avgScore)
         while (trainAvgScores.size > improveWindow) {
             trainAvgScores.dequeue()
         }
-        val improve = (trainAvgScores.head._2 - avgScore) / trainAvgScores.head._2
+        val improve = (trainAvgScores.head - avgScore) / trainAvgScores.head
         trainAvgScores.size >= improveWindow && (
             compare(minImproveFact) == 0 && compare(improve) <= 0 ||
             compare(improve, minImproveFact) < 0
         )
     }
 
-    def isOverfit(batch: Int, avgScore: Double) = {
-        if (testAvgScores.size > 0 && compare(testAvgScores.head._2, avgScore) >= 0) {
+    def isOverfit(avgScore: Double) = {
+        if (testAvgScores.size > 0 && compare(testAvgScores.head, avgScore) >= 0) {
             testAvgScores.clear()
         }
-        testAvgScores.enqueue((batch, avgScore))
+        testAvgScores.enqueue(avgScore)
         testAvgScores.size >= improveWindow
     }
 
@@ -233,7 +233,7 @@ class Controller(
         localNodes.foreach{ i => i.child = i.child.filter(_ < k) }
     }
 
-    def setMetaData(batch: Int) {
+    def setMetaData() {
         assign = new ArrayBuffer[Broadcast[SparseVector]]()
         weights = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
         val fa = sc.broadcast(
@@ -256,8 +256,8 @@ class Controller(
         trainAvgScores.clear()
         testAvgScores.clear()
         val (trainAvgScore, testAvgScore) = printStats(0)
-        isUnderfit(batch, trainAvgScore)
-        isOverfit(batch, testAvgScore)
+        isUnderfit(trainAvgScore)
+        isOverfit(testAvgScore)
         println()
     }
 
@@ -330,7 +330,7 @@ class Controller(
             println(s"Root node predicts ($predVal, 0.0)")
         }
 
-        setMetaData(0)
+        setMetaData()
 
         var batch = 0
         var curIter = 0
@@ -424,7 +424,7 @@ class Controller(
                 }
                 println
 
-                if (isUnderfit(batch, curTrainAvgScore)) {
+                if (isUnderfit(curTrainAvgScore)) {
                     println("Underfitting occurs at iteration " + localNodes.size +
                         s": increasing tree depth from $depth to " + (depth + 1))
                     depth += 1
@@ -432,12 +432,12 @@ class Controller(
                     testAvgScores.clear()
                     admitted = effectAdmitSize  // To break out the while loop
                     println
-                } else if (isOverfit(batch, curTestAvgScore)) {
+                } else if (isOverfit(curTestAvgScore)) {
                     println("Overfitting occurs at iteration " + localNodes.size +
                         ": resampling data")
                     overfitRollback()
                     resample()
-                    setMetaData(batch)
+                    setMetaData()
                     depth = 1
                     admitted = effectAdmitSize  // To break out the while loop
                     println
