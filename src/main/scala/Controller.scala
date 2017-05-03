@@ -322,23 +322,29 @@ class Controller(
         setMetaData()
 
         var curIter = 0
-        var start = 0
-        var board = sc.broadcast(Map[(Int, Int, Int, Boolean), Double]())
         while (maxIters == 0 || curIter < maxIters) {
             curIter += 1
 
             val timerStart = System.nanoTime()
 
-            val (newBoard, minScore, maxScore) = learnerFunc(
-                sc, train, y, weights, assign.toArray, nodes.toArray, depth, candidateSize,
-                logratio, board, start, seqChunks
-            )
-            board.destroy()
-            board = sc.broadcast(newBoard)
-            start = start + seqChunks
-
+            var start = 0
+            var board = sc.broadcast(Map[(Int, Int, Int, Boolean), Double]())
+            var (minScore, maxScore) = ((0.0, (0, 0, 0, true)), (0.0, (0, 0, 0, true)))
+            while (minScore._1 >= thrA && maxScore._1 <= thrB) {
+                val res = learnerFunc(
+                    sc, train, y, weights, assign.toArray, nodes.toArray, depth, candidateSize,
+                    logratio, board, start, seqChunks
+                )
+                board.destroy()
+                board = sc.broadcast(res._1)
+                minScore = res._2
+                maxScore = res._3
+                start = start + seqChunks
+            }
 
             println("Node " + localNodes.size)
+            println(s"Stopped after scanning $start examples in " +
+                    (System.nanoTime() - timerStart) / SEC + " sec.")
 
             /*
             TODO:
@@ -352,90 +358,88 @@ class Controller(
                 }
             ```
             */
-            if (minScore._1 < thrA || maxScore._1 > thrB) {
-                val (nodeIndex, dimIndex, splitIndex, splitEval) = (
-                    if (compare(thrA - minScore._1, maxScore._1 - thrB) > 0) {
-                        minScore._2
-                    } else {
-                        maxScore._2
-                    }
-                )
+            val (nodeIndex, dimIndex, splitIndex, splitEval) = (
+                if (compare(thrA - minScore._1, maxScore._1 - thrB) > 0) {
+                    minScore._2
+                } else {
+                    maxScore._2
+                }
+            )
 
-                // get its prediction
-                val curAssign = assign(nodeIndex)
-                var (posWeight, negWeight) = (0.0, 0.0)
-                val splitVal = train.filter(t => t.active && t.index == dimIndex).first.splits(splitIndex)
-                val (posCount, negCount) = (
-                    train.filter(t => t.active && t.index == dimIndex).map(data => {
-                        var (posWeight, negWeight) = (0.0, 0.0)
-                        (0 until curAssign.value.size).foreach(idx => {
-                            val ptr = curAssign.value.indices(idx)
-                            if (compare(curAssign.value(idx)) != 0 &&
-                                    (compare(data.x(ptr), splitVal) <= 0) == splitEval) {
-                                if (y.value(ptr) > 0) {
-                                    posWeight += weights.value(ptr)
-                                    // posCount += 1
-                                } else {
-                                    negWeight += weights.value(ptr)
-                                    // negCount += 1
-                                }
+            // get its prediction
+            val curAssign = assign(nodeIndex)
+            var (posWeight, negWeight) = (0.0, 0.0)
+            val splitVal = train.filter(t => t.active && t.index == dimIndex).first.splits(splitIndex)
+            val (posCount, negCount) = (
+                train.filter(t => t.active && t.index == dimIndex).map(data => {
+                    var (posWeight, negWeight) = (0.0, 0.0)
+                    (0 until curAssign.value.size).foreach(idx => {
+                        val ptr = curAssign.value.indices(idx)
+                        if (compare(curAssign.value(idx)) != 0 &&
+                                (compare(data.x(ptr), splitVal) <= 0) == splitEval) {
+                            if (y.value(ptr) > 0) {
+                                posWeight += weights.value(ptr)
+                                // posCount += 1
+                            } else {
+                                negWeight += weights.value(ptr)
+                                // negCount += 1
                             }
-                        })
-                        (posWeight, negWeight)
-                    }).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
-                )
-                val pred = 0.5 * safeLogRatio(posWeight, negWeight)
+                        }
+                    })
+                    (posWeight, negWeight)
+                }).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+            )
+            val pred = 0.5 * safeLogRatio(posWeight, negWeight)
 
-                // add the new node to the nodes list
-                val newNode = SplitterNode(nodes.size, nodeIndex, localNodes(nodeIndex).depth + 1,
-                                           (splitIndex, splitVal, splitEval))
-                newNode.setPredict(pred)
-                localNodes(nodeIndex).addChild(localNodes.size)
-                val brNewNode = sc.broadcast(newNode)
-                nodes :+= brNewNode
-                localNodes :+= newNode
+            // add the new node to the nodes list
+            val newNode = SplitterNode(nodes.size, nodeIndex, localNodes(nodeIndex).depth + 1,
+                                       (splitIndex, splitVal, splitEval))
+            newNode.setPredict(pred)
+            localNodes(nodeIndex).addChild(localNodes.size)
+            val brNewNode = sc.broadcast(newNode)
+            nodes :+= brNewNode
+            localNodes :+= newNode
 
-                println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
-                println("Depth: " + newNode.depth)
-                println(s"Predicts $pred (suggestion $pred) Father $nodeIndex")
+            println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
+            println("Depth: " + newNode.depth)
+            println(s"Predicts $pred (suggestion $pred) Father $nodeIndex")
 
-                // update weights and assignment matrix
-                val timerUpdate = System.nanoTime()
-                val (newAssign, newWeights) = updateFunc(train, y, assign(nodeIndex), weights, brNewNode)
-                println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
-                assign.append(sc.broadcast(newAssign))
-                println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
-                val toDestroy = weights
-                weights = sc.broadcast(newWeights)
-                toDestroy.destroy()
+            // update weights and assignment matrix
+            val timerUpdate = System.nanoTime()
+            val (newAssign, newWeights) = updateFunc(train, y, assign(nodeIndex), weights, brNewNode)
+            println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
+            assign.append(sc.broadcast(newAssign))
+            println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
+            val toDestroy = weights
+            weights = sc.broadcast(newWeights)
+            toDestroy.destroy()
 
-                val timerPrint = System.nanoTime()
-                val (curTrainAvgScore, curTestAvgScore) = printStats(curIter)
-                println("printStats took (ms) " + (System.nanoTime() - timerPrint) / SEC)
-                println("Running time for Iteration " + curIter + " is (ms) " +
-                        (System.nanoTime() - timerStart) / SEC)
-                if (curIter % 100 == 0) {
-                    SplitterNode.save(localNodes, modelWritePath)
-                    println("Wrote model to disk at iteration " + curIter)
-                }
+            val timerPrint = System.nanoTime()
+            val (curTrainAvgScore, curTestAvgScore) = printStats(curIter)
+            println("printStats took (ms) " + (System.nanoTime() - timerPrint) / SEC)
+            println("Running time for Iteration " + curIter + " is (ms) " +
+                    (System.nanoTime() - timerStart) / SEC)
+            if (curIter % 100 == 0) {
+                SplitterNode.save(localNodes, modelWritePath)
+                println("Wrote model to disk at iteration " + curIter)
+            }
+            println
+
+            if (isUnderfit(curTrainAvgScore)) {
+                println("Underfitting occurs at iteration " + localNodes.size +
+                    s": increasing tree depth from $depth to " + (depth + 1))
+                depth += 1
+                trainAvgScores.clear()
+                testAvgScores.clear()
                 println
-
-                if (isUnderfit(curTrainAvgScore)) {
-                    println("Underfitting occurs at iteration " + localNodes.size +
-                        s": increasing tree depth from $depth to " + (depth + 1))
-                    depth += 1
-                    trainAvgScores.clear()
-                    testAvgScores.clear()
-                    println
-                } else if (isOverfit(curTestAvgScore)) {
-                    println("Overfitting occurs at iteration " + localNodes.size +
-                            ": resampling data")
-                    overfitRollback()
-                    resample()
-                    setMetaData()
-                    depth = 1
-                    println
-                }
+            } else if (isOverfit(curTestAvgScore)) {
+                println("Overfitting occurs at iteration " + localNodes.size +
+                        ": resampling data")
+                overfitRollback()
+                resample()
+                setMetaData()
+                depth = 1
+                println
             }
         }
         localNodes
