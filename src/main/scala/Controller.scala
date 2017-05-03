@@ -83,8 +83,8 @@ class Controller(
     val seqLength = ((1 - delta) * log((1 - delta) / delta) -
                         delta * log(delta / (1 - delta))) / kld
     val seqChunks = (seqLength / 5).ceil.toInt
-    val thrA = log((1 - gamma) / gamma)
-    val thrB = log(gamma / (1 - gamma))
+    val thrA = log(gamma / (1 - gamma))
+    val thrB = log((1 - gamma) / gamma)
     val logratio = log((0.5 + gamma) / (0.5 - gamma))
 
     val trainAvgScores = new Queue[Double]()
@@ -329,7 +329,7 @@ class Controller(
             var start = 0
             var board = sc.broadcast(Map[(Int, Int, Int, Boolean), Double]())
             var (minScore, maxScore) = ((0.0, (0, 0, 0, true)), (0.0, (0, 0, 0, true)))
-            while (minScore._1 >= thrA && maxScore._1 <= thrB) {
+            while (thrA <= minScore._1 && maxScore._1 <= thrB) {
                 val res = learnerFunc(
                     sc, train, y, weights, assign.toArray, nodes.toArray, depth,
                     logratio, board, start, seqChunks
@@ -367,12 +367,11 @@ class Controller(
 
             // get its prediction
             val curAssign = assign(nodeIndex)
-            var (posWeight, negWeight) = (0.0, 0.0)
             val splitVal = train.filter(t => t.active && t.index == dimIndex).first.splits(splitIndex)
-            val (posCount, negCount) = (
+            val (posWeight, negWeight) = (
                 train.filter(t => t.active && t.index == dimIndex).map(data => {
                     var (posWeight, negWeight) = (0.0, 0.0)
-                    (0 until curAssign.value.size).foreach(idx => {
+                    (0 until curAssign.value.indices.size).foreach(idx => {
                         val ptr = curAssign.value.indices(idx)
                         if (compare(curAssign.value(idx)) != 0 &&
                                 (compare(data.x(ptr), splitVal) <= 0) == splitEval) {
@@ -399,7 +398,8 @@ class Controller(
             nodes :+= brNewNode
             localNodes :+= newNode
 
-            println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
+            // println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
+            println(s"weights: ($posWeight, $negWeight)")
             println("Depth: " + newNode.depth)
             println(s"Predicts $pred (suggestion $pred) Father $nodeIndex")
 
