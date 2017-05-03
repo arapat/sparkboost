@@ -295,6 +295,7 @@ class Controller(
                 test.filter(_._1 > 0).count)
         println("Distinct negative samples in the test data: " +
                 test.filter(_._1 < 0).count)
+        println("CSC storage length: " + trainCSC.count)
         println()
     }
 

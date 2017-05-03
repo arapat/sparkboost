@@ -201,11 +201,12 @@ object SpliceSite {
         val trainCSC = train.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
                                 (0 until x.size).map(k =>
-                                    ((idx * BINSIZE / trainSize, k), x(k)))}
+                                    ((idx * BINSIZE / trainSize, k), (idx, x(k))))}
                             .groupByKey()
                             .partitionBy(new UniformPartitioner(numPartitions, InstanceFactory.featureSize))
-                            .map {case ((batchId, index), x) => {
-                                Instances(batchId.toInt, (new DenseVector(x.toArray)).toSparse,
+                            .map {case ((batchId, index), ptrX) => {
+                                Instances(batchId.toInt,
+                                          (new DenseVector(ptrX.toArray.sorted.map(_._2))).toSparse,
                                           index, numSlices, true)
                             }}
         trainCSC.setName("sampled train CSC data")
@@ -287,6 +288,7 @@ object SpliceSite {
                 test.filter(_._1 > 0).count)
         println("Distinct negative samples in the test data: " +
                 test.filter(_._1 < 0).count)
+        println("CSC storage length: " + trainCSC.count)
         println()
 
         val nodes = algo.toInt match {
