@@ -254,7 +254,7 @@ class Controller(
         assign = new ArrayBuffer[Broadcast[SparseVector]]()
         weights = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
         val fa = sc.broadcast(
-            new DenseVector((0 until y.value.size).map(_ => -1.0).toArray).toSparse)
+            new DenseVector((0 until y.value.size).map(_ => 1.0).toArray).toSparse)
         var nodeIdx = 0
         for (node <- nodes) {
             val faIdx = node.value.prtIndex
@@ -367,13 +367,15 @@ class Controller(
 
             // get its prediction
             val curAssign = assign(nodeIndex)
+            println("Scores generated on " +
+                train.filter(t => t.active && t.index == dimIndex).count + " set(s).")
             val splitVal = train.filter(t => t.active && t.index == dimIndex).first.splits(splitIndex)
             val (posWeight, negWeight) = (
                 train.filter(t => t.active && t.index == dimIndex).map(data => {
                     var (posWeight, negWeight) = (0.0, 0.0)
                     (0 until curAssign.value.indices.size).foreach(idx => {
                         val ptr = curAssign.value.indices(idx)
-                        if (compare(curAssign.value(idx)) != 0 &&
+                        if (compare(curAssign.value.values(idx)) != 0 &&
                                 (compare(data.x(ptr), splitVal) <= 0) == splitEval) {
                             if (y.value(ptr) > 0) {
                                 posWeight += weights.value(ptr)
@@ -391,7 +393,7 @@ class Controller(
 
             // add the new node to the nodes list
             val newNode = SplitterNode(nodes.size, nodeIndex, localNodes(nodeIndex).depth + 1,
-                                       (splitIndex, splitVal, splitEval))
+                                       (dimIndex, splitVal, splitEval))
             newNode.setPredict(pred)
             localNodes(nodeIndex).addChild(localNodes.size)
             val brNewNode = sc.broadcast(newNode)
@@ -401,7 +403,8 @@ class Controller(
             // println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
             println(s"weights: ($posWeight, $negWeight)")
             println("Depth: " + newNode.depth)
-            println(s"Predicts $pred (suggestion $pred) Father $nodeIndex")
+            println(s"Predicts $pred. Father $nodeIndex. " +
+                    s"Feature $dimIndex, split at $splitVal, eval $splitEval")
 
             // update weights and assignment matrix
             val timerUpdate = System.nanoTime()
