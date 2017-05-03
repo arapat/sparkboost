@@ -39,7 +39,7 @@ object Type {
     type Suggest = (Int, Int, Double, Boolean, Double)
     type LearnerObj = (BoardType, ScoreType, ScoreType)
     type LearnerFunc = (SparkContext, ColRDD, BrAI, BrAD,
-                        Array[BrSV], Array[BrNode], Int, Int,
+                        Array[BrSV], Array[BrNode], Int,
                         Double, BrBoard, Int, Int) => LearnerObj
     type UpdateFunc = (ColRDD, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
@@ -55,8 +55,6 @@ class Controller(
     val weightFunc: Type.WeightFunc,
     val minImproveFact: Double,
     val improveWindow: Int,
-    val candidateSize: Int,
-    val admitSize: Int,
     val modelWritePath: String,
     val maxIters: Int
 ) extends java.io.Serializable with Comparison {
@@ -332,7 +330,7 @@ class Controller(
             var (minScore, maxScore) = ((0.0, (0, 0, 0, true)), (0.0, (0, 0, 0, true)))
             while (minScore._1 >= thrA && maxScore._1 <= thrB) {
                 val res = learnerFunc(
-                    sc, train, y, weights, assign.toArray, nodes.toArray, depth, candidateSize,
+                    sc, train, y, weights, assign.toArray, nodes.toArray, depth,
                     logratio, board, start, seqChunks
                 )
                 board.destroy()

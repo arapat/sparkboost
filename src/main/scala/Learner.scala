@@ -217,7 +217,7 @@ object Learner extends Comparison {
             train: RDDType, y: BrAI,
             w: BrAD, assign: Array[BrSV],
             nodes: ABrNode, maxDepth: Int,
-            candidateSize: Int, logratio: Double,
+            logratio: Double,
             board: BrBoard, start: Int, seqLength: Int): (BoardType, ScoreType, ScoreType) = {
         var tStart = System.currentTimeMillis()
         val nodeWeightsMap = train.filter(_.index == 0).map(

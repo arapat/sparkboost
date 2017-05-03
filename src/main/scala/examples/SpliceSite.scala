@@ -92,8 +92,6 @@ object SpliceSite {
         --data-source      - source of data
                                  1 -> read from text files and get a new sample
                                  2 -> read from object files of an existing sample (requires additional parameters, see below)
-        --candidate-splits - number of candidates split points to select in each batch
-        --admit-splits     - number of split points to be added to the tree for each batch of candidates
         --improve          - percentage of improvement expected for re-sampling range in (0.0, 1.0)
 
     Optional:
@@ -235,8 +233,6 @@ object SpliceSite {
         val trainSavePath = options("save-train-rdd")
         val testSavePath = options("save-test-rdd")
         val source = options("data-source").toInt
-        val candidateSize = options("candidate-splits").toInt
-        val admitSize = options("admit-splits").toInt
         val improveFact = options("improve").toDouble
         // Optional options
         val improveWindow = options.getOrElse("improve-window", "100").toInt
@@ -305,8 +301,6 @@ object SpliceSite {
                     UpdateFunc.adaboostWeightUpdate,
                     improveFact,
                     improveWindow,
-                    candidateSize,
-                    admitSize,
                     modelWritePath,
                     maxIters
                 )
@@ -375,7 +369,7 @@ object SpliceSite {
 //
 // ./spark/bin/spark-submit --master spark://ec2-54-89-40-11.compute-1.amazonaws.com:7077 \
 // --class sparkboost.examples.SpliceSite --conf spark.executor.extraJavaOptions=-XX:+UseG1GC \
-// ./sparkboost_2.11-0.1.jar --train /train-txt --test /test-txt --sample-frac 0.001 \
+// ./sparkboost_2.11-0.1.jar --train /train-txt --test /test-txt --sample-frac 0.1 \
 // --cores 80 --num-slices 2 --max-iteration 0 --algorithm 1 --save-model ./model.bin \
 // --save-train-rdd /train0 --save-test-rdd /test0 --data-source 1 \
-// --candidate-splits 100 --admit-splits 30 --improve 0.01
+// --improve 0.01
