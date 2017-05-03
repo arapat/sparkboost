@@ -198,14 +198,19 @@ object SpliceSite {
     def baseToCSC(numSlices: Int, numPartitions: Int)(train: RDD[BaseInstance]) = {
         val trainSize = train.count
         val y = train.map(_._1).collect()
+        // TODO:
+        //      1. Only support 1 batch now
+        //      2. May need to shuffle the training data
         val trainCSC = train.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
-                                (0 until x.size).map(k =>
-                                    ((idx * BINSIZE / trainSize, k), (idx, x(k))))}
+                                (0 until x.size).map(k => (k, (idx, x(k))))}
+                                    // ((idx * BINSIZE / trainSize, k), (idx, x(k))))}
                             .groupByKey()
-                            .partitionBy(new UniformPartitioner(numPartitions, InstanceFactory.featureSize))
-                            .map {case ((batchId, index), ptrX) => {
-                                Instances(batchId.toInt,
+                            // .partitionBy(new UniformPartitioner(numPartitions, InstanceFactory.featureSize))
+                            // .map {case ((batchId, index), ptrX) => {
+                            .map {case (index, ptrX) => {
+                                // Instances(batchId.toInt,
+                                Instances(0,
                                           (new DenseVector(ptrX.toArray.sorted.map(_._2))).toSparse,
                                           index, numSlices, true)
                             }}
