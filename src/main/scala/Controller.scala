@@ -27,13 +27,20 @@ object Type {
     type BrSV = Broadcast[SparseVector]
     type BrNode = Broadcast[SplitterNode]
 
+    // TODO: here I assumed batchId is always 0 so is ignored
+    type BoardKey = (Int, Int, Int, Boolean)
+    type BoardType = Map[BoardKey, Double]
+    type BrBoard = Broadcast[BoardType]
+    type ScoreType = (Double, BoardKey)
+
     type SampleFunc = Array[SplitterNode] => (RDD[BaseInstance], RDD[BaseInstance])
     type BaseToCSCFunc = RDD[BaseInstance] => ColRDD
     type LossFunc = (Double, Double, Double) => Double
     type Suggest = (Int, Int, Double, Boolean, Double)
-    type LearnerObj = List[Suggest]
+    type LearnerObj = (BoardType, ScoreType, ScoreType)
     type LearnerFunc = (SparkContext, ColRDD, BrAI, BrAD,
-                        Array[BrSV], Array[BrNode], Int, Int, LossFunc) => LearnerObj
+                        Array[BrSV], Array[BrNode], Int, Int,
+                        Double, BrBoard, Int, Int) => LearnerObj
     type UpdateFunc = (ColRDD, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 }
@@ -69,6 +76,18 @@ class Controller(
     var nodes: Array[Type.BrNode] = null
     var localNodes: Array[SplitterNode] = null
     var lastResample = 0
+
+    // Early stop
+    val delta = 0.0001
+    val gamma = 0.01
+    val kld = (0.5 + gamma) * log((0.5 + gamma) / (0.5 - gamma)) +
+                        (0.5 - gamma) * log((0.5 - gamma) / (0.5 + gamma))
+    val seqLength = ((1 - delta) * log((1 - delta) / delta) -
+                        delta * log(delta / (1 - delta))) / kld
+    val seqChunks = (seqLength / 5).ceil.toInt
+    val thrA = log((1 - gamma) / gamma)
+    val thrB = log(gamma / (1 - gamma))
+    val logratio = log((0.5 + gamma) / (0.5 - gamma))
 
     val trainAvgScores = new Queue[Double]()
     val testAvgScores = new Queue[Double]()
@@ -288,36 +307,6 @@ class Controller(
         //
         // In both cases, we need to initialize `weights` vector and `assign` matrix.
         // In addition to that, for case 2 we need to create a root node that always says "YES"
-        def evaluate(insts: Instances, suggests: Map[Int, Type.LearnerObj], sumWeight: Double) = {
-            suggests(insts.index).map(sgst => {
-                val (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts) = sgst
-                val prtAssign = assign(prtNodeIndex)
-                var posWeight = 0.0
-                var posCount = 0
-                var negWeight = 0.0
-                var negCount = 0
-                (0 until prtAssign.value.indices.size).foreach(idx => {
-                    val ptr = prtAssign.value.indices(idx)
-                    if (compare(prtAssign.value.values(idx)) != 0 &&
-                        (compare(insts.xVec(ptr), splitVal) <= 0) == splitEval) {
-                        if (y.value(ptr) > 0) {
-                            posWeight += weights.value(ptr)
-                            posCount += 1
-                        } else {
-                            negWeight += weights.value(ptr)
-                            negCount += 1
-                        }
-                    }
-                })
-                (
-                    lossFunc(sumWeight - posWeight - negWeight, posWeight, negWeight),
-                    (posWeight, posCount, negWeight, negCount),
-                    (prtNodeIndex, splitIndex, splitVal, splitEval,
-                        0.5 * safeLogRatio(posWeight, negWeight))
-                )
-            }).reduce((a, b) => if (a._1 < b._1) a else b)
-        }
-
         if (nodes == null || nodes.size == 0) {
             val posCount = y.value.count(_ > 0)
             val negCount = y.value.size - posCount
@@ -332,80 +321,87 @@ class Controller(
 
         setMetaData()
 
-        var batch = 0
         var curIter = 0
+        var start = 0
+        var board = sc.broadcast(Map[(Int, Int, Int, Boolean), Double]())
         while (maxIters == 0 || curIter < maxIters) {
-            println("Batch " + batch)
-            batch += 1
+            curIter += 1
 
             val timerStart = System.nanoTime()
 
-            // LearnerFunc gives 100 suggestions
-            val suggests: Map[Int, Type.LearnerObj] = learnerFunc(
-                sc, train, y, weights, assign.toArray, nodes.toArray, depth, candidateSize, lossFunc
-            ).groupBy(_._2)
-            val pTrain = train.filter(t => suggests.contains(t.index)).cache
-            var effectAdmitSize =
-                    if (candidateSize <= 0) (suggests.map(_._2.size).reduce(_ + _) * 0.3).ceil.toInt
-                    else                    admitSize
-            println("Number of splits to be selected: " + effectAdmitSize)
+            val (newBoard, minScore, maxScore) = learnerFunc(
+                sc, train, y, weights, assign.toArray, nodes.toArray, depth, candidateSize,
+                logratio, board, start, seqChunks
+            )
+            board.destroy()
+            board = sc.broadcast(newBoard)
+            start = start + seqChunks
 
-            // Iteratively, we select and convert `R` suggestions into weak learners
-            var admitted = 0
-            while (admitted < effectAdmitSize) {
-                curIter += 1
-                println("Node " + localNodes.size)
-                val sumWeight = weights.value.reduce(_ + _)
 
-                val timer = System.nanoTime()
+            println("Node " + localNodes.size)
 
-                val pTrainMap = pTrain.map(t => evaluate(t, suggests, sumWeight)).cache()
-                pTrainMap.count
-
-                val timeStamp1 = System.nanoTime - timer
-                println("Search time for Map (ms): " + timeStamp1 / SEC)
-
-                val (
-                    minScore,
-                    (posWeight, posCount, negWeight, negCount),
-                    (prtNodeIndex, splitIndex, splitVal, splitEval, learnerPredicts)
-                ) = pTrainMap.reduce((a, b) => if (a._1 < b._1) a else b)
-
-                val timeStamp2 = System.nanoTime - timer - timeStamp1
-                println("Search time for Reduce (ms): " + timeStamp2 / SEC)
-                pTrainMap.unpersist()
-
-                /*
-                TODO:
-                The prediction here is computed based on the statistics collected on just a single
-                partition. It is okay when a single partition actually has all training data.
-                But if it only has partial data, we may need to add something like below here:
-                ```
-                    reduce {
-                        (a: (Double, Int, Double, Int), b: (Double, Int, Double, Int)) =>
-                            (a._1 + b._1, a._2 + b._2, a._3 + b._3, a._4 + b._4)
+            /*
+            TODO:
+            The prediction here is computed based on the statistics collected on just a single
+            partition. It is okay when a single partition actually has all training data.
+            But if it only has partial data, we may need to add something like below here:
+            ```
+                reduce {
+                    (a: (Double, Int, Double, Int), b: (Double, Int, Double, Int)) =>
+                        (a._1 + b._1, a._2 + b._2, a._3 + b._3, a._4 + b._4)
+                }
+            ```
+            */
+            if (minScore._1 < thrA || maxScore._1 > thrB) {
+                val (nodeIndex, dimIndex, splitIndex, splitEval) = (
+                    if (compare(thrA - minScore._1, maxScore._1 - thrB) > 0) {
+                        minScore._2
+                    } else {
+                        maxScore._2
                     }
-                ```
-                */
+                )
+
+                // get its prediction
+                val curAssign = assign(nodeIndex)
+                var (posWeight, negWeight) = (0.0, 0.0)
+                val splitVal = train.filter(t => t.active && t.index == dimIndex).first.splits(splitIndex)
+                val (posCount, negCount) = (
+                    train.filter(t => t.active && t.index == dimIndex).map(data => {
+                        var (posWeight, negWeight) = (0.0, 0.0)
+                        (0 until curAssign.value.size).foreach(idx => {
+                            val ptr = curAssign.value.indices(idx)
+                            if (compare(curAssign.value(idx)) != 0 &&
+                                    (compare(data.x(ptr), splitVal) <= 0) == splitEval) {
+                                if (y.value(ptr) > 0) {
+                                    posWeight += weights.value(ptr)
+                                    // posCount += 1
+                                } else {
+                                    negWeight += weights.value(ptr)
+                                    // negCount += 1
+                                }
+                            }
+                        })
+                        (posWeight, negWeight)
+                    }).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+                )
+                val pred = 0.5 * safeLogRatio(posWeight, negWeight)
 
                 // add the new node to the nodes list
-                val pred = 0.5 * safeLogRatio(posWeight, negWeight)
-                val newNode = SplitterNode(nodes.size, prtNodeIndex, localNodes(prtNodeIndex).depth + 1,
+                val newNode = SplitterNode(nodes.size, nodeIndex, localNodes(nodeIndex).depth + 1,
                                            (splitIndex, splitVal, splitEval))
                 newNode.setPredict(pred)
-                localNodes(prtNodeIndex).addChild(localNodes.size)
+                localNodes(nodeIndex).addChild(localNodes.size)
                 val brNewNode = sc.broadcast(newNode)
                 nodes :+= brNewNode
                 localNodes :+= newNode
-                admitted += 1
 
                 println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
                 println("Depth: " + newNode.depth)
-                println(s"Predicts $pred (suggestion $learnerPredicts) Father $prtNodeIndex")
+                println(s"Predicts $pred (suggestion $pred) Father $nodeIndex")
 
                 // update weights and assignment matrix
                 val timerUpdate = System.nanoTime()
-                val (newAssign, newWeights) = updateFunc(train, y, assign(prtNodeIndex), weights, brNewNode)
+                val (newAssign, newWeights) = updateFunc(train, y, assign(nodeIndex), weights, brNewNode)
                 println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
                 assign.append(sc.broadcast(newAssign))
                 println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
@@ -430,20 +426,17 @@ class Controller(
                     depth += 1
                     trainAvgScores.clear()
                     testAvgScores.clear()
-                    admitted = effectAdmitSize  // To break out the while loop
                     println
                 } else if (isOverfit(curTestAvgScore)) {
                     println("Overfitting occurs at iteration " + localNodes.size +
-                        ": resampling data")
+                            ": resampling data")
                     overfitRollback()
                     resample()
                     setMetaData()
                     depth = 1
-                    admitted = effectAdmitSize  // To break out the while loop
                     println
                 }
             }
-            pTrain.unpersist()
         }
         localNodes
     }

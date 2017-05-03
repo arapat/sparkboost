@@ -203,12 +203,11 @@ object SpliceSite {
         val trainCSC = train.zipWithIndex()
                             .flatMap {case ((y, x), idx) =>
                                 (0 until x.size).map(k =>
-                                    ((idx * BINSIZE / trainSize, k), (x(k), idx.toInt)))}
+                                    ((idx * BINSIZE / trainSize, k), x(k)))}
                             .groupByKey()
                             .partitionBy(new UniformPartitioner(numPartitions, InstanceFactory.featureSize))
-                            .map {case ((batchId, index), xAndPtr) => {
-                                val (x, ptr) = xAndPtr.toArray.sorted.unzip
-                                Instances(batchId.toInt, (new DenseVector(x)).toSparse, ptr,
+                            .map {case ((batchId, index), x) => {
+                                Instances(batchId.toInt, (new DenseVector(x.toArray)).toSparse,
                                           index, numSlices, true)
                             }}
         trainCSC.setName("sampled train CSC data")

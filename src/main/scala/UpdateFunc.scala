@@ -29,7 +29,7 @@ object UpdateFunc extends Comparison {
             (0 until fa.value.indices.size).map(idx => {
                 val ptr = fa.value.indices(idx)
                 val faPredict = fa.value.values(idx)
-                val ix = insts.xVec(ptr)
+                val ix = insts.x(ptr)
                 val iy = y.value(ptr)
                 val iw = w.value(ptr)
                 val assign = (compare(faPredict) != 0) && node.value.check(ix, curIndex, true)
