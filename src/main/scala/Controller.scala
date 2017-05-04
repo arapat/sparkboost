@@ -61,8 +61,6 @@ class Controller(
     val printStatsInterval = 10
     val improveWindow = (rawImproveWindow / printStatsInterval).floor.toInt
 
-    val SEC = 1000000
-
     var baseTrain: Type.BaseRDD = null
     var train: Type.ColRDD = null
     var y: Type.BrAI = null
@@ -326,6 +324,7 @@ class Controller(
         var curIter = 0
         while (maxIters == 0 || curIter < maxIters) {
             curIter += 1
+            println("Node " + localNodes.size)
 
             val timerStart = System.currentTimeMillis()
 
@@ -344,9 +343,8 @@ class Controller(
                 start = start + seqChunks
             }
 
-            println("Node " + localNodes.size)
-            println(s"Stopped after scanning $start examples in " +
-                    (System.currentTimeMillis() - timerStart) / SEC + " sec.")
+            println(s"Stopped after scanning $start examples in (ms) " +
+                    (System.currentTimeMillis() - timerStart))
 
             /*
             TODO:
@@ -412,7 +410,7 @@ class Controller(
             // update weights and assignment matrix
             val timerUpdate = System.currentTimeMillis()
             val (newAssign, newWeights) = updateFunc(train, y, assign(nodeIndex), weights, brNewNode)
-            println("updateFunc took (ms) " + (System.currentTimeMillis() - timerUpdate) / SEC)
+            println("updateFunc took (ms) " + (System.currentTimeMillis() - timerUpdate))
             assign.append(sc.broadcast(newAssign))
             println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
             val toDestroy = weights
@@ -425,10 +423,7 @@ class Controller(
 
                 val timerPrint = System.currentTimeMillis()
                 val (curTrainAvgScore, curTestAvgScore) = printStats(curIter)
-                println("printStats took (ms) " + (System.currentTimeMillis() - timerPrint) / SEC)
-                println("Running time for Iteration " + curIter + " is (ms) " +
-                        (System.currentTimeMillis() - timerStart) / SEC)
-                println
+                println("printStats took (ms) " + (System.currentTimeMillis() - timerPrint))
 
                 if (isUnderfit(curTrainAvgScore)) {
                     println("Underfitting occurs at iteration " + localNodes.size +
@@ -447,6 +442,8 @@ class Controller(
                     println
                 }
             }
+            println("Running time for Iteration " + curIter + " is (ms) " +
+                    (System.currentTimeMillis() - timerStart))
             println
         }
         localNodes

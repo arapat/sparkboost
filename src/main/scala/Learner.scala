@@ -246,7 +246,7 @@ object Learner extends Comparison {
         val splitsMap = allSplits.collectAsMap
         allSplits.unpersist()
 
-        println("FindWeakLearner took (ms) " + (System.currentTimeMillis() - tStart))
+        println("FindWeakLearner took in total (ms) " + (System.currentTimeMillis() - tStart))
         // print("Timer details: ")
         // timer.foreach(k => print(k + ", "))
         println
