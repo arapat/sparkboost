@@ -1,5 +1,6 @@
 package sparkboost.examples
 
+import collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.annotation.tailrec
 import util.Random.{nextDouble => rand}
@@ -14,6 +15,7 @@ import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.storage.StorageLevel
 
 import sparkboost._
+import sparkboost.utils.Comparison
 
 
 /*
@@ -73,7 +75,7 @@ object InstanceFactory {
     }
 }
 
-object SpliceSite {
+object SpliceSite extends Comparison {
     /*
     Commandline options:
 
@@ -196,22 +198,37 @@ object SpliceSite {
 
     // Row store to Column Store Compression
     def baseToCSC(numSlices: Int, numPartitions: Int)(train: RDD[BaseInstance]) = {
-        val trainSize = train.count
+        val trainSize = train.count.toInt
         val y = train.map(_._1).collect()
         // TODO:
         //      1. Only support 1 batch now
+        //          ==>  ((idx * BINSIZE / trainSize, k), (idx, x(k))))}
         //      2. May need to shuffle the training data
         val trainCSC = train.zipWithIndex()
+                            /*
+                            .mapPartitions(
+                                (items: Iterator[((Int, SparseVector), Long)]) => {
+                                    var res = new ArrayBuffer[List[(Int, Double)]]()
+                                    (0 until dim).foreach(_ => res.append(List[(Int, Double)]()))
+                                    items.foreach(d => {
+                                        (0 until dim).foreach(k =>
+                                            res(k) = (d._2.toInt, d._1._2(k)) +: res(k))
+                                    })
+                                    (0 until dim).map(k => (k, res(k))).toIterator
+                                }
+                            ).reduceByKey((a, b) => a ++ b)
+                            */
                             .flatMap {case ((y, x), idx) =>
-                                (0 until x.size).map(k => (k, (idx, x(k))))}
-                                    // ((idx * BINSIZE / trainSize, k), (idx, x(k))))}
-                            .groupByKey()
+                                (0 until x.indices.size).map(i => {
+                                    (x.indices(i), (idx.toInt, x.values(i)))
+                                }).filter(t => compare(t._2._2) != 0)
+                            }.groupByKey()
                             // .partitionBy(new UniformPartitioner(numPartitions, InstanceFactory.featureSize))
                             // .map {case ((batchId, index), ptrX) => {
-                            .map {case (index, ptrX) => {
+                            .map {case (index, indVal) => {
                                 // Instances(batchId.toInt,
-                                Instances(0,
-                                          (new DenseVector(ptrX.toArray.sorted.map(_._2))).toSparse,
+                                val (indices, values) = indVal.unzip
+                                Instances(0, new SparseVector(trainSize, indices.toArray, values.toArray),
                                           index, numSlices, true)
                             }}
         trainCSC.setName("sampled train CSC data")

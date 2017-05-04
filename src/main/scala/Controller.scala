@@ -54,10 +54,13 @@ class Controller(
     val lossFunc: Type.LossFunc,
     val weightFunc: Type.WeightFunc,
     val minImproveFact: Double,
-    val improveWindow: Int,
+    val rawImproveWindow: Int,
     val modelWritePath: String,
     val maxIters: Int
 ) extends java.io.Serializable with Comparison {
+    val printStatsInterval = 10
+    val improveWindow = (rawImproveWindow / printStatsInterval).floor.toInt
+
     val SEC = 1000000
 
     var baseTrain: Type.BaseRDD = null
@@ -82,7 +85,7 @@ class Controller(
                         (0.5 - gamma) * log((0.5 - gamma) / (0.5 + gamma))
     val seqLength = ((1 - delta) * log((1 - delta) / delta) -
                         delta * log(delta / (1 - delta))) / kld
-    val seqChunks = (seqLength / 5).ceil.toInt
+    val seqChunks = (seqLength / 20).ceil.toInt
     val thrA = log(gamma / (1 - gamma))
     val thrB = log((1 - gamma) / gamma)
     val logratio = log((0.5 + gamma) / (0.5 - gamma))
@@ -165,7 +168,7 @@ class Controller(
         var auPRCTestRef = auPRCTest
         var lossFuncTestRef = lossFuncTest
         if (test.id != testRef.id) {
-            if (iteration % 100 == 0) {
+            if (iteration % 1 == 0) {
                 testRefMetrics = new BinaryClassificationMetrics(testRefPredictionAndLabels)
                 auPRCTestRef = testRefMetrics.areaUnderPR + adjust(testRefMetrics.pr.take(2))
                 lossFuncTestRef = getLossFunc(testRefPredictionAndLabels)
@@ -324,7 +327,7 @@ class Controller(
         while (maxIters == 0 || curIter < maxIters) {
             curIter += 1
 
-            val timerStart = System.nanoTime()
+            val timerStart = System.currentTimeMillis()
 
             var start = 0
             var board = sc.broadcast(Map[(Int, Int, Int, Boolean), Double]())
@@ -343,7 +346,7 @@ class Controller(
 
             println("Node " + localNodes.size)
             println(s"Stopped after scanning $start examples in " +
-                    (System.nanoTime() - timerStart) / SEC + " sec.")
+                    (System.currentTimeMillis() - timerStart) / SEC + " sec.")
 
             /*
             TODO:
@@ -407,42 +410,44 @@ class Controller(
                     s"Feature $dimIndex, split at $splitVal, eval $splitEval")
 
             // update weights and assignment matrix
-            val timerUpdate = System.nanoTime()
+            val timerUpdate = System.currentTimeMillis()
             val (newAssign, newWeights) = updateFunc(train, y, assign(nodeIndex), weights, brNewNode)
-            println("updateFunc took (ms) " + (System.nanoTime() - timerUpdate) / SEC)
+            println("updateFunc took (ms) " + (System.currentTimeMillis() - timerUpdate) / SEC)
             assign.append(sc.broadcast(newAssign))
             println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
             val toDestroy = weights
             weights = sc.broadcast(newWeights)
             toDestroy.destroy()
 
-            val timerPrint = System.nanoTime()
-            val (curTrainAvgScore, curTestAvgScore) = printStats(curIter)
-            println("printStats took (ms) " + (System.nanoTime() - timerPrint) / SEC)
-            println("Running time for Iteration " + curIter + " is (ms) " +
-                    (System.nanoTime() - timerStart) / SEC)
-            if (curIter % 100 == 0) {
+            if (curIter % printStatsInterval == 0) {
                 SplitterNode.save(localNodes, modelWritePath)
                 println("Wrote model to disk at iteration " + curIter)
+
+                val timerPrint = System.currentTimeMillis()
+                val (curTrainAvgScore, curTestAvgScore) = printStats(curIter)
+                println("printStats took (ms) " + (System.currentTimeMillis() - timerPrint) / SEC)
+                println("Running time for Iteration " + curIter + " is (ms) " +
+                        (System.currentTimeMillis() - timerStart) / SEC)
+                println
+
+                if (isUnderfit(curTrainAvgScore)) {
+                    println("Underfitting occurs at iteration " + localNodes.size +
+                        s": increasing tree depth from $depth to " + (depth + 1))
+                    depth += 1
+                    trainAvgScores.clear()
+                    testAvgScores.clear()
+                    println
+                } else if (isOverfit(curTestAvgScore)) {
+                    println("Overfitting occurs at iteration " + localNodes.size +
+                            ": resampling data")
+                    overfitRollback()
+                    resample()
+                    setMetaData()
+                    depth = 1
+                    println
+                }
             }
             println
-
-            if (isUnderfit(curTrainAvgScore)) {
-                println("Underfitting occurs at iteration " + localNodes.size +
-                    s": increasing tree depth from $depth to " + (depth + 1))
-                depth += 1
-                trainAvgScores.clear()
-                testAvgScores.clear()
-                println
-            } else if (isOverfit(curTestAvgScore)) {
-                println("Overfitting occurs at iteration " + localNodes.size +
-                        ": resampling data")
-                overfitRollback()
-                resample()
-                setMetaData()
-                depth = 1
-                println
-            }
         }
         localNodes
     }
