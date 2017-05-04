@@ -3,6 +3,7 @@ package sparkboost
 import math.log
 import math.exp
 import util.Random.{nextDouble => rand}
+import util.Random.{nextInt => randomInt}
 import collection.mutable.ArrayBuffer
 import collection.mutable.Queue
 
@@ -40,7 +41,7 @@ object Type {
     type LearnerObj = (BoardType, ScoreType, ScoreType)
     type LearnerFunc = (SparkContext, ColRDD, BrAI, BrAD,
                         Array[BrSV], Array[BrNode], Int,
-                        Double, BrBoard, Int, Int) => LearnerObj
+                        Double, BrBoard, Range) => LearnerObj
     type UpdateFunc = (ColRDD, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 }
@@ -58,7 +59,7 @@ class Controller(
     val modelWritePath: String,
     val maxIters: Int
 ) extends java.io.Serializable with Comparison {
-    val printStatsInterval = 10
+    val printStatsInterval = 1
     val improveWindow = (rawImproveWindow / printStatsInterval).floor.toInt
 
     var baseTrain: Type.BaseRDD = null
@@ -83,9 +84,9 @@ class Controller(
                         (0.5 - gamma) * log((0.5 - gamma) / (0.5 + gamma))
     val seqLength = ((1 - delta) * log((1 - delta) / delta) -
                         delta * log(delta / (1 - delta))) / kld
-    val seqChunks = (seqLength / 20).ceil.toInt
-    val thrA = log(gamma / (1 - gamma))
-    val thrB = log((1 - gamma) / gamma)
+    var seqChunks = (seqLength / 3).ceil.toInt
+    val thrA = 5 * log(gamma / (1 - gamma))
+    val thrB = 5 * log((1 - gamma) / gamma)
     val logratio = log((0.5 + gamma) / (0.5 - gamma))
 
     val trainAvgScores = new Queue[Double]()
@@ -322,28 +323,42 @@ class Controller(
         setMetaData()
 
         var curIter = 0
-        while (maxIters == 0 || curIter < maxIters) {
+        val numExamples = baseTrain.count.toInt
+        var failed = false
+        while (!failed && (maxIters == 0 || curIter < maxIters)) {
             curIter += 1
             println("Node " + localNodes.size)
 
             val timerStart = System.currentTimeMillis()
 
-            var start = 0
+            var totlength = 0
             var board = sc.broadcast(Map[(Int, Int, Int, Boolean), Double]())
             var (minScore, maxScore) = ((0.0, (0, 0, 0, true)), (0.0, (0, 0, 0, true)))
-            while (thrA <= minScore._1 && maxScore._1 <= thrB) {
+            println(s"Now scan $seqChunks examples at a time, until found a good weak learner " +
+                    s"or scanned more than $numExamples examples.")
+            while (totlength < numExamples && thrA <= minScore._1 && maxScore._1 <= thrB) {
+                val start = randomInt(numExamples)
+                val interval = 1  // better if randomInt(numExamples), but will cause cache misses
                 val res = learnerFunc(
                     sc, train, y, weights, assign.toArray, nodes.toArray, depth,
-                    logratio, board, start, seqChunks
+                    logratio, board, start until (start + interval * seqChunks) by interval
                 )
+                totlength += seqChunks
                 board.destroy()
                 board = sc.broadcast(res._1)
                 minScore = res._2
                 maxScore = res._3
-                start = start + seqChunks
+            }
+            seqChunks = totlength
+
+            println("min: " + minScore)
+            println("max: " + maxScore)
+            if (thrA <= minScore._1 && maxScore._1 <= thrB) {
+                println("=== !!!  Cannot find a valid weak learner.  !!! ===")
+                failed = true
             }
 
-            println(s"Stopped after scanning $start examples in (ms) " +
+            println(s"Stopped after scanning $totlength examples in (ms) " +
                     (System.currentTimeMillis() - timerStart))
 
             /*

@@ -37,7 +37,7 @@ object Learner extends Comparison {
     val assignAndLabelsTemplate = Array(-1, 0, 1).flatMap(k => Array((k, 1), (k, -1))).map(_ -> (0.0, 0))
 
     def getOverallWeights(y: BrAI, w: BrAD, assign: Array[BrSV], nodes: ABrNode, maxDepth: Int,
-                          start: Int, seqLength: Int)(data: Instances) = {
+                          range: Range)(data: Instances) = {
         def getWeights(node: SplitterNode): (Int, (DoubleTuple2, IntTuple2)) = {
             var totalPositiveWeight = 0.0
             var totalPositiveCount = 0
@@ -45,9 +45,11 @@ object Learner extends Comparison {
             var totalNegativeCount = 0
 
             val curAssign = assign(node.index).value
-            assert(curAssign.values.size == curAssign.indices.size)
-            (start until min(curAssign.values.size, start + seqLength)).foreach(idx => {
+            val DIM = curAssign.indices.size
+            range.foreach(rawIdx => {
+                val idx = rawIdx % DIM
                 val ptr = curAssign.indices(idx)
+                require(compare(curAssign.values(idx)) != 0)
                 if (compare(curAssign.values(idx)) != 0) {
                     if (y.value(ptr) > 0) {
                         totalPositiveWeight += w.value(ptr)
@@ -72,7 +74,7 @@ object Learner extends Comparison {
     def findBestSplit(
             y: BrAI, w: BrAD, assign: Array[BrSV], nodeWeightsMap: Broadcast[WeightsMap],
             nodes: ABrNode, maxDepth: Int,
-            logratio: Double, board: BrBoard, start: Int, seqLength: Int
+            logratio: Double, board: BrBoard, range: Range
     )(data: Instances): Iterator[(BoardKey, Double)] = {
         val timer = System.currentTimeMillis()
 
@@ -102,13 +104,17 @@ object Learner extends Comparison {
             val ((totalPositiveWeight, totalNegativeWeight),
                  (totalPositiveCount, totalNegativeCount)) = nodeWeights(node.index)
 
+            // (1) fill the bins
             var weights = MutableMap[(Boolean, Int), Double]()
             var counts = MutableMap[(Boolean, Int), Int]()
             val curAssign = assign(node.index).value
+            val DIM = curAssign.values.size
             assert(curAssign.values.size == curAssign.indices.size)
-            (start until min(curAssign.values.size, start + seqLength)).map(idx => {
+            range.map(rawIdx => {
+                val idx = rawIdx % DIM
                 val ptr = curAssign.indices(idx)
                 val loc = curAssign.values(idx)
+                require(compare(loc) != 0)
                 if (compare(loc) != 0) {
                     val iy = y.value(ptr)
                     val slot = getSlot(data.x(ptr))
@@ -131,6 +137,7 @@ object Learner extends Comparison {
             var splitEval = true
             var predict = 0.0
 
+            // (2) find a good splits using bins
             for (i <- 0 until data.splits.size - 1) {
                 positiveWeight += weights.getOrElse((true, i), 0.0)
                 positiveCount += counts.getOrElse((true, i), 0)
@@ -143,7 +150,6 @@ object Learner extends Comparison {
                 // var totalRejectCount = rejectCount + totalPositiveCount + totalNegativeCount
                 //                             - positiveCount - negativeCount
                 val key1 = (node.index, data.index, i, true)
-                val key2 = (node.index, data.index, i, false)
                 newScores = (key1,
                     board.value.getOrElse(key1, 0.0) +
                         (positiveWeight * logratio - negativeWeight * logratio)
@@ -156,6 +162,7 @@ object Learner extends Comparison {
                 val rNegativeWeight = totalNegativeWeight - negativeWeight
                 val rPositiveCount = totalPositiveCount - positiveCount
                 val rNegativeCount = totalNegativeCount - negativeCount
+                val key2 = (node.index, data.index, i, false)
                 newScores = (key2,
                     board.value.getOrElse(key2, 0.0) +
                         (rPositiveWeight * logratio - rNegativeWeight * logratio)
@@ -218,10 +225,10 @@ object Learner extends Comparison {
             w: BrAD, assign: Array[BrSV],
             nodes: ABrNode, maxDepth: Int,
             logratio: Double,
-            board: BrBoard, start: Int, seqLength: Int): (BoardType, ScoreType, ScoreType) = {
+            board: BrBoard, range: Range): (BoardType, ScoreType, ScoreType) = {
         var tStart = System.currentTimeMillis()
         val nodeWeightsMap = train.filter(_.index == 0).map(
-            getOverallWeights(y, w, assign, nodes, maxDepth, start, seqLength)
+            getOverallWeights(y, w, assign, nodes, maxDepth, range)
         ).collectAsMap
         val bcWeightsMap = sc.broadcast(nodeWeightsMap)
 
@@ -229,7 +236,7 @@ object Learner extends Comparison {
         tStart = System.currentTimeMillis()
 
         val f = findBestSplit(y, w, assign, bcWeightsMap, nodes, maxDepth,
-                              logratio, board, start, seqLength) _
+                              logratio, board, range) _
         // suggests: List((minScore, nodeInfo, timer))
         val allSplits = train.filter(_.active)
                              .flatMap(f)
