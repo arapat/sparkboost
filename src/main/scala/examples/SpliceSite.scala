@@ -227,7 +227,7 @@ object SpliceSite extends Comparison {
                             // .map {case ((batchId, index), ptrX) => {
                             .map {case (index, indVal) => {
                                 // Instances(batchId.toInt,
-                                val (indices, values) = indVal.unzip
+                                val (indices, values) = indVal.toList.sorted.unzip
                                 Instances(0, new SparseVector(trainSize, indices.toArray, values.toArray),
                                           index, numSlices, true)
                             }}
