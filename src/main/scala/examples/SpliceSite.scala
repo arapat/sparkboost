@@ -268,7 +268,10 @@ object SpliceSite extends Comparison {
 
         val trainInstance = sc.textFile(trainPath, minPartitions=numCores)
                               .map(InstanceFactory.rowToInstance)
-                              .cache()
+                              .map(t => (rand, t))
+                              .sortByKey()
+                              .map(t => t._2)
+                              .cache
         trainInstance.setName("all train data")
         val loadNodes = {
             if (modelReadPath != "") SplitterNode.load(modelReadPath)

@@ -88,7 +88,8 @@ class Controller(
     var seqChunks = (seqLength / 3).ceil.toInt
     val thrA = thrFact * log(delta / (1 - delta))
     val thrB = thrFact * log((1 - delta) / delta)
-    val logratio = log((0.5 + gamma) / (0.5 - gamma))
+    val perLogratio = log((0.5 + gamma) / (0.5 - gamma))
+    var logratio = 0.0
 
     val trainAvgScores = new Queue[Double]()
     val testAvgScores = new Queue[Double]()
@@ -111,6 +112,7 @@ class Controller(
             }
             this.testRef = testRef
         }
+        logratio = perLogratio * baseTrain.count
     }
 
     def setNodes(nodes: Array[SplitterNode], lastResample: Int, lastDepth: Int) {
@@ -255,7 +257,8 @@ class Controller(
 
     def setMetaData() {
         assign = new ArrayBuffer[Broadcast[SparseVector]]()
-        weights = sc.broadcast((0 until y.value.size).map(_ => 1.0).toArray)
+        val pw = 1.0 / y.value.size
+        weights = sc.broadcast((0 until y.value.size).map(_ => pw).toArray)
         val fa = sc.broadcast(
             new DenseVector((0 until y.value.size).map(_ => 1.0).toArray).toSparse)
         var nodeIdx = 0
