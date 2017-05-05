@@ -78,6 +78,7 @@ class Controller(
     var lastResample = 0
 
     // Early stop
+    val thrFact = 20
     val delta = 0.0001
     val gamma = 0.01
     val kld = (0.5 + gamma) * log((0.5 + gamma) / (0.5 - gamma)) +
@@ -85,8 +86,8 @@ class Controller(
     val seqLength = ((1 - delta) * log((1 - delta) / delta) -
                         delta * log(delta / (1 - delta))) / kld
     var seqChunks = (seqLength / 3).ceil.toInt
-    val thrA = 5 * log(gamma / (1 - gamma))
-    val thrB = 5 * log((1 - gamma) / gamma)
+    val thrA = thrFact * log(delta / (1 - delta))
+    val thrB = thrFact * log((1 - delta) / delta)
     val logratio = log((0.5 + gamma) / (0.5 - gamma))
 
     val trainAvgScores = new Queue[Double]()
