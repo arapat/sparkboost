@@ -184,7 +184,7 @@ class Controller(
         println("Training average score = " + lossFuncTrain._1)
         println("Training average score (positive) = " + lossFuncTrain._2)
         println("Training average score (negative) = " + lossFuncTrain._3)
-        println("Verify scores and weights " + lossFuncTrain._4 + " " + weights.value.reduce(_ + _))
+        println("Training scores = " + lossFuncTrain._4)
         println("Testing auPRC = " + auPRCTest)
         println("Testing average score = " + lossFuncTest._1)
         println("Testing average score (positive) = " + lossFuncTest._2)
@@ -431,7 +431,7 @@ class Controller(
             val (newAssign, newWeights) = updateFunc(train, y, assign(nodeIndex), weights, brNewNode)
             println("updateFunc took (ms) " + (System.currentTimeMillis() - timerUpdate))
             assign.append(sc.broadcast(newAssign))
-            println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
+            // println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
             val toDestroy = weights
             weights = sc.broadcast(newWeights)
             toDestroy.destroy()
