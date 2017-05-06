@@ -78,7 +78,7 @@ class Controller(
     var lastResample = 0
 
     // Early stop
-    val thrFact = 20
+    val thrFact = 1
     val delta = 0.0001
     val gamma = 0.01
     val kld = (0.5 + gamma) * log((0.5 + gamma) / (0.5 - gamma)) +
@@ -342,7 +342,8 @@ class Controller(
                     s"or scanned more than $numExamples examples.")
             while (totlength < numExamples && thrA <= minScore._1 && maxScore._1 <= thrB) {
                 val start = randomInt(numExamples)
-                val interval = 1  // better if randomInt(numExamples), but will cause cache misses
+                // TODO: better if randomInt(numExamples), but will cause cache misses
+                val interval = 1
                 val res = learnerFunc(
                     sc, train, y, weights, assign.toArray, nodes.toArray, depth,
                     logratio, board, start until (start + interval * seqChunks) by interval
