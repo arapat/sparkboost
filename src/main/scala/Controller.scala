@@ -41,7 +41,7 @@ object Type {
     type LearnerObj = (BoardType, ScoreType, ScoreType)
     type LearnerFunc = (SparkContext, ColRDD, BrAI, BrAD,
                         Array[BrSV], Array[BrNode], Int,
-                        Double, BrBoard, Range) => LearnerObj
+                        Double, BrBoard, Range, Double, Double) => LearnerObj
     type UpdateFunc = (ColRDD, BrAI, BrSV, BrAD, BrNode) => (SparseVector, Array[Double])
     type WeightFunc = (Int, Double, Double) => Double
 }
@@ -353,7 +353,8 @@ class Controller(
                 val interval = 1
                 val res = learnerFunc(
                     sc, train, y, weights, assign.toArray, nodes.toArray, depth,
-                    logratio, board, start until (start + interval * seqChunks) by interval
+                    logratio, board, start until (start + interval * seqChunks) by interval,
+                    thrA, thrB
                 )
                 totlength += seqChunks
                 board.destroy()
