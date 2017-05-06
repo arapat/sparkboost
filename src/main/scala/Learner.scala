@@ -195,7 +195,6 @@ object Learner extends Comparison {
 
         // val timeStamp2 = System.currentTimeMillis() - timer - timeStamp1
         // val timeUnexplained = 0 // timeStamp2 - result.map(_._2).reduce(_ + _)
-//
         // (result, (timeStamp1, timeStamp2, timeUnexplained, timer))
 
         // Will return following tuple:
@@ -238,7 +237,7 @@ object Learner extends Comparison {
 
         val timerMap = System.currentTimeMillis()
         allSplits.count
-        println("allSplits map took (ms) " + (System.currentTimeMillis - timerMap))
+        val mapMs = System.currentTimeMillis - timerMap
 
         val scoreFirst = allSplits.map(t => (t._2, t._1)).cache()
         val maxScore = scoreFirst.max
@@ -247,9 +246,8 @@ object Learner extends Comparison {
         val splitsMap = allSplits.collectAsMap
         allSplits.unpersist()
 
-        println("FindWeakLearner took in total (ms) " + (System.currentTimeMillis() - tStart))
-        // print("Timer details: ")
-        // timer.foreach(k => print(k + ", "))
+        println("FindWeakLearner took in total (ms) " + (System.currentTimeMillis() - tStart) +
+                ", of which allSplits took (ms) " + mapMs)
         println
 
         // (minScore, node.index, data.index, splitVal, splitEval, predict)
