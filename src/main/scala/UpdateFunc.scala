@@ -43,9 +43,9 @@ object UpdateFunc extends Comparison {
         val assignVec = new SparseVector(w.value.size, indices, assign.map(t => if (t) 1.0 else 0.0))
         val wDelta = new SparseVector(w.value.size, indices, weights)
         val wVec = (0 until w.value.size).map(idx => w.value(idx) + wDelta(idx)).toArray
-        val wsum = wVec.reduce(_ + _)
-        val wVecNorm = wVec.map(_ / wsum)
-        (assignVec, wVecNorm)
+        // val wsum = wVec.reduce(_ + _)
+        // val wVecNorm = wVec.map(_ / wsum)
+        (assignVec, wVec)
     }
 
     def adaboostUpdate(train: RDDType, y: BrAI, fa: BrSV, w: BrAD, node: Broadcast[SplitterNode]) = {

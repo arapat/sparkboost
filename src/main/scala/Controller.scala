@@ -71,6 +71,7 @@ class Controller(
 
     var depth: Int = 1
     var weights : Type.BrAD = null
+    var wsum: Double = 0.0
     var assign: ArrayBuffer[Broadcast[SparseVector]] = null
 
     var nodes: Array[Type.BrNode] = null
@@ -86,8 +87,8 @@ class Controller(
     val seqLength = ((1 - delta) * log((1 - delta) / delta) -
                         delta * log(delta / (1 - delta))) / kld
     var seqChunks = (seqLength / 3).ceil.toInt
-    val thrA = thrFact * log(delta / (1 - delta))
-    val thrB = thrFact * log((1 - delta) / delta)
+    var thrA = thrFact * log(delta / (1 - delta))
+    var thrB = thrFact * log((1 - delta) / delta)
     val perLogratio = log((0.5 + gamma) / (0.5 - gamma))
     var logratio = 0.0
 
@@ -257,8 +258,10 @@ class Controller(
 
     def setMetaData() {
         assign = new ArrayBuffer[Broadcast[SparseVector]]()
-        val pw = 1.0 / y.value.size
+        // val pw = 1.0 / y.value.size
+        val pw = 1.0
         weights = sc.broadcast((0 until y.value.size).map(_ => pw).toArray)
+        wsum = y.value.size.toDouble
         val fa = sc.broadcast(
             new DenseVector((0 until y.value.size).map(_ => 1.0).toArray).toSparse)
         var nodeIdx = 0
@@ -269,7 +272,11 @@ class Controller(
             assign.append(sc.broadcast(aVec))
             if (nodeIdx >= lastResample) {
                 val toDestroy = weights
+                val oldwsum = wsum
                 weights = sc.broadcast(w)
+                wsum = w.reduce(_ + _)
+                thrA = thrA / oldwsum * wsum
+                thrB = thrB / oldwsum * wsum
                 toDestroy.destroy()
             }
             nodeIdx += 1
@@ -434,7 +441,11 @@ class Controller(
             assign.append(sc.broadcast(newAssign))
             // println("Changes to weights: " + (newWeights.reduce(_ + _) - weights.value.reduce(_ + _)))
             val toDestroy = weights
+            val oldwsum = wsum
             weights = sc.broadcast(newWeights)
+            wsum = newWeights.reduce(_ + _)
+            thrA = thrA / oldwsum * wsum
+            thrB = thrB / oldwsum * wsum
             toDestroy.destroy()
 
             if (curIter % printStatsInterval == 0) {
