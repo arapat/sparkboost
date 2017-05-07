@@ -17,7 +17,6 @@ import org.apache.spark.mllib.linalg.SparseVector
 import java.io._
 
 import sparkboost.utils.Comparison
-import sparkboost.utils.Utils.safeLogRatio
 
 object Type {
     type BaseInstance = (Int, SparseVector)
@@ -32,13 +31,13 @@ object Type {
     type BoardKey = (Int, Int, Int, Boolean)
     type BoardType = Map[BoardKey, Double]
     type BrBoard = Broadcast[BoardType]
-    type ScoreType = (Double, BoardKey)
+    type ScoreType = (BoardKey, Double)
 
     type SampleFunc = Array[SplitterNode] => (RDD[BaseInstance], RDD[BaseInstance])
     type BaseToCSCFunc = RDD[BaseInstance] => ColRDD
     type LossFunc = (Double, Double, Double) => Double
     type Suggest = (Int, Int, Double, Boolean, Double)
-    type LearnerObj = (BoardType, ScoreType, ScoreType)
+    type LearnerObj = (BoardType, ScoreType)
     type LearnerFunc = (SparkContext, ColRDD, BrAI, BrAD,
                         Array[BrSV], Array[BrNode], Int,
                         Double, BrBoard, Range, Double, Double) => LearnerObj
@@ -59,7 +58,7 @@ class Controller(
     val modelWritePath: String,
     val maxIters: Int
 ) extends java.io.Serializable with Comparison {
-    val printStatsInterval = 1
+    val printStatsInterval = 100
     val improveWindow = (rawImproveWindow / printStatsInterval).floor.toInt
 
     var baseTrain: Type.BaseRDD = null
@@ -69,7 +68,7 @@ class Controller(
     var test: Type.BaseRDD = null
     var testRef: Type.BaseRDD = null
 
-    var depth: Int = 1
+    var depth: Int = 100
     var weights : Type.BrAD = null
     var wsum: Double = 0.0
     var assign: ArrayBuffer[Broadcast[SparseVector]] = null
@@ -119,7 +118,7 @@ class Controller(
     def setNodes(nodes: Array[SplitterNode], lastResample: Int, lastDepth: Int) {
         this.localNodes = nodes
         this.nodes = nodes.map(node => sc.broadcast(node))
-        this.depth = lastDepth
+        // this.depth = lastDepth
     }
 
     def printStats(iteration: Int) = {
@@ -344,10 +343,11 @@ class Controller(
 
             var totlength = 0
             var board = sc.broadcast(Map[(Int, Int, Int, Boolean), Double]())
-            var (minScore, maxScore) = ((0.0, (0, 0, 0, true)), (0.0, (0, 0, 0, true)))
+            var resSplit: (Int, Int, Int, Boolean) = null
+            var ratio = Double.NaN
             println(s"Now scan $seqChunks examples at a time, until found a good weak learner " +
                     s"or scanned more than $numExamples examples.")
-            while (totlength < numExamples && thrA <= minScore._1 && maxScore._1 <= thrB) {
+            while (totlength < numExamples && resSplit == null) {
                 val start = randomInt(numExamples)
                 // TODO: better if randomInt(numExamples), but will cause cache misses
                 val interval = 1
@@ -359,15 +359,15 @@ class Controller(
                 totlength += seqChunks
                 board.destroy()
                 board = sc.broadcast(res._1)
-                minScore = res._2
-                maxScore = res._3
+                resSplit = res._2._1
+                ratio = res._2._2
             }
             seqChunks = totlength
 
-            println("min: " + minScore)
-            println("max: " + maxScore)
-            if (thrA <= minScore._1 && maxScore._1 <= thrB) {
+            if (resSplit == null) {
                 println("=== !!!  Cannot find a valid weak learner.  !!! ===")
+                resSplit = board.value.keys.head
+                ratio = 1.0
                 failed = true
             }
 
@@ -386,39 +386,9 @@ class Controller(
                 }
             ```
             */
-            val (nodeIndex, dimIndex, splitIndex, splitEval) = (
-                if (compare(thrA - minScore._1, maxScore._1 - thrB) > 0) {
-                    minScore._2
-                } else {
-                    maxScore._2
-                }
-            )
-
-            // get its prediction
-            val curAssign = assign(nodeIndex)
-            println("Scores generated on " +
-                train.filter(t => t.active && t.index == dimIndex).count + " set(s).")
+            val (nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
             val splitVal = train.filter(t => t.active && t.index == dimIndex).first.splits(splitIndex)
-            val (posWeight, negWeight) = (
-                train.filter(t => t.active && t.index == dimIndex).map(data => {
-                    var (posWeight, negWeight) = (0.0, 0.0)
-                    (0 until curAssign.value.indices.size).foreach(idx => {
-                        val ptr = curAssign.value.indices(idx)
-                        if (compare(curAssign.value.values(idx)) != 0 &&
-                                (compare(data.x(ptr), splitVal) <= 0) == splitEval) {
-                            if (y.value(ptr) > 0) {
-                                posWeight += weights.value(ptr)
-                                // posCount += 1
-                            } else {
-                                negWeight += weights.value(ptr)
-                                // negCount += 1
-                            }
-                        }
-                    })
-                    (posWeight, negWeight)
-                }).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
-            )
-            val pred = 0.5 * safeLogRatio(posWeight, negWeight)
+            val pred = 0.5 * log(ratio)
 
             // add the new node to the nodes list
             val newNode = SplitterNode(nodes.size, nodeIndex, localNodes(nodeIndex).depth + 1,
@@ -430,7 +400,7 @@ class Controller(
             localNodes :+= newNode
 
             // println(s"weightsAndCounts: ($posWeight, $posCount), ($negWeight, $negCount)")
-            println(s"weights: ($posWeight, $negWeight)")
+            // println(s"weights: ($posWeight, $negWeight)")
             println("Depth: " + newNode.depth)
             println(s"Predicts $pred. Father $nodeIndex. " +
                     s"Feature $dimIndex, split at $splitVal, eval $splitEval")
@@ -470,7 +440,7 @@ class Controller(
                     overfitRollback()
                     resample()
                     setMetaData()
-                    depth = 1
+                    depth = 100
                     println
                 }
             }
@@ -481,3 +451,30 @@ class Controller(
         localNodes
     }
 }
+
+
+/*
+    val curAssign = assign(nodeIndex)
+    println("Scores generated on " +
+        train.filter(t => t.active && t.index == dimIndex).count + " set(s).")
+    val splitVal = train.filter(t => t.active && t.index == dimIndex).first.splits(splitIndex)
+    val (posWeight, negWeight) = (
+        train.filter(t => t.active && t.index == dimIndex).map(data => {
+            var (posWeight, negWeight) = (0.0, 0.0)
+            (0 until curAssign.value.indices.size).foreach(idx => {
+                val ptr = curAssign.value.indices(idx)
+                if (compare(curAssign.value.values(idx)) != 0 &&
+                        (compare(data.x(ptr), splitVal) <= 0) == splitEval) {
+                    if (y.value(ptr) > 0) {
+                        posWeight += weights.value(ptr)
+                        // posCount += 1
+                    } else {
+                        negWeight += weights.value(ptr)
+                        // negCount += 1
+                    }
+                }
+            })
+            (posWeight, negWeight)
+        }).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+    )
+*/

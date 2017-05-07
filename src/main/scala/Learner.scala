@@ -5,6 +5,8 @@ import scala.collection.mutable.{Map => MutableMap}
 import Double.MaxValue
 import math.min
 import math.max
+import math.sqrt
+import util.Random.{nextInt => randomInt}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
@@ -22,6 +24,7 @@ object Learner extends Comparison {
     type BrSV = Broadcast[SparseVector]
     type ABrNode = Array[Broadcast[SplitterNode]]
     type DoubleTuple2 = (Double, Double)
+    type DoubleTuple3 = (Double, Double, Double)
     type IntTuple2 = (Int, Int)
     type WeightsMap = collection.Map[Int, Map[Int, (DoubleTuple2, IntTuple2)]]
 
@@ -73,11 +76,11 @@ object Learner extends Comparison {
     }
 
     def findBestSplit(
-            y: BrAI, w: BrAD, assign: Array[BrSV], nodeWeightsMap: Broadcast[WeightsMap],
+            y: BrAI, w: BrAD, wsum: Double, assign: Array[BrSV], nodeWeightsMap: Broadcast[WeightsMap],
             nodes: ABrNode, maxDepth: Int,
             logratio: Double, board: BrBoard, range: Range,
             thrA: Double, thrB: Double
-    )(data: Instances): Iterator[(BoardKey, Double)] = {
+    )(data: Instances): Iterator[(BoardKey, DoubleTuple3)] = {
         val timer = System.currentTimeMillis()
 
         def getSlot(x: Double) = {
@@ -99,8 +102,8 @@ object Learner extends Comparison {
         // time stamp
         val timeStamp1 = System.currentTimeMillis() - timer
 
-        def findBest(node: SplitterNode): (List[(BoardKey, Double)], Boolean) = {
-            var newScores = List[(BoardKey, Double)]()
+        def findBest(node: SplitterNode): (List[(BoardKey, DoubleTuple3)], Boolean) = {
+            var newScores = List[(BoardKey, DoubleTuple3)]()
             val timer = System.currentTimeMillis()
 
             val ((totalPositiveWeight, totalNegativeWeight),
@@ -126,15 +129,41 @@ object Learner extends Comparison {
                 }
             })
 
-            // time stamp
-            // val timeStamp1 = System.currentTimeMillis() - timer
+            // (2) find a good splits using bins
+            def getLossScore(score: Double, key: BoardKey) = {
+                if (thrA <= score && score <= thrB) {
+                    (Double.NaN, Double.NaN)
+                } else {
+                    val (nodeIndex, dim, splitIdx, splitEval) = key
+                    val splitVal = data.splits(splitIdx)
+
+                    var (posWeight, negWeight) = (0.0, 0.0)
+                    (0 until curAssign.indices.size).map(idx => {
+                        val ptr = curAssign.indices(idx)
+                        val loc = curAssign.values(idx)
+                        if (compare(loc) != 0) {
+                            val iy = y.value(ptr)
+                            if ((compare(data.x(ptr), splitVal) <= 0) == splitEval) {
+                                if (y.value(ptr) > 0) {
+                                    posWeight += w.value(ptr)
+                                } else {
+                                    negWeight += w.value(ptr)
+                                }
+                            }
+                        }
+                    })
+                    (
+                        (wsum - posWeight - negWeight) + 2 * sqrt(posWeight * negWeight),
+                        posWeight / negWeight
+                    )
+                }
+            }
 
             var positiveWeight = 0.0
             var positiveCount = 0
             var negativeWeight = 0.0
             var negativeCount = 0
 
-            // (2) find a good splits using bins
             var i = 0
             var bingo = false
             while (i < data.splits.size - 1 && !bingo) {
@@ -152,7 +181,8 @@ object Learner extends Comparison {
                 val key1 = (node.index, data.index, i, true)
                 val val1 = board.value.getOrElse(key1, 0.0) +
                             (positiveWeight * logratio - negativeWeight * logratio)
-                newScores = (key1, val1) +: newScores
+                val (score1, ratio1) = getLossScore(val1, key1)
+                newScores = (key1, (val1, score1, ratio1)) +: newScores
 
                 // Check right tree
                 // totalRejectWeight = rejectWeight + positiveWeight + negativeWeight
@@ -164,9 +194,10 @@ object Learner extends Comparison {
                 val key2 = (node.index, data.index, i, false)
                 val val2 = board.value.getOrElse(key2, 0.0) +
                             (rPositiveWeight * logratio - rNegativeWeight * logratio)
-                newScores = (key2, val2) +: newScores
+                val (score2, ratio2) = getLossScore(val2, key2)
+                newScores = (key2, (val2, score2, ratio2)) +: newScores
 
-                bingo = (min(val1, val2) < thrA || thrB < max(val1, val2))
+                bingo = !(score1.isNaN && score2.isNaN)
                 i = i + 1
             }
 
@@ -179,17 +210,19 @@ object Learner extends Comparison {
             (newScores, bingo)
         }
 
-        var res = List[(BoardKey, Double)]()
-        var i = 0
+        var res = List[(BoardKey, DoubleTuple3)]()
+        var i = randomInt(nodes.size)
+        var remain = nodes.size
         var bingo = false
-        while (i < nodes.size && !bingo) {
+        while (remain > 0 && !bingo) {
             val node = nodes(i).value
             if (node.depth < maxDepth) {
                 val t = findBest(node)
                 res ++= t._1
                 bingo = t._2
             }
-            i += 1
+            i = (i + 1) % nodes.size
+            remain -= 1
         }
         res.toIterator
 
@@ -218,7 +251,7 @@ object Learner extends Comparison {
             nodes: ABrNode, maxDepth: Int,
             logratio: Double,
             board: BrBoard, range: Range,
-            thrA: Double, thrB: Double): (BoardType, ScoreType, ScoreType) = {
+            thrA: Double, thrB: Double): (BoardType, (BoardKey, Double)) = {
         var tStart = System.currentTimeMillis()
         val nodeWeightsMap = train.filter(_.index == 0).map(
             getOverallWeights(y, w, assign, nodes, maxDepth, range)
@@ -228,7 +261,7 @@ object Learner extends Comparison {
         val timeWeightInfo = System.currentTimeMillis() - tStart
         tStart = System.currentTimeMillis()
 
-        val f = findBestSplit(y, w, assign, bcWeightsMap, nodes, maxDepth,
+        val f = findBestSplit(y, w, w.value.reduce(_ + _), assign, bcWeightsMap, nodes, maxDepth,
                               logratio, board, range, thrA, thrB) _
         // suggests: List((minScore, nodeInfo, timer))
         val allSplits = train.filter(_.active)
@@ -239,20 +272,24 @@ object Learner extends Comparison {
         allSplits.count
         val mapMs = System.currentTimeMillis - timerMap
 
-        val scoreFirst = allSplits.map(t => (t._2, t._1)).cache()
-        val maxScore = scoreFirst.max
-        val minScore = scoreFirst.min
-        scoreFirst.unpersist()
-        val splitsMap = allSplits.collectAsMap
+        val goodSplits = allSplits.filter(!_._2._2.isNaN).cache()
+        val (resSplit, ratio) =
+            if (goodSplits.count > 0) {
+                val t = goodSplits.reduce((a, b) => if (a._2._2 < b._2._2) a else b)
+                (t._1, t._2._3)
+            } else {
+                (null, Double.NaN)
+            }
+        goodSplits.unpersist()
+        val splitsMap = allSplits.map(t => (t._1, t._2._1)).collectAsMap
         allSplits.unpersist()
 
         println("FindWeakLearner took in total (ms) " + (System.currentTimeMillis() - tStart) +
                 ", of which allSplits took (ms) " + mapMs)
-        println
 
         // (minScore, node.index, data.index, splitVal, splitEval, predict)
         // suggests.map(t => (t._2, t._3, t._4, t._5, t._6)).toList
-        (splitsMap.toMap, minScore, maxScore)
+        (splitsMap.toMap, (resSplit, ratio))
     }
 }
 
