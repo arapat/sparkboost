@@ -33,8 +33,7 @@ object Type {
     type BrBoard = Broadcast[BoardType]
     type ScoreType = (BoardKey, Double)
 
-    type SampleFunc = Array[SplitterNode] => (RDD[BaseInstance], RDD[BaseInstance])
-    type BaseToCSCFunc = RDD[BaseInstance] => ColRDD
+    type SampleFunc = Array[SplitterNode] => (RDD[BaseInstance], RDD[BaseInstance], RDD[Instances])
     type LossFunc = (Double, Double, Double) => Double
     type Suggest = (Int, Int, Double, Boolean, Double)
     type LearnerObj = (BoardType, ScoreType)
@@ -48,7 +47,6 @@ object Type {
 class Controller(
     @transient val sc: SparkContext,
     val sampleFunc: Type.SampleFunc,
-    val baseToCSCFunc: Type.BaseToCSCFunc,
     val learnerFunc: Type.LearnerFunc,
     val updateFunc: Type.UpdateFunc,
     val lossFunc: Type.LossFunc,
@@ -291,9 +289,8 @@ class Controller(
     }
 
     def resample() {
-        val (baseTrain, test) = sampleFunc(localNodes)
+        val (baseTrain, test, trainCSC) = sampleFunc(localNodes)
         val y = sc.broadcast(baseTrain.map(_._1).collect)
-        val trainCSC = baseToCSCFunc(baseTrain)
         setDatasets(baseTrain, trainCSC, y, test)
         lastResample = localNodes.size
 

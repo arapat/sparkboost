@@ -118,6 +118,7 @@ object SpliceSite extends Comparison {
     val TRAIN_PORTION = 0.75
 
     type BaseInstance = (Int, SparseVector)
+    type BaseToCSCFunc = RDD[BaseInstance] => RDD[Instances]
 
     def parseOptions(options: Array[String]) = {
         options.zip(options.slice(1, options.size))
@@ -127,8 +128,8 @@ object SpliceSite extends Comparison {
     }
 
     def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, getWeight: (Int, Double, Double) => Double,
-                   url: String, trainSavePath: String, testSavePath: String)
-                  (nodes: Array[SplitterNode]) = {
+                   url: String, trainSavePath: String, trainCSCSavePath: String, testSavePath: String,
+                   baseToCSCFunc: BaseToCSCFunc)(nodes: Array[SplitterNode]) = {
         val weightsTrain = trainInstance.map(t =>
                             (getWeight(t._1, 1.0, SplitterNode.getScore(0, nodes, t._2)), t)
                            ).cache
@@ -178,14 +179,17 @@ object SpliceSite extends Comparison {
         test.setName("sampled test data")
         train.cache()
         test.cache()
+        val trainCSC = baseToCSCFunc(train)
 
         val hadoopConf = new org.apache.hadoop.conf.Configuration()
         val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI(s"hdfs://$url"), hadoopConf)
         try {
             hdfs.delete(new org.apache.hadoop.fs.Path(trainSavePath), true)
             hdfs.delete(new org.apache.hadoop.fs.Path(testSavePath), true)
+            hdfs.delete(new org.apache.hadoop.fs.Path(trainCSCSavePath), true)
             train.saveAsObjectFile(trainSavePath)
             test.saveAsObjectFile(testSavePath)
+            trainCSC.saveAsObjectFile(trainCSCSavePath)
             println("Re-sampled data saved.")
         } catch {
             case e : Throwable => {
@@ -195,61 +199,67 @@ object SpliceSite extends Comparison {
         }
 
         weightsTrain.unpersist()
-        (train, test)
+        (train, test, trainCSC)
     }
 
     // Row store to Column Store Compression
-    def baseToCSC(numSlices: Int, numPartitions: Int, url: String, trainCSCSavePath: String)
+    def baseToCSC(numSlices: Int, numCores: Int, url: String, trainCSCSavePath: String)
                     (train: RDD[BaseInstance]) = {
+        type T = (Int, Double)
+        @scala.annotation.tailrec
+        def merge(ls: List[T], rs: List[T], acc: List[T] = List()): List[T] = (ls, rs) match {
+            case (Nil, _) => acc.reverse ++ rs
+            case (_, Nil) => acc.reverse ++ ls
+            case (l :: ls1, r :: rs1) =>
+                if (l._1 < r._1) merge(ls1, rs, l +: acc)
+                else merge(ls, rs1, r +: acc)
+        }
+
         val trainSize = train.count.toInt
         val y = train.map(_._1).collect()
         // TODO:
         //      1. Only support 1 batch now
         //          ==>  ((idx * BINSIZE / trainSize, k), (idx, x(k))))}
         //      2. May need to shuffle the training data
+        val dim = train.first._2.size
         val trainCSC = train.zipWithIndex()
+                            .mapPartitions(t => {
+                                (0 until dim).map(idx => {
+                                    (idx, t.map(d => (d._2.toInt, d._1._2(idx)))
+                                           .filter(e => compare(e._2) != 0).toList)
+                                }).toIterator
+
+                                /*
+                                _.flatMap(d => {
+                                    val x = d._1._2
+                                    (0 until x.indices.size).map(i =>
+                                        (x.indices(i), (d._2.toInt, x.values(i)))
+                                    )
+                                }).filter(t => compare(t._2._2) != 0)
+                                  .toList
+                                  .groupBy(_._1)
+                                  .mapValues(_.map(_._2))
+                                  .toIterator
+                                */
+                            }).reduceByKey((a, b) => merge(a, b))
                             /*
-                            .mapPartitions(
-                                (items: Iterator[((Int, SparseVector), Long)]) => {
-                                    var res = new ArrayBuffer[List[(Int, Double)]]()
-                                    (0 until dim).foreach(_ => res.append(List[(Int, Double)]()))
-                                    items.foreach(d => {
-                                        (0 until dim).foreach(k =>
-                                            res(k) = (d._2.toInt, d._1._2(k)) +: res(k))
-                                    })
-                                    (0 until dim).map(k => (k, res(k))).toIterator
-                                }
-                            ).reduceByKey((a, b) => a ++ b)
-                            */
                             .flatMap {case ((y, x), idx) =>
                                 (0 until x.indices.size).map(i => {
                                     (x.indices(i), (idx.toInt, x.values(i)))
                                 }).filter(t => compare(t._2._2) != 0)
                             }.groupByKey()
+                            */
                             // .partitionBy(new UniformPartitioner(numPartitions, InstanceFactory.featureSize))
                             // .map {case ((batchId, index), ptrX) => {
                             .map {case (index, indVal) => {
                                 // Instances(batchId.toInt,
-                                val (indices, values) = indVal.toList.sorted.unzip
+                                // val (indices, values) = indVal.toList.sorted.unzip
+                                val (indices, values) = indVal.unzip  // no need to sort
                                 Instances(0, new SparseVector(trainSize, indices.toArray, values.toArray),
                                           index, numSlices, true)
                             }}
         trainCSC.setName("sampled train CSC data")
         trainCSC.cache()
-
-        val hadoopConf = new org.apache.hadoop.conf.Configuration()
-        val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI(s"hdfs://$url"), hadoopConf)
-        try {
-            hdfs.delete(new org.apache.hadoop.fs.Path(trainCSCSavePath), true)
-            trainCSC.saveAsObjectFile(trainCSCSavePath)
-            println("Re-sampled CSC data saved.")
-        } catch {
-            case e : Throwable => {
-                println("Failed to save the resampled CSC data.")
-                println("Error: " + e)
-            }
-        }
-
         trainCSC
     }
 
@@ -257,7 +267,7 @@ object SpliceSite extends Comparison {
         // Define SparkContext
         val conf = new SparkConf()
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-            .set("spark.kryoserializer.buffer.mb","24")
+            .set("spark.kryoserializer.buffer.max", "1024m")
         val sc = new SparkContext(conf)
         sc.setCheckpointDir("/checkpoint/")
 
@@ -300,25 +310,21 @@ object SpliceSite extends Comparison {
             else                 loadNodes
         }
         val hdfsURL = sc.master.split("://")(1).split(":")(0) + ":9000"
+        val rowToColFunc = baseToCSC(numSlices, numCores, hdfsURL, trainCSCSavePath) _
         val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate,
-                                       hdfsURL, trainSavePath, testSavePath) _
-        val curBaseToCSCFunc = baseToCSC(numSlices, numCores, hdfsURL, trainCSCSavePath) _
-        val (train, test) =
+                                       hdfsURL, trainSavePath, trainCSCSavePath, testSavePath, rowToColFunc) _
+        val (train, test, trainCSC) =
             if (source == 2) {
                 val trainObjFile = options("load-train-rdd")
                 val testObjFile = options("load-test-rdd")
-                (sc.objectFile[BaseInstance](trainObjFile), sc.objectFile[BaseInstance](testObjFile))
+                val trainCSCObjectFile = options("load-train-csc-rdd")
+                (
+                    sc.objectFile[BaseInstance](trainObjFile),
+                    sc.objectFile[BaseInstance](testObjFile),
+                    sc.objectFile[Instances](trainCSCObjectFile)
+                )
             } else {
                 curSampleFunc(baseNodes)
-            }
-        train.setName("sampled train data")
-        test.setName("sampled test data")
-        val trainCSC =
-            if (source == 2) {
-                val trainCSCObjectFile = options("load-train-csc-rdd")
-                sc.objectFile[Instances](trainCSCObjectFile)
-            } else {
-                curBaseToCSCFunc(train)
             }
         val y = sc.broadcast(train.map(_._1).collect)
         val testRef = sc.textFile(testPath, minPartitions=numCores)
@@ -345,7 +351,6 @@ object SpliceSite extends Comparison {
                 val controller = new Controller(
                     sc,
                     curSampleFunc,
-                    curBaseToCSCFunc,
                     Learner.partitionedGreedySplit,
                     UpdateFunc.adaboostUpdate,
                     LossFunc.lossfunc,
