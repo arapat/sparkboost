@@ -80,34 +80,36 @@ object SpliceSite extends Comparison {
     Commandline options:
 
     Required:
-        --train            - file path to the training data
-        --test             - file path to the test data
-        --sample-frac      - fraction for sampling for a single batch
-        --num-slices       - number of slices a feature dimension to be divded into
-        --max-iteration    - maximum number of iterations (0 for unlimited)
-        --algorithm        - algorithm selection
-                                 1 -> AdaBoost
-                                 2 -> LogitBoost (not supported yet)
-        --save-model       - file path to save the model
-        --save-train-rdd   - file path to save training data RDD (row-based)
-        --save-test-rdd    - file path to save test data RDD
-        --data-source      - source of data
-                                 1 -> read from text files and get a new sample
-                                 2 -> read from object files of an existing sample (requires additional parameters, see below)
-        --improve          - percentage of improvement expected for re-sampling range in (0.0, 1.0)
+        --train                - file path to the training data
+        --test                 - file path to the test data
+        --sample-frac          - fraction for sampling for a single batch
+        --num-slices           - number of slices a feature dimension to be divded into
+        --max-iteration        - maximum number of iterations (0 for unlimited)
+        --algorithm            - algorithm selection
+                                     1 -> AdaBoost
+                                     2 -> LogitBoost (not supported yet)
+        --save-model           - file path to save the model
+        --save-train-rdd       - file path to save training data RDD (row-based)
+        --save-train-csc-rdd   - file path to save training csc RDD (col-based)
+        --save-test-rdd        - file path to save test data RDD
+        --data-source          - source of data
+                                     1 -> read from text files and get a new sample
+                                     2 -> read from object files of an existing sample (requires additional parameters, see below)
+        --improve              - percentage of improvement expected for re-sampling range in (0.0, 1.0)
 
     Optional:
-        --improve-window   - number of iterations to wait before declaring overfitting/underfitting
-        --cores            - number of cores available for this job
-        --load-model       - file path to load the model
-        --model-length     - length of the loaded model (for handling rollback)
-        --last-resample    - the last tree node before resampling (1-based)
-        --last-depth       - the depth of the tree before existing
+        --improve-window       - number of iterations to wait before declaring overfitting/underfitting
+        --cores                - number of cores available for this job
+        --load-model           - file path to load the model
+        --model-length         - length of the loaded model (for handling rollback)
+        --last-resample        - the last tree node before resampling (1-based)
+        --last-depth           - the depth of the tree before existing
 
     If "--data-source" is set to 2, the following optional parameters are required.
 
-        --load-train-rdd   - path to read training data RDD (row-based)
-        --load-test-rdd    - path to save testing data RDD
+        --load-train-rdd       - path to read training data RDD (row-based)
+        --load-train-csc-rdd   - path to read training csc RDD (col-based)
+        --load-test-rdd        - path to save testing data RDD
     */
 
     // TODO: support BINSIZE > 1
@@ -197,7 +199,8 @@ object SpliceSite extends Comparison {
     }
 
     // Row store to Column Store Compression
-    def baseToCSC(numSlices: Int, numPartitions: Int)(train: RDD[BaseInstance]) = {
+    def baseToCSC(numSlices: Int, numPartitions: Int, url: String, trainCSCSavePath: String)
+                    (train: RDD[BaseInstance]) = {
         val trainSize = train.count.toInt
         val y = train.map(_._1).collect()
         // TODO:
@@ -233,6 +236,20 @@ object SpliceSite extends Comparison {
                             }}
         trainCSC.setName("sampled train CSC data")
         trainCSC.cache()
+
+        val hadoopConf = new org.apache.hadoop.conf.Configuration()
+        val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI(s"hdfs://$url"), hadoopConf)
+        try {
+            hdfs.delete(new org.apache.hadoop.fs.Path(trainCSCSavePath), true)
+            trainCSC.saveAsObjectFile(trainCSCSavePath)
+            println("Re-sampled CSC data saved.")
+        } catch {
+            case e : Throwable => {
+                println("Failed to save the resampled CSC data.")
+                println("Error: " + e)
+            }
+        }
+
         trainCSC
     }
 
@@ -254,6 +271,7 @@ object SpliceSite extends Comparison {
         val algo = options("algorithm").toInt
         val modelWritePath = options("save-model")
         val trainSavePath = options("save-train-rdd")
+        val trainCSCSavePath = options("save-train-csc-rdd")
         val testSavePath = options("save-test-rdd")
         val source = options("data-source").toInt
         val improveFact = options("improve").toDouble
@@ -281,10 +299,10 @@ object SpliceSite extends Comparison {
             if (modelLength > 0) loadNodes.take(modelLength)
             else                 loadNodes
         }
+        val hdfsURL = sc.master.split("://")(1).split(":")(0) + ":9000"
         val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate,
-                                sc.master.split("://")(1).split(":")(0) + ":9000",
-                                trainSavePath, testSavePath) _
-        val curBaseToCSCFunc = baseToCSC(numSlices, numCores) _
+                                       hdfsURL, trainSavePath, testSavePath) _
+        val curBaseToCSCFunc = baseToCSC(numSlices, numCores, hdfsURL, trainCSCSavePath) _
         val (train, test) =
             if (source == 2) {
                 val trainObjFile = options("load-train-rdd")
@@ -295,8 +313,14 @@ object SpliceSite extends Comparison {
             }
         train.setName("sampled train data")
         test.setName("sampled test data")
+        val trainCSC =
+            if (source == 2) {
+                val trainCSCObjectFile = options("load-train-csc-rdd")
+                sc.objectFile[Instances](trainCSCObjectFile)
+            } else {
+                curBaseToCSCFunc(train)
+            }
         val y = sc.broadcast(train.map(_._1).collect)
-        val trainCSC = curBaseToCSCFunc(train)
         val testRef = sc.textFile(testPath, minPartitions=numCores)
                         .map(InstanceFactory.rowToInstance)
                         .cache()
