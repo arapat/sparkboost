@@ -204,8 +204,7 @@ object SpliceSite extends Comparison {
     }
 
     // Row store to Column Store Compression
-    def baseToCSC(numSlices: Int, numCores: Int, url: String, trainCSCSavePath: String)
-                    (train: RDD[BaseInstance]) = {
+    def baseToCSC(numSlices: Int, numCores: Int)(train: RDD[BaseInstance]) = {
         type T = (Int, Double)
         @scala.annotation.tailrec
         def merge(ls: List[T], rs: List[T], acc: List[T] = List()): List[T] = (ls, rs) match {
@@ -218,48 +217,27 @@ object SpliceSite extends Comparison {
 
         val trainSize = train.count.toInt
         val dim = train.first._2.size
+        println(s"Feature size = $dim")
         // TODO:
         //      1. Only support 1 batch now
         //          ==>  ((idx * BINSIZE / trainSize, k), (idx, x(k))))}
         //      2. May need to shuffle the training data
         val trainCSC = train.zipWithIndex()
-                            .mapPartitions(t => {
+                            .mapPartitions(it => {
+                                val t = it.toList
                                 (0 until dim).map(idx => {
                                     (idx, t.map(d => (d._2.toInt, d._1._2(idx)))
-                                           .filter(e => compare(e._2) != 0).toList.sorted)
+                                           .filter(e => compare(e._2) != 0)
+                                           .toList
+                                           .sorted)
                                 }).toIterator
-
-                                /*
-                                _.flatMap(d => {
-                                    val x = d._1._2
-                                    (0 until x.indices.size).map(i =>
-                                        (x.indices(i), (d._2.toInt, x.values(i)))
-                                    )
-                                }).filter(t => compare(t._2._2) != 0)
-                                  .toList
-                                  .groupBy(_._1)
-                                  .mapValues(_.map(_._2))
-                                  .toIterator
-                                */
                             }).reduceByKey((a, b) => merge(a, b))
-                            /*
-                            .flatMap {case ((y, x), idx) =>
-                                (0 until x.indices.size).map(i => {
-                                    (x.indices(i), (idx.toInt, x.values(i)))
-                                }).filter(t => compare(t._2._2) != 0)
-                            }.groupByKey()
-                            */
-                            // .partitionBy(new UniformPartitioner(numPartitions, InstanceFactory.featureSize))
-                            // .map {case ((batchId, index), ptrX) => {
                             .map {case (index, indVal) => {
-                                // Instances(batchId.toInt,
-                                // val (indices, values) = indVal.toList.sorted.unzip
                                 val (indices, values) = indVal.unzip  // no need to sort
                                 Instances(0, new SparseVector(trainSize, indices.toArray, values.toArray),
                                           index, numSlices, true)
-                            }}
+                            }}.cache()
         trainCSC.setName("sampled train CSC data")
-        trainCSC.cache()
         trainCSC
     }
 
@@ -310,7 +288,7 @@ object SpliceSite extends Comparison {
             else                 loadNodes
         }
         val hdfsURL = sc.master.split("://")(1).split(":")(0) + ":9000"
-        val rowToColFunc = baseToCSC(numSlices, numCores, hdfsURL, trainCSCSavePath) _
+        val rowToColFunc = baseToCSC(numSlices, numCores) _
         val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate,
                                        hdfsURL, trainSavePath, trainCSCSavePath, testSavePath, rowToColFunc) _
         val (train, test, trainCSC) =
