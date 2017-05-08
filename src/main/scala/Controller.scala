@@ -76,7 +76,7 @@ class Controller(
     var lastResample = 0
 
     // Early stop
-    val thrFact = 10
+    val thrFact = 1
     val delta = 0.0001
     val gamma = 0.01
     val kld = (0.5 + gamma) * log((0.5 + gamma) / (0.5 - gamma)) +

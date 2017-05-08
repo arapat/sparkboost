@@ -179,6 +179,7 @@ object SpliceSite extends Comparison {
         test.setName("sampled test data")
         train.cache()
         test.cache()
+        train.count()
         val trainCSC = baseToCSCFunc(train)
 
         val hadoopConf = new org.apache.hadoop.conf.Configuration()
@@ -216,17 +217,16 @@ object SpliceSite extends Comparison {
         }
 
         val trainSize = train.count.toInt
-        val y = train.map(_._1).collect()
+        val dim = train.first._2.size
         // TODO:
         //      1. Only support 1 batch now
         //          ==>  ((idx * BINSIZE / trainSize, k), (idx, x(k))))}
         //      2. May need to shuffle the training data
-        val dim = train.first._2.size
         val trainCSC = train.zipWithIndex()
                             .mapPartitions(t => {
                                 (0 until dim).map(idx => {
                                     (idx, t.map(d => (d._2.toInt, d._1._2(idx)))
-                                           .filter(e => compare(e._2) != 0).toList)
+                                           .filter(e => compare(e._2) != 0).toList.sorted)
                                 }).toIterator
 
                                 /*
@@ -319,13 +319,16 @@ object SpliceSite extends Comparison {
                 val testObjFile = options("load-test-rdd")
                 val trainCSCObjectFile = options("load-train-csc-rdd")
                 (
-                    sc.objectFile[BaseInstance](trainObjFile),
-                    sc.objectFile[BaseInstance](testObjFile),
-                    sc.objectFile[Instances](trainCSCObjectFile)
+                    sc.objectFile[BaseInstance](trainObjFile).cache(),
+                    sc.objectFile[BaseInstance](testObjFile).cache(),
+                    sc.objectFile[Instances](trainCSCObjectFile).cache()
                 )
             } else {
                 curSampleFunc(baseNodes)
             }
+        train.setName("sampled train data")
+        test.setName("sampled test data")
+        trainCSC.setName("sampled train CSC data")
         val y = sc.broadcast(train.map(_._1).collect)
         val testRef = sc.textFile(testPath, minPartitions=numCores)
                         .map(InstanceFactory.rowToInstance)
