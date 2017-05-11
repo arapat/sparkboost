@@ -1,6 +1,7 @@
 package sparkboost
 
 import collection.mutable.ArrayBuffer
+import math.abs
 import math.min
 import math.max
 import math.sqrt
@@ -18,7 +19,7 @@ object Learner extends Comparison {
     def findBestSplit(
             nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            headTest: Int, numTests: Int, thrA: Double, thrB: Double
+            headTest: Int, numTests: Int, getThreshold: Int => Double
     )(glom: Types.GlomType): Types.GlomResultType = {
 
         // TODO:
@@ -59,18 +60,24 @@ object Learner extends Comparison {
                 }
             }
 
+            def getSign(t: Double, value: Int) = {
+                if (compare(t) > 0) value else -value
+            }
+
             val timer = System.currentTimeMillis()
 
             val node = nodes(nodeIndex).value
             val prevScores = board(nodeIndex).iterator
             var curScores = Array[Double]()
-            var result = (-1, 0, 0, 0, true)
+            var result = (0, 0, 0, 0, true)
 
             var wsum = 0.0
             val candidIter = candid.iterator
             var earlyStop = false
             while (candidIter.hasNext && !earlyStop) {
                 val idx = candidIter.next
+                val nScanned = idx - headTest + 1
+                val thr = getThreshold(nScanned)
                 val (y, x) = data(idx)
                 val w = weights(idx)
                 wsum += w
@@ -81,7 +88,6 @@ object Learner extends Comparison {
                     val splitVal = 0.5
 
                     // Check left tree
-                    val result1 = (idx - headTest + 1, nodeIndex, j, 0, true)
                     val val1 = nextOrElse(prevScores) + (
                         if ((compare(x(j), splitVal) <= 0) == true) {
                             score
@@ -89,14 +95,14 @@ object Learner extends Comparison {
                             0.0
                         }
                     )
-                    if (val1 < thrA || val1 > thrB) {
+                    val result1 = (getSign(val1, nScanned), nodeIndex, j, 0, true)
+                    if (abs(val1) > thr) {
                         earlyStop = true
                         result = result1
                     }
                     curScores = val1 +: curScores
 
                     // Check right tree
-                    val result2 = (idx - headTest + 1, nodeIndex, j, 0, false)
                     val val2 = nextOrElse(prevScores) + (
                         if ((compare(x(j), splitVal) <= 0) == false) {
                             score
@@ -104,7 +110,8 @@ object Learner extends Comparison {
                             0.0
                         }
                     )
-                    if (val2 < thrA || val2 > thrB) {
+                    val result2 = (getSign(val2, nScanned), nodeIndex, j, 0, false)
+                    if (abs(val2) > thr) {
                         earlyStop = true
                         result = result2
                     }
@@ -127,7 +134,7 @@ object Learner extends Comparison {
 
             if (node.depth + 1 < maxDepth) {
                 val c = child.iterator
-                while (bestSplit._1 < 0 && c.hasNext) {
+                while (bestSplit._1 == 0 && c.hasNext) {
                     val (res, split) = travelTree(c.next, candid)
                     newBoard ++= res
                     bestSplit = split
@@ -147,13 +154,13 @@ object Learner extends Comparison {
     def partitionedGreedySplit(
             sc: SparkContext, train: Types.TrainRDDType, nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            headTest: Int, numTests: Int, thrA: Double, thrB: Double
+            headTest: Int, numTests: Int, getThreshold: Int => Double
     ): RDD[Types.GlomResultType] = {
         var tStart = System.currentTimeMillis()
 
         val f = findBestSplit(nodes, maxDepth,
                               featuresOffset, featuresPerCore,
-                              headTest, numTests, thrA, thrB) _
+                              headTest, numTests, getThreshold) _
         val trainAndResult = train.map(f).cache()
         trainAndResult.count()
 

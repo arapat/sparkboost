@@ -1,5 +1,6 @@
 package sparkboost
 
+import math.abs
 import math.log
 import math.exp
 import util.Random.{nextDouble => rand}
@@ -44,9 +45,9 @@ class Controller(
 
     // Early stop
     var gamma = 0.25
-    var thrA = -10.0
-    var thrB = 10.0
-    var seqChunks = 2000
+    var delta = 0.001
+    val initSeqChunks = 2000
+    var seqChunks = initSeqChunks
 
     // TT: good
     def setDatasets(train: Types.BaseRDD, test: Types.BaseRDD, testRef: Types.BaseRDD = null) {
@@ -148,37 +149,48 @@ class Controller(
             //    Simulating TMSN using Spark's computation model ==>
             //        Ask workers to scan a batch of examples at a time until one of them find
             //        a valid weak rule (as per early stop rule).
-            var resSplit: Types.ResultType = (-1, 0, 0, 0, true)
-            var start = 0
-            setGlomTrain()
-            while (seqChunks < maxPartSize && resSplit._1 < 0) {
-                println(s"Now scan $seqChunks examples for a $gamma weak learner.")
-                // TODO: let 0, 8 be two parameters
-                val glomResults = learnerFunc(
-                    sc, glomTrain, nodes, depth,
-                    0, 8,
-                    start, seqChunks, thrA, thrB
-                ).cache()
-                val results = glomResults.map(_._5).filter(_._1 >= 0).cache()
-                if (results.count > 0) {
-                    resSplit = results.min
-                } else {
-                    setGlomTrain(glomResults)
-                }
-                start += seqChunks
-            }
-            seqChunks = start
+            var resSplit: Types.ResultType = (0, 0, 0, 0, true)
 
-            if (resSplit._1 < 0) {
-                println("=== !!!  Cannot find a valid weak learner.  !!! ===")
+            while (gamma > 0.02 && resSplit._1 == 0) {
+                var start = 0
+                setGlomTrain()
+                while (seqChunks < maxPartSize && resSplit._1 == 0) {
+                    println(s"Now scan $seqChunks examples for a $gamma weak learner.")
+                    // TODO: let 0, 8 be two parameters
+                    val glomResults = learnerFunc(
+                        sc, glomTrain, nodes, depth,
+                        0, 8,
+                        start, seqChunks, Utils.getThreshold(gamma, delta)
+                    ).cache()
+                    val results = glomResults.map(_._5).filter(_._1 >= 0).cache()
+                    if (results.count > 0) {
+                        resSplit = results.reduce((a, b) => if (abs(a._1) < abs(b._1)) a else b)
+                    } else {
+                        setGlomTrain(glomResults)
+                    }
+                    start += seqChunks
+                }
+                seqChunks = start
+                if (resSplit._1 == 0) {
+                    println(s"=== !!!  Cannot find a valid weak learner for $gamma.  !!! ===")
+                    gamma /= 2.0
+                    seqChunks = initSeqChunks
+                }
+            }
+
+            if (resSplit._1 == 0) {
+                println("=== !!!  Cannot find a valid weak learner at all.  !!! ===")
+                return localNodes
             }
 
             println(s"Stopped after scanning $seqChunks examples in (ms) " +
                     (System.currentTimeMillis() - timerStart))
 
-            val (_, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
+            val (signedScanned, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
             val splitVal = 0.5  // TODO: fix this
-            val pred = 0.5 * log(gamma)
+            val pred = if (signedScanned > 0) (0.5 * log(gamma)) else (-0.5 * log(gamma))
+
+            println("Number of samples before early-stop: " + abs(signedScanned))
 
             // add the new node to the nodes list
             val newNode = SplitterNode(nodes.size, nodeIndex, localNodes(nodeIndex).depth + 1,
