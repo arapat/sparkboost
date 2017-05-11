@@ -7,7 +7,6 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
-import sparkboost.Types
 import sparkboost.utils.Comparison
 
 
@@ -18,9 +17,9 @@ object UpdateFunc extends Comparison {
 
     def logitboostWeightUpdate(y: Int, w: Double, predict: Double) = w / (1.0 + exp(y * predict))
 
-    def update(glomTrain: Types.GlomType, nodes: ABrNode,
-               updateRule: (Int, Double, Double) => Double): Types.GlomType = {
-        def isIn(x: Vector, idx: Int) = {
+    def update(glomTrain: Types.TrainRDDType, nodes: Types.ABrNode,
+               updateRule: Types.WeightFunc): Types.TrainRDDType = {
+        def isIn(x: Vector, idx: Int): Boolean = {
             if (idx < 0) {
                 true
             } else {
@@ -46,7 +45,7 @@ object UpdateFunc extends Comparison {
         }).cache()
     }
 
-    def adaboostUpdate(glomTrain: Types.GlomType, nodes: ABrNode) = {
+    def adaboostUpdate(glomTrain: Types.TrainRDDType, nodes: Types.ABrNode) = {
         update(glomTrain, nodes, adaboostWeightUpdate)
     }
 }

@@ -15,13 +15,11 @@ class SplitterNode(val index: Int, val prtIndex: Int, val depth: Int,
     var child = List[Int]()
 
     def check(value: Double) = {
-        require(inNode == true)
-        require(fIndex == splitIndex)
         splitIndex < 0 || ((compare(value, splitVal) <= 0) == splitEval)
     }
 
-    def predict(value: Double, fIndex: Int, inNode: Boolean) = {
-        if (check(value, fIndex, inNode)) {
+    def predict(value: Double) = {
+        if (check(value)) {
             pred
         } else {
             0.0
@@ -83,7 +81,7 @@ object SplitterNode {
             0.0
         } else {
             val node = nodes(curIndex)
-            if (node.check(instance(max(0, node.splitIndex)), node.splitIndex, true)) {
+            if (node.check(instance(max(0, node.splitIndex)))) {
                 node.pred + (
                     if (node.child.nonEmpty) {
                         node.child.map(t => getScore(t, nodes, instance, maxNumNodes))
@@ -98,17 +96,17 @@ object SplitterNode {
         }
     }
 
-    def getScore(curIndex: Int, nodes: Array[Broadcast[SplitterNode]], struct: Array[List[Int]],
+    def getScore2(curIndex: Int, nodes: Array[Broadcast[SplitterNode]], struct: Array[List[Int]],
                  instance: Vector, maxNumNodes: Int = -1): Double = {
         if (maxNumNodes >= 0 && curIndex >= maxNumNodes || curIndex >= nodes.size) {
             0.0
         } else {
-            val node = nodes(curIndex)
+            val node = nodes(curIndex).value
             val child = struct(curIndex)
-            if (node.check(instance(max(0, node.splitIndex)), node.splitIndex, true)) {
+            if (node.check(instance(max(0, node.splitIndex)))) {
                 node.pred + (
                     if (child.nonEmpty) {
-                        child.map(t => getScore(t, nodes, struct, instance, maxNumNodes))
+                        child.map(t => getScore2(t, nodes, struct, instance, maxNumNodes))
                              .reduce(_ + _)
                     } else {
                         0.0

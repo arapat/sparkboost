@@ -10,17 +10,16 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.SparseVector
 
-import sparkboost.Types
 import sparkboost.utils.Comparison
 
 object Learner extends Comparison {
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
 
     def findBestSplit(
-            nodes: ABrNode, maxDepth: Int,
+            nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
             headTest: Int, numTests: Int, thrA: Double, thrB: Double
-    )(glom: GlomType): GlomResultType = {
+    )(glom: Types.GlomType): Types.GlomResultType = {
 
         // TODO:
         // Is this better than serialize the whole tree and pass it as part of the function?
@@ -39,7 +38,7 @@ object Learner extends Comparison {
         val (glomId, data, weights, board) = glom
         val numFeatures = data(0)._2.size
         val tree = getTreeTopology()
-        val rangeSt = partitionIndex + featuresOffset
+        val rangeSt = glomId + featuresOffset
         val rangeEd = rangeSt + featuresPerCore
         val range =
             if (rangeEd <= numFeatures) {
@@ -51,7 +50,7 @@ object Learner extends Comparison {
         // time stamp
         val timeStamp1 = System.currentTimeMillis() - timer
 
-        def findBest(nodeIndex: Int, candid: Array[Int]): (BoardElem, ResultType) = {
+        def findBest(nodeIndex: Int, candid: Array[Int]): (Types.BoardElem, Types.ResultType) = {
             def nextOrElse(iter: Iterator[Double]) = {
                 if (iter.hasNext) {
                     iter.next
@@ -83,7 +82,7 @@ object Learner extends Comparison {
 
                     // Check left tree
                     val result1 = (idx - headTest + 1, nodeIndex, j, 0, true)
-                    val val1 = nextOrElse(prevScores) +
+                    val val1 = nextOrElse(prevScores) + (
                         if ((compare(x(j), splitVal) <= 0) == true) {
                             score
                         } else {
@@ -98,7 +97,7 @@ object Learner extends Comparison {
 
                     // Check right tree
                     val result2 = (idx - headTest + 1, nodeIndex, j, 0, false)
-                    val val2 = nextOrElse(prevScores) +
+                    val val2 = nextOrElse(prevScores) + (
                         if ((compare(x(j), splitVal) <= 0) == false) {
                             score
                         } else {
@@ -116,20 +115,19 @@ object Learner extends Comparison {
             ((nodeIndex, curScores), result)
         }
 
-        def travelTree(nodeId: Int, faCandid: Array[Int]): (BoardList, ResultType) = {
+        def travelTree(nodeId: Int, faCandid: Array[Int]): (Types.BoardList, Types.ResultType) = {
             val node = nodes(nodeId).value
-            val child = travelTree(nodeId)
+            val child = tree(nodeId)
             val candid = faCandid.filter(i =>
-                node.check(data(i)._2(max(0, node.splitIndex)),
-                           node.splitIndex, true)
+                node.check(data(i)._2(max(0, node.splitIndex)))
             )
 
-            var (cb, bestSplit) = findBest(j, candid)
+            var (cb, bestSplit) = findBest(nodeId, candid)
             var newBoard = List(cb)
 
             if (node.depth + 1 < maxDepth) {
                 val c = child.iterator
-                while (bestSplit._1 < 0 && c.hasNext)
+                while (bestSplit._1 < 0 && c.hasNext) {
                     val (res, split) = travelTree(c.next, candid)
                     newBoard ++= res
                     bestSplit = split
@@ -147,10 +145,10 @@ object Learner extends Comparison {
     }
 
     def partitionedGreedySplit(
-            sc: SparkContext, train: TrainRDDType, nodes: ABrNode, maxDepth: Int,
+            sc: SparkContext, train: Types.TrainRDDType, nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
             headTest: Int, numTests: Int, thrA: Double, thrB: Double
-    ): RDD[GlomResultType] = {
+    ): RDD[Types.GlomResultType] = {
         var tStart = System.currentTimeMillis()
 
         val f = findBestSplit(nodes, maxDepth,

@@ -1,6 +1,13 @@
 package sparkboost.utils
 
+import math.exp
+
+import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+
+import sparkboost.SplitterNode
+import sparkboost.Types
+
 
 object Utils extends Comparison {
     // Limit the prediction score in a reasonable range
@@ -13,7 +20,10 @@ object Utils extends Comparison {
         }
     }
 
-    def printStats(iteration: Int) = {
+    def printStats(train: Types.BaseRDD, glomTrain: Types.TrainRDDType,
+                   test: Types.BaseRDD, testRef: Types.BaseRDD,
+                   localNodes: Array[SplitterNode], iteration: Int,
+                   lastResample: Int = 0) = {
         // manual fix the auPRC computation bug in MLlib
         def adjust(points: Array[(Double, Double)]) = {
             require(points.length == 2)
@@ -37,7 +47,7 @@ object Utils extends Comparison {
         }
 
         // Part 1 - Compute auPRC
-        val trainPredictionAndLabels = baseTrain.map(t =>
+        val trainPredictionAndLabels = train.map(t =>
             (SplitterNode.getScore(0, localNodes, t._2).toDouble -
                 SplitterNode.getScore(0, localNodes, t._2, lastResample).toDouble, t._1.toDouble)
         ).cache()
@@ -92,26 +102,26 @@ object Utils extends Comparison {
         }
 
         // Part 2 - Compute effective counts
-        val trainCount = y.value.size
-        val positiveTrainCount = y.value.count(_ > 0)
+        // TODO: these need not to be done repeatedly
+        val trainCount = train.count
+        val positiveTrainCount = train.filter(_._1 > 0).count
         val negativeTrainCount = trainCount - positiveTrainCount
 
-        val wSum = weights.value.reduce(_ + _)
-        val wsqSum = weights.value.map(s => s * s).reduce(_ + _)
+        val wSum = glomTrain.map(_._3.sum).sum
+        val wsqSum = glomTrain.map(_._3.map(t => t * t).sum).sum
         val effectiveCount = (wSum * wSum / wsqSum) / trainCount
 
-        val wPositive = weights.value.zip(y.value).filter(_._2 > 0).map(_._1)
-        val wSumPositive = wPositive.reduce(_ + _)
-        val wsqSumPositive = wPositive.map(s => s * s).reduce(_ + _)
-        val effectiveCountPositive = (wSumPositive * wSumPositive / wsqSumPositive) / positiveTrainCount
-
-        val wSumNegative = wSum - wSumPositive
-        val wsqSumNegative = wsqSum - wsqSumPositive
-        val effectiveCountNegative = (wSumNegative * wSumNegative / wsqSumNegative) / negativeTrainCount
+        // val wPositive = weights.value.zip(y.value).filter(_._2 > 0).map(_._1)
+        // val wSumPositive = wPositive.reduce(_ + _)
+        // val wsqSumPositive = wPositive.map(s => s * s).reduce(_ + _)
+        // val effectiveCountPositive = (wSumPositive * wSumPositive / wsqSumPositive) / positiveTrainCount
+        // val wSumNegative = wSum - wSumPositive
+        // val wsqSumNegative = wsqSum - wsqSumPositive
+        // val effectiveCountNegative = (wSumNegative * wSumNegative / wsqSumNegative) / negativeTrainCount
 
         println("Effective count = " + effectiveCount)
-        println("Positive effective count = " + effectiveCountPositive)
-        println("Negative effective count = " + effectiveCountNegative)
+        // println("Positive effective count = " + effectiveCountPositive)
+        // println("Negative effective count = " + effectiveCountNegative)
         trainPredictionAndLabels.unpersist()
         testPredictionAndLabels.unpersist()
         testRefPredictionAndLabels.unpersist()

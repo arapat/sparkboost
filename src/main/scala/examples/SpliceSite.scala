@@ -282,14 +282,12 @@ object SpliceSite extends Comparison {
                     curSampleFunc,
                     Learner.partitionedGreedySplit,
                     UpdateFunc.adaboostUpdate,
-                    LossFunc.lossfunc,
-                    UpdateFunc.adaboostWeightUpdate,
                     improveFact,
                     improveWindow,
                     modelWritePath,
                     maxIters
                 )
-                controller.setDatasets(train, trainCSC, y, test, testRef)
+                controller.setDatasets(train, test, testRef)
                 controller.setNodes(baseNodes, lastResample, lastDepth)
                 controller.runADTree
             }

@@ -14,18 +14,14 @@ import org.apache.spark.mllib.linalg.SparseVector
 
 import java.io._
 
-import sparkboost.Types
 import sparkboost.utils.Comparison
 import sparkboost.utils.Utils
 
 class Controller(
     @transient val sc: SparkContext,
     val sampleFunc: Types.SampleFunc,
-    val baseToCSCFunc: Types.BaseToCSCFunc,
     val learnerFunc: Types.LearnerFunc,
     val updateFunc: Types.UpdateFunc,
-    val lossFunc: Types.LossFunc,
-    val weightFunc: Types.WeightFunc,
     val minImproveFact: Double,
     val rawImproveWindow: Int,
     val modelWritePath: String,
@@ -35,21 +31,21 @@ class Controller(
     val emptyMap = Map[Int, Array[Double]]()
 
     var train: Types.BaseRDD = null
-    val glomTrain: Types.GlomType = null
+    var glomTrain: Types.TrainRDDType = null
     var test: Types.BaseRDD = null
     var testRef: Types.BaseRDD = null
     var maxPartSize: Int = 0
 
     var depth: Int = 100
 
-    var nodes: Array[Types.BrNode] = null
+    var nodes: ArrayBuffer[Types.BrNode] = null
     var localNodes: Array[SplitterNode] = null
     var lastResample = 0
 
     // Early stop
     var gamma = 0.25
-    var thrA = thrFact * log(delta / (1 - delta))
-    var thrB = thrFact * log((1 - delta) / delta)
+    var thrA = -10.0
+    var thrB = 10.0
     var seqChunks = 2000
 
     // TT: good
@@ -63,7 +59,7 @@ class Controller(
         glomTrain = train.glom()
                          .zipWithIndex()
                          .map { case (array, idx) => {
-                             (idx.toInt, array, 1.0, emptyMap)
+                             (idx.toInt, array, array.map(_ => 1.0), emptyMap)
                          }}.cache()
         this.test = test
         println(s"Max partition size is $maxPartSize")
@@ -78,7 +74,7 @@ class Controller(
         maxPartSize = glomTrain.map(_._2.size).max
     }
 
-    def setGlomTrain(glomResults: Types.GlomResultType = null) {
+    def setGlomTrain(glomResults: Types.ResultRDDType = null) {
         val toDestroy = glomTrain
         if (glomResults == null) {
             glomTrain = glomTrain.map(t => (t._1, t._2, t._3, emptyMap)).cache
@@ -92,7 +88,7 @@ class Controller(
     // TT: good
     def setNodes(nodes: Array[SplitterNode], lastResample: Int, lastDepth: Int) {
         this.localNodes = nodes
-        this.nodes = nodes.map(node => sc.broadcast(node))
+        this.nodes = ArrayBuffer() ++ nodes.map(node => sc.broadcast(node))
         // this.depth = lastDepth
     }
 
@@ -126,13 +122,13 @@ class Controller(
         // In both cases, we need to initialize `weights` vector and `assign` matrix.
         // In addition to that, for case 2 we need to create a root node that always says "YES"
         if (nodes == null || nodes.size == 0) {
-            val posCount = train.count(_._1 > 0)
+            val posCount = train.filter(_._1 > 0).count
             val negCount = train.count - posCount
             val predVal = 0.5 * log(posCount.toDouble / negCount)
             val rootNode = SplitterNode(0, -1, 0, (-1, 0.0, true))
             rootNode.setPredict(predVal)
 
-            nodes = Array(sc.broadcast(rootNode))
+            nodes = ArrayBuffer(sc.broadcast(rootNode))
             localNodes = Array(rootNode)
             println(s"Root node predicts ($predVal, 0.0)")
         }
@@ -159,9 +155,9 @@ class Controller(
                 println(s"Now scan $seqChunks examples for a $gamma weak learner.")
                 // TODO: let 0, 8 be two parameters
                 val glomResults = learnerFunc(
-                    sc, train, nodes.toArray, depth,
+                    sc, glomTrain, nodes, depth,
                     0, 8,
-                    start, seqChunks
+                    start, seqChunks, thrA, thrB
                 ).cache()
                 val results = glomResults.map(_._5).filter(_._1 >= 0).cache()
                 if (results.count > 0) {
@@ -173,7 +169,7 @@ class Controller(
             }
             seqChunks = start
 
-            if (resSplit._1 < 0)
+            if (resSplit._1 < 0) {
                 println("=== !!!  Cannot find a valid weak learner.  !!! ===")
             }
 
@@ -193,7 +189,8 @@ class Controller(
             nodes :+= brNewNode
             localNodes :+= newNode
 
-            glomTrain = updateFunc
+            glomTrain = updateFunc(glomTrain, nodes)
+            glomTrain.count
             println("Depth: " + newNode.depth)
             println(s"Predicts $pred. Father $nodeIndex. " +
                     s"Feature $dimIndex, split at $splitVal, eval $splitEval")
@@ -203,7 +200,9 @@ class Controller(
                 println("Wrote model to disk at iteration " + curIter)
 
                 val timerPrint = System.currentTimeMillis()
-                val (curTrainAvgScore, curTestAvgScore) = printStats(curIter)
+                val (curTrainAvgScore, curTestAvgScore) = Utils.printStats(
+                    train, glomTrain, test, testRef, localNodes, curIter
+                )
                 println("printStats took (ms) " + (System.currentTimeMillis() - timerPrint))
             }
 
