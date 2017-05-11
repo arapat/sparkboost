@@ -14,7 +14,7 @@ class SplitterNode(val index: Int, val prtIndex: Int, val depth: Int,
     var pred = 0.0
     var child = List[Int]()
 
-    def check(value: Double, fIndex: Int, inNode: Boolean) = {
+    def check(value: Double) = {
         require(inNode == true)
         require(fIndex == splitIndex)
         splitIndex < 0 || ((compare(value, splitVal) <= 0) == splitEval)
@@ -88,6 +88,28 @@ object SplitterNode {
                     if (node.child.nonEmpty) {
                         node.child.map(t => getScore(t, nodes, instance, maxNumNodes))
                                   .reduce(_ + _)
+                    } else {
+                        0.0
+                    }
+                )
+            } else {
+                0.0
+            }
+        }
+    }
+
+    def getScore(curIndex: Int, nodes: Array[Broadcast[SplitterNode]], struct: Array[List[Int]],
+                 instance: Vector, maxNumNodes: Int = -1): Double = {
+        if (maxNumNodes >= 0 && curIndex >= maxNumNodes || curIndex >= nodes.size) {
+            0.0
+        } else {
+            val node = nodes(curIndex)
+            val child = struct(curIndex)
+            if (node.check(instance(max(0, node.splitIndex)), node.splitIndex, true)) {
+                node.pred + (
+                    if (child.nonEmpty) {
+                        child.map(t => getScore(t, nodes, struct, instance, maxNumNodes))
+                             .reduce(_ + _)
                     } else {
                         0.0
                     }

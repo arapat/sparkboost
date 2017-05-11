@@ -5,3 +5,4 @@ result/
 *.csv
 .ipynb_checkpoints
 .env
+analysis/
