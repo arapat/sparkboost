@@ -116,6 +116,10 @@ class Controller(
     }
 
     def runADTree(): Array[SplitterNode] = {
+        def maxAbs(a: Double, b: Double) = if (abs(a) > abs(b)) a else b
+        def safeMaxAbs(array: Array[Double]) = if (array.size == 0) 0.0 else array.reduce(maxAbs)
+        def safeMaxAbs2(array: Iterator[Double]) = if (array.hasNext == false) 0.0 else array.reduce(maxAbs)
+        def safeMaxAbs3(array: RDD[Double]) = if (array.take(1).size == 0) 0.0 else array.reduce(maxAbs)
         // Initialize the training examples. There are two possible cases:
         //     1. a ADTree is provided (i.e. improve an existing model)
         //     2. start from scratch
@@ -155,12 +159,13 @@ class Controller(
                 var start = 0
                 setGlomTrain()
                 while (seqChunks < maxPartSize && resSplit._1 == 0) {
+                    val thrFunc = Utils.getThreshold(gamma, delta) _
                     println(s"Now scan $seqChunks examples for a $gamma weak learner.")
                     // TODO: let 0, 8 be two parameters
                     val glomResults = learnerFunc(
                         sc, glomTrain, nodes, depth,
                         0, 8,
-                        start, seqChunks, Utils.getThreshold(gamma, delta)
+                        start, seqChunks, thrFunc
                     ).cache()
                     val results = glomResults.map(_._5).filter(_._1 >= 0).cache()
                     if (results.count > 0) {
@@ -169,6 +174,11 @@ class Controller(
                         setGlomTrain(glomResults)
                     }
                     start += seqChunks
+
+                    println("Testing progress: most extreme outlier " +
+                        safeMaxAbs3(glomTrain.map(t =>
+                            safeMaxAbs2(t._4.values.map(safeMaxAbs).toIterator)
+                        )) + ", threshold " + thrFunc(start))
                 }
                 seqChunks = start
                 if (resSplit._1 == 0) {

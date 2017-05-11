@@ -13,6 +13,13 @@ import org.apache.spark.mllib.linalg.SparseVector
 
 import sparkboost.utils.Comparison
 
+
+object ZeroIterator extends Iterator[Double] {
+    def hasNext = true
+    def next = 0.0
+}
+
+
 object Learner extends Comparison {
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
 
@@ -52,14 +59,6 @@ object Learner extends Comparison {
         val timeStamp1 = System.currentTimeMillis() - timer
 
         def findBest(nodeIndex: Int, candid: Array[Int]): (Types.BoardElem, Types.ResultType) = {
-            def nextOrElse(iter: Iterator[Double]) = {
-                if (iter.hasNext) {
-                    iter.next
-                } else {
-                    0.0
-                }
-            }
-
             def getSign(t: Double, value: Int) = {
                 if (compare(t) > 0) value else -value
             }
@@ -67,7 +66,7 @@ object Learner extends Comparison {
             val timer = System.currentTimeMillis()
 
             val node = nodes(nodeIndex).value
-            val prevScores = board(nodeIndex).iterator
+            val prevScores = if (board.contains(nodeIndex)) board(nodeIndex).iterator else ZeroIterator
             var curScores = Array[Double]()
             var result = (0, 0, 0, 0, true)
 
@@ -88,7 +87,7 @@ object Learner extends Comparison {
                     val splitVal = 0.5
 
                     // Check left tree
-                    val val1 = nextOrElse(prevScores) + (
+                    val val1 = prevScores.next + (
                         if ((compare(x(j), splitVal) <= 0) == true) {
                             score
                         } else {
@@ -103,7 +102,7 @@ object Learner extends Comparison {
                     curScores = val1 +: curScores
 
                     // Check right tree
-                    val val2 = nextOrElse(prevScores) + (
+                    val val2 = prevScores.next + (
                         if ((compare(x(j), splitVal) <= 0) == false) {
                             score
                         } else {
@@ -119,7 +118,7 @@ object Learner extends Comparison {
                 })
             }
 
-            ((nodeIndex, curScores), result)
+            ((nodeIndex, curScores.reverse), result)
         }
 
         def travelTree(nodeId: Int, faCandid: Array[Int]): (Types.BoardList, Types.ResultType) = {
