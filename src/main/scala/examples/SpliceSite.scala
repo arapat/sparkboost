@@ -90,7 +90,6 @@ object SpliceSite extends Comparison {
                                      2 -> LogitBoost (not supported yet)
         --save-model           - file path to save the model
         --save-train-rdd       - file path to save training data RDD (row-based)
-        --save-train-csc-rdd   - file path to save training csc RDD (col-based)
         --save-test-rdd        - file path to save test data RDD
         --data-source          - source of data
                                      1 -> read from text files and get a new sample
@@ -108,7 +107,6 @@ object SpliceSite extends Comparison {
     If "--data-source" is set to 2, the following optional parameters are required.
 
         --load-train-rdd       - path to read training data RDD (row-based)
-        --load-train-csc-rdd   - path to read training csc RDD (col-based)
         --load-test-rdd        - path to save testing data RDD
     */
 
@@ -216,7 +214,6 @@ object SpliceSite extends Comparison {
         val algo = options("algorithm").toInt
         val modelWritePath = options("save-model")
         val trainSavePath = options("save-train-rdd")
-        val trainCSCSavePath = options("save-train-csc-rdd")
         val testSavePath = options("save-test-rdd")
         val source = options("data-source").toInt
         val improveFact = options("improve").toDouble

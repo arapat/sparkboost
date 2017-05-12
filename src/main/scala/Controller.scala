@@ -28,7 +28,7 @@ class Controller(
     val modelWritePath: String,
     val maxIters: Int
 ) extends java.io.Serializable with Comparison {
-    val printStatsInterval = 100
+    val printStatsInterval = 1
     val emptyMap = Map[Int, Array[Double]]()
 
     var train: Types.BaseRDD = null
@@ -177,12 +177,15 @@ class Controller(
                     }
                     start += seqChunks
 
+                    /*
                     {
                         // Debug
+                        setGlomTrain(glomResults)
                         println(glomResults.first._4.keys.toList.take(5).toList)
                         println(glomResults.first._4.values.toList.head.toList)
                         println(glomTrain.first._4)
                     }
+                    */
 
                     glomResults.unpersist()
                     println("Testing progress: most extreme outlier " +

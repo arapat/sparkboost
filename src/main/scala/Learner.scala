@@ -95,7 +95,7 @@ object Learner extends Comparison {
                         }
                     )
                     val result1 = (getSign(val1, nScanned), nodeIndex, j, 0, true)
-                    if (abs(val1) > thr) {
+                    if (nScanned > 1000 && abs(val1) > thr) {
                         earlyStop = true
                         result = result1
                     }
@@ -111,7 +111,7 @@ object Learner extends Comparison {
                         }
                     )
                     val result2 = (getSign(val2, nScanned), nodeIndex, j, 0, false)
-                    if (abs(val2) > thr) {
+                    if (nScanned > 1000 && abs(val2) > thr) {
                         earlyStop = true
                         result = result2
                     }
