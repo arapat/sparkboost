@@ -14,12 +14,6 @@ import org.apache.spark.mllib.linalg.SparseVector
 import sparkboost.utils.Comparison
 
 
-object ZeroIterator extends Iterator[Double] {
-    def hasNext = true
-    def next = 0.0
-}
-
-
 object Learner extends Comparison {
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
 
@@ -66,8 +60,13 @@ object Learner extends Comparison {
             val timer = System.currentTimeMillis()
 
             val node = nodes(nodeIndex).value
-            val prevScores = if (board.contains(nodeIndex)) board(nodeIndex).iterator else ZeroIterator
-            var curScores = Array[Double]()
+            val curScores: ArrayBuffer[Double] =
+                if (board.contains(nodeIndex)) {
+                    ArrayBuffer() ++ board(nodeIndex)
+                } else {
+                    // TODO: Add support for multiple splits
+                    ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => 0.0))
+                }
             var result = (0, 0, 0, 0, true)
 
             var wsum = 0.0
@@ -82,12 +81,13 @@ object Learner extends Comparison {
                 wsum += w
                 val score = y * w
 
+                var k = 0
                 range.foreach(j => {
-                    // TODO: Added support to multiple splits
+                    // TODO: Add support for multiple splits
                     val splitVal = 0.5
 
                     // Check left tree
-                    val val1 = prevScores.next + (
+                    val val1 = curScores(k) + (
                         if ((compare(x(j), splitVal) <= 0) == true) {
                             score
                         } else {
@@ -99,10 +99,11 @@ object Learner extends Comparison {
                         earlyStop = true
                         result = result1
                     }
-                    curScores = val1 +: curScores
+                    curScores(k) = val1
+                    k += 1
 
                     // Check right tree
-                    val val2 = prevScores.next + (
+                    val val2 = curScores(k) + (
                         if ((compare(x(j), splitVal) <= 0) == false) {
                             score
                         } else {
@@ -114,11 +115,12 @@ object Learner extends Comparison {
                         earlyStop = true
                         result = result2
                     }
-                    curScores = val2 +: curScores
+                    curScores(k) = val2
+                    k += 1
                 })
             }
 
-            ((nodeIndex, curScores.reverse), result)
+            ((nodeIndex, curScores.toArray), result)
         }
 
         def travelTree(nodeId: Int, faCandid: Array[Int]): (Types.BoardList, Types.ResultType) = {
@@ -129,7 +131,7 @@ object Learner extends Comparison {
             )
 
             var (cb, bestSplit) = findBest(nodeId, candid)
-            var newBoard = List(cb)
+            var newBoard: List[(Int, Array[Double])] = List(cb)
 
             if (node.depth + 1 < maxDepth) {
                 val c = child.iterator

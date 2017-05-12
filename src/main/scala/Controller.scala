@@ -63,7 +63,6 @@ class Controller(
                              (idx.toInt, array, array.map(_ => 1.0), emptyMap)
                          }}.cache()
         this.test = test
-        println(s"Max partition size is $maxPartSize")
         if (testRef != null) {
             if (this.testRef != null) {
                 this.testRef.unpersist()
@@ -73,6 +72,8 @@ class Controller(
 
         glomTrain.count
         maxPartSize = glomTrain.map(_._2.size).max
+        println(s"Max partition size is $maxPartSize")
+        println
     }
 
     def setGlomTrain(glomResults: Types.ResultRDDType = null) {
@@ -167,14 +168,23 @@ class Controller(
                         0, 8,
                         start, seqChunks, thrFunc
                     ).cache()
-                    val results = glomResults.map(_._5).filter(_._1 >= 0).cache()
+                    val results = glomResults.map(_._5).filter(_._1 != 0).cache()
                     if (results.count > 0) {
+                        // for simulation: select the earliest stopped one
                         resSplit = results.reduce((a, b) => if (abs(a._1) < abs(b._1)) a else b)
                     } else {
                         setGlomTrain(glomResults)
                     }
                     start += seqChunks
 
+                    {
+                        // Debug
+                        println(glomResults.first._4.keys.toList.take(5).toList)
+                        println(glomResults.first._4.values.toList.head.toList)
+                        println(glomTrain.first._4)
+                    }
+
+                    glomResults.unpersist()
                     println("Testing progress: most extreme outlier " +
                         safeMaxAbs3(glomTrain.map(t =>
                             safeMaxAbs2(t._4.values.map(safeMaxAbs).toIterator)
