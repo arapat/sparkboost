@@ -16,12 +16,12 @@ object Types {
     type BrNode = Broadcast[SplitterNode]
 
     type ABrNode = ArrayBuffer[Broadcast[SplitterNode]]
-    type BoardType = Map[Int, Array[Double]]
-    type BoardElem = (Int, Array[Double])
+    type BoardType = Map[Int, (Double, Array[Double])]
+    type BoardElem = (Int, (Double, Array[Double]))
     type BoardList = List[BoardElem]
 
-    // steps, nodeId, featureId, splitId, dir
-    type ResultType = (Int, Int, Int, Int, Boolean)
+    // steps, score, nodeId, featureId, splitId, dir
+    type ResultType = (Int, Double, Int, Int, Int, Boolean)
 
     // glomId, instances, weights, board
     type GlomType = (Int, Array[BaseInstance], Array[Double], BoardType)
@@ -34,7 +34,7 @@ object Types {
     type LossFunc = (Double, Double, Double) => Double
     type LearnerFunc = (SparkContext, TrainRDDType, ABrNode, Int,
                         Int, Int,
-                        Int, Int, Int => Double) => ResultRDDType
+                        Int, Int, Int, Int => Double) => ResultRDDType
     type UpdateFunc = (TrainRDDType, ABrNode) => TrainRDDType
     type WeightFunc = (Int, Double, Double) => Double
 }

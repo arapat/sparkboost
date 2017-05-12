@@ -20,7 +20,7 @@ object Learner extends Comparison {
     def findBestSplit(
             nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            headTest: Int, numTests: Int, getThreshold: Int => Double
+            prevScanned: Int, headTest: Int, numTests: Int, getThreshold: Int => Double
     )(glom: Types.GlomType): Types.GlomResultType = {
 
         // TODO:
@@ -53,28 +53,24 @@ object Learner extends Comparison {
         val timeStamp1 = System.currentTimeMillis() - timer
 
         def findBest(nodeIndex: Int, candid: Array[Int]): (Types.BoardElem, Types.ResultType) = {
-            def getSign(t: Double, value: Int) = {
-                if (compare(t) > 0) value else -value
-            }
-
             val timer = System.currentTimeMillis()
 
             val node = nodes(nodeIndex).value
-            val curScores: ArrayBuffer[Double] =
+            val (prevw, curScores): (Double, ArrayBuffer[Double]) =
                 if (board.contains(nodeIndex)) {
-                    ArrayBuffer() ++ board(nodeIndex)
+                    (board(nodeIndex)._1, ArrayBuffer() ++ board(nodeIndex)._2)
                 } else {
                     // TODO: Add support for multiple splits
-                    ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => 0.0))
+                    (0.0, ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => 0.0)))
                 }
-            var result = (0, 0, 0, 0, true)
+            var wsum = prevw
+            var result = (0, 0.0, 0, 0, 0, true)
 
-            var wsum = 0.0
             val candidIter = candid.iterator
             var earlyStop = false
             while (candidIter.hasNext && !earlyStop) {
                 val idx = candidIter.next
-                val nScanned = idx - headTest + 1
+                val nScanned = idx - headTest + 1 + prevScanned
                 val thr = getThreshold(nScanned)
                 val (y, x) = data(idx)
                 val w = weights(idx)
@@ -94,8 +90,8 @@ object Learner extends Comparison {
                             0.0
                         }
                     )
-                    val result1 = (getSign(val1, nScanned), nodeIndex, j, 0, true)
-                    if (nScanned > 1000 && abs(val1) > thr) {
+                    val result1 = (nScanned, val1, nodeIndex, j, 0, true)
+                    if (nScanned > 5000 && abs(val1 * nScanned / wsum) > thr) {
                         earlyStop = true
                         result = result1
                     }
@@ -110,8 +106,8 @@ object Learner extends Comparison {
                             0.0
                         }
                     )
-                    val result2 = (getSign(val2, nScanned), nodeIndex, j, 0, false)
-                    if (nScanned > 1000 && abs(val2) > thr) {
+                    val result2 = (nScanned, val2, nodeIndex, j, 0, false)
+                    if (nScanned > 5000 && abs(val2 * nScanned / wsum) > thr) {
                         earlyStop = true
                         result = result2
                     }
@@ -120,7 +116,7 @@ object Learner extends Comparison {
                 })
             }
 
-            ((nodeIndex, curScores.toArray), result)
+            ((nodeIndex, (wsum, curScores.toArray)), result)
         }
 
         def travelTree(nodeId: Int, faCandid: Array[Int]): (Types.BoardList, Types.ResultType) = {
@@ -131,7 +127,7 @@ object Learner extends Comparison {
             )
 
             var (cb, bestSplit) = findBest(nodeId, candid)
-            var newBoard: List[(Int, Array[Double])] = List(cb)
+            var newBoard: List[Types.BoardElem] = List(cb)
 
             if (node.depth + 1 < maxDepth) {
                 val c = child.iterator
@@ -155,13 +151,13 @@ object Learner extends Comparison {
     def partitionedGreedySplit(
             sc: SparkContext, train: Types.TrainRDDType, nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            headTest: Int, numTests: Int, getThreshold: Int => Double
+            prevScanned: Int, headTest: Int, numTests: Int, getThreshold: Int => Double
     ): RDD[Types.GlomResultType] = {
         var tStart = System.currentTimeMillis()
 
         val f = findBestSplit(nodes, maxDepth,
                               featuresOffset, featuresPerCore,
-                              headTest, numTests, getThreshold) _
+                              prevScanned, headTest, numTests, getThreshold) _
         val trainAndResult = train.map(f).cache()
         trainAndResult.count()
 

@@ -3,6 +3,7 @@ package sparkboost
 import math.abs
 import math.log
 import math.exp
+import math.min
 import util.Random.{nextDouble => rand}
 import util.Random.{nextInt => randomInt}
 import collection.mutable.ArrayBuffer
@@ -28,8 +29,8 @@ class Controller(
     val modelWritePath: String,
     val maxIters: Int
 ) extends java.io.Serializable with Comparison {
-    val printStatsInterval = 1
-    val emptyMap = Map[Int, Array[Double]]()
+    val printStatsInterval = 20
+    val emptyMap = Map[Int, (Double, Array[Double])]()
 
     var train: Types.BaseRDD = null
     var glomTrain: Types.TrainRDDType = null
@@ -46,7 +47,7 @@ class Controller(
     // Early stop
     var gamma = 0.25
     var delta = 0.001
-    val initSeqChunks = 2000
+    val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
     // TT: good
@@ -118,7 +119,10 @@ class Controller(
 
     def runADTree(): Array[SplitterNode] = {
         def maxAbs(a: Double, b: Double) = if (abs(a) > abs(b)) a else b
-        def safeMaxAbs(array: Array[Double]) = if (array.size == 0) 0.0 else array.reduce(maxAbs)
+        def safeMaxAbs(n: Int)(value: (Double, Array[Double])) = {
+            val (wsum, array) = value
+            n / wsum * { if (array.size == 0) 0.0 else array.reduce(maxAbs) }
+        }
         def safeMaxAbs2(array: Iterator[Double]) = if (array.hasNext == false) 0.0 else array.reduce(maxAbs)
         def safeMaxAbs3(array: RDD[Double]) = if (array.take(1).size == 0) 0.0 else array.reduce(maxAbs)
         // Initialize the training examples. There are two possible cases:
@@ -154,44 +158,44 @@ class Controller(
             //    Simulating TMSN using Spark's computation model ==>
             //        Ask workers to scan a batch of examples at a time until one of them find
             //        a valid weak rule (as per early stop rule).
-            var resSplit: Types.ResultType = (0, 0, 0, 0, true)
+            var resSplit: Types.ResultType = (0, 0.0, 0, 0, 0, true)
 
             while (gamma > 0.02 && resSplit._1 == 0) {
                 var start = 0
+                var scanned = 0
                 setGlomTrain()
-                while (seqChunks < maxPartSize && resSplit._1 == 0) {
+                while (scanned < maxPartSize && resSplit._1 == 0) {
                     val thrFunc = Utils.getThreshold(gamma, delta) _
-                    println(s"Now scan $seqChunks examples for a $gamma weak learner.")
+                    println(s"Now scan $seqChunks examples from $start for a $gamma weak learner.")
                     // TODO: let 0, 8 be two parameters
                     val glomResults = learnerFunc(
                         sc, glomTrain, nodes, depth,
                         0, 8,
-                        start, seqChunks, thrFunc
+                        scanned, start, seqChunks, thrFunc
                     ).cache()
                     val results = glomResults.map(_._5).filter(_._1 != 0).cache()
                     if (results.count > 0) {
                         // for simulation: select the earliest stopped one
-                        resSplit = results.reduce((a, b) => if (abs(a._1) < abs(b._1)) a else b)
+                        resSplit = results.reduce((a, b) => if (a._1 < b._1) a else b)
                     } else {
                         setGlomTrain(glomResults)
                     }
                     start += seqChunks
+                    scanned += seqChunks
 
-                    /*
                     {
                         // Debug
                         setGlomTrain(glomResults)
-                        println(glomResults.first._4.keys.toList.take(5).toList)
-                        println(glomResults.first._4.values.toList.head.toList)
-                        println(glomTrain.first._4)
+                        // println(glomResults.first._4.keys.toList.take(5).toList)
+                        // println(glomResults.first._4.values.toList.head.toList)
+                        // println(glomTrain.first._4)
                     }
-                    */
 
                     glomResults.unpersist()
                     println("Testing progress: most extreme outlier " +
                         safeMaxAbs3(glomTrain.map(t =>
-                            safeMaxAbs2(t._4.values.map(safeMaxAbs).toIterator)
-                        )) + ", threshold " + thrFunc(start))
+                            safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
+                        )) + ", threshold " + thrFunc(scanned))
                 }
                 seqChunks = start
                 if (resSplit._1 == 0) {
@@ -209,11 +213,13 @@ class Controller(
             println(s"Stopped after scanning $seqChunks examples in (ms) " +
                     (System.currentTimeMillis() - timerStart))
 
-            val (signedScanned, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
+            val (steps, score, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
             val splitVal = 0.5  // TODO: fix this
-            val pred = if (signedScanned > 0) (0.5 * log(gamma)) else (-0.5 * log(gamma))
+            val pred = if (score > 0) (0.5 * log((0.5 + gamma) / (0.5 - gamma)))
+                       else           (0.5 * log((0.5 - gamma) / (0.5 + gamma)))
 
-            println("Number of samples before early-stop: " + abs(signedScanned))
+            println(s"$steps steps achieved score $score, threshold was " +
+                Utils.getThreshold(gamma, delta)(steps))
 
             // add the new node to the nodes list
             val newNode = SplitterNode(nodes.size, nodeIndex, localNodes(nodeIndex).depth + 1,
@@ -223,12 +229,34 @@ class Controller(
             val brNewNode = sc.broadcast(newNode)
             nodes :+= brNewNode
             localNodes :+= newNode
-
-            glomTrain = updateFunc(glomTrain, nodes)
-            glomTrain.count
             println("Depth: " + newNode.depth)
             println(s"Predicts $pred. Father $nodeIndex. " +
                     s"Feature $dimIndex, split at $splitVal, eval $splitEval")
+
+            {
+                // Debug
+                val (pos, neg) = glomTrain.map(t => {
+                    var i = 0
+                    var (pos, neg) = (0.0, 0.0)
+                    while (i < min(8000, t._3.size)) {
+                        val (y, x) = t._2(i)
+                        val w = t._3(i)
+                        if (brNewNode.value.check(x(brNewNode.value.splitIndex))) {
+                            if (y > 0) {
+                                pos += w
+                            } else {
+                                neg += w
+                            }
+                        }
+                        i+= 1
+                    }
+                    (pos, neg)
+                }).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+                println("Actual prediction should be " + 0.5 * log(pos / neg))
+            }
+
+            glomTrain = updateFunc(glomTrain, nodes)
+            glomTrain.count
 
             if (curIter % printStatsInterval == 0) {
                 SplitterNode.save(localNodes, modelWritePath)
