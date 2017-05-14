@@ -4,6 +4,7 @@ import math.abs
 import math.log
 import math.exp
 import math.min
+import math.pow
 import util.Random.{nextDouble => rand}
 import util.Random.{nextInt => randomInt}
 import collection.mutable.ArrayBuffer
@@ -46,7 +47,7 @@ class Controller(
 
     // Early stop
     var gamma = 0.25
-    var delta = 0.001
+    var delta = pow(10, -20)
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
@@ -182,6 +183,8 @@ class Controller(
                     }
                     start += seqChunks
                     scanned += seqChunks
+
+                    println("We have " + results.count + " potential biased rules.")
 
                     {
                         // Debug
