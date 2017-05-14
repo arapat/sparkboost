@@ -21,11 +21,11 @@ object Utils extends Comparison {
         }
     }
 
-    def getThreshold(gamma: Double, delta: Double)(t: Int) = {
+    def getThreshold(gamma: Double, delta: Double)(wsum: Double) = {
         val rou = (0.5 + gamma) * (0.5 - gamma / 2) / (0.5 - gamma) / (0.5 + gamma / 2)
         val alpha = 1.0 / rou * log((1.0 - delta) / delta)
         val beta = 1.0 / rou * log((0.5 - gamma / 2) / (0.5 - gamma))
-        alpha + beta * t
+        alpha + beta * wsum
     }
 
     def printStats(train: Types.BaseRDD, glomTrain: Types.TrainRDDType,

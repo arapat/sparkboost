@@ -20,7 +20,7 @@ object Learner extends Comparison {
     def findBestSplit(
             nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            prevScanned: Int, headTest: Int, numTests: Int, getThreshold: Int => Double
+            prevScanned: Int, headTest: Int, numTests: Int, getThreshold: Double => Double
     )(glom: Types.GlomType): Types.GlomResultType = {
 
         // TODO:
@@ -71,10 +71,10 @@ object Learner extends Comparison {
             while (candidIter.hasNext && !earlyStop) {
                 val idx = candidIter.next
                 val nScanned = idx - headTest + 1 + prevScanned
-                val thr = getThreshold(nScanned)
                 val (y, x) = data(idx)
                 val w = weights(idx)
                 wsum += w
+                val thr = getThreshold(wsum)
                 val score = y * w
 
                 var k = 0
@@ -91,7 +91,7 @@ object Learner extends Comparison {
                         }
                     )
                     val result1 = (nScanned, val1, nodeIndex, j, 0, true)
-                    if (nScanned > 5000 && abs(val1 * nScanned / wsum) > thr) {
+                    if (nScanned > 5000 && abs(val1) > thr) {
                         earlyStop = true
                         result = result1
                     }
@@ -107,7 +107,7 @@ object Learner extends Comparison {
                         }
                     )
                     val result2 = (nScanned, val2, nodeIndex, j, 0, false)
-                    if (nScanned > 5000 && abs(val2 * nScanned / wsum) > thr) {
+                    if (nScanned > 5000 && abs(val2) > thr) {
                         earlyStop = true
                         result = result2
                     }
@@ -151,7 +151,7 @@ object Learner extends Comparison {
     def partitionedGreedySplit(
             sc: SparkContext, train: Types.TrainRDDType, nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            prevScanned: Int, headTest: Int, numTests: Int, getThreshold: Int => Double
+            prevScanned: Int, headTest: Int, numTests: Int, getThreshold: Double => Double
     ): RDD[Types.GlomResultType] = {
         var tStart = System.currentTimeMillis()
 

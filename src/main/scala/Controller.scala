@@ -121,7 +121,7 @@ class Controller(
         def maxAbs(a: Double, b: Double) = if (abs(a) > abs(b)) a else b
         def safeMaxAbs(n: Int)(value: (Double, Array[Double])) = {
             val (wsum, array) = value
-            n / wsum * { if (array.size == 0) 0.0 else array.reduce(maxAbs) }
+            if (array.size == 0) 0.0 else array.reduce(maxAbs)
         }
         def safeMaxAbs2(array: Iterator[Double]) = if (array.hasNext == false) 0.0 else array.reduce(maxAbs)
         def safeMaxAbs3(array: RDD[Double]) = if (array.take(1).size == 0) 0.0 else array.reduce(maxAbs)
@@ -222,7 +222,8 @@ class Controller(
                 Utils.getThreshold(gamma, delta)(steps))
 
             // add the new node to the nodes list
-            val newNode = SplitterNode(nodes.size, nodeIndex, localNodes(nodeIndex).depth + 1,
+            val newNodeId = nodes.size
+            val newNode = SplitterNode(newNodeId, nodeIndex, localNodes(nodeIndex).depth + 1,
                                        (dimIndex, splitVal, splitEval))
             newNode.setPredict(pred)
             localNodes(nodeIndex).addChild(localNodes.size)
@@ -235,23 +236,35 @@ class Controller(
 
             {
                 // Debug
+                def check(x: SparseVector, nodeId: Int): Boolean = {
+                    val node = nodes(nodeId).value
+                    ((node.prtIndex < 0 || check(x, node.prtIndex)) &&
+                        (node.splitIndex < 0 || node.check(x(node.splitIndex))))
+                }
+
                 val (pos, neg) = glomTrain.map(t => {
                     var i = 0
                     var (pos, neg) = (0.0, 0.0)
-                    while (i < min(8000, t._3.size)) {
-                        val (y, x) = t._2(i)
-                        val w = t._3(i)
-                        if (brNewNode.value.check(x(brNewNode.value.splitIndex))) {
-                            if (y > 0) {
-                                pos += w
-                            } else {
-                                neg += w
+                    if (t._3.size >= steps) {
+                        while (i < steps) {
+                            val (y, x) = t._2(i)
+                            val w = t._3(i)
+                            if (check(x, newNodeId)) {
+                                if (y > 0) {
+                                    pos += w
+                                } else {
+                                    neg += w
+                                }
                             }
+                            i+= 1
                         }
-                        i+= 1
+                        (true, (pos, neg))
+                    } else {
+                        (false, (pos, neg))
                     }
-                    (pos, neg)
-                }).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+                }).filter(_._1).map(_._2).reduce((a, b) =>
+                    (a._1 + b._1, a._2 + b._2)
+                )
                 println("Actual prediction should be " + 0.5 * log(pos / neg))
             }
 
