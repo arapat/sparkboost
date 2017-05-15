@@ -4,6 +4,7 @@ import math.abs
 import math.log
 import math.exp
 import math.min
+import math.max
 import math.pow
 import util.Random.{nextDouble => rand}
 import util.Random.{nextInt => randomInt}
@@ -47,7 +48,7 @@ class Controller(
 
     // Early stop
     var gamma = 0.25
-    var delta = pow(10, -20)
+    var delta = pow(10, -8)
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
@@ -147,6 +148,7 @@ class Controller(
         // TODO: is this func still needed?
         // setMetaData()
 
+        var start = 0
         var curIter = 0
         var terminate = false
         while (!terminate && (maxIters == 0 || curIter < maxIters)) {
@@ -162,7 +164,6 @@ class Controller(
             var resSplit: Types.ResultType = (0, 0.0, 0, 0, 0, true)
 
             while (gamma > 0.02 && resSplit._1 == 0) {
-                var start = 0
                 var scanned = 0
                 setGlomTrain()
                 while (scanned < maxPartSize && resSplit._1 == 0) {
@@ -181,7 +182,7 @@ class Controller(
                     } else {
                         setGlomTrain(glomResults)
                     }
-                    start += seqChunks
+                    start = (start + seqChunks) % maxPartSize
                     scanned += seqChunks
 
                     println("We have " + results.count + " potential biased rules.")
@@ -195,12 +196,12 @@ class Controller(
                     }
 
                     glomResults.unpersist()
-                    println("Testing progress: most extreme outlier " +
-                        safeMaxAbs3(glomTrain.map(t =>
-                            safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
-                        )) + ", threshold " + thrFunc(scanned))
+                    // println("Testing progress: most extreme outlier " +
+                    //     safeMaxAbs3(glomTrain.map(t =>
+                    //         safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
+                    //     )) + ", threshold " + thrFunc(scanned))
                 }
-                seqChunks = start
+                seqChunks = scanned
                 if (resSplit._1 == 0) {
                     println(s"=== !!!  Cannot find a valid weak learner for $gamma.  !!! ===")
                     gamma /= 2.0
@@ -248,24 +249,20 @@ class Controller(
                 val (pos, neg) = glomTrain.map(t => {
                     var i = 0
                     var (pos, neg) = (0.0, 0.0)
-                    if (t._3.size >= steps) {
-                        while (i < steps) {
-                            val (y, x) = t._2(i)
-                            val w = t._3(i)
-                            if (check(x, newNodeId)) {
-                                if (y > 0) {
-                                    pos += w
-                                } else {
-                                    neg += w
-                                }
+                    while (i < t._3.size) {
+                        val (y, x) = t._2(i)
+                        val w = t._3(i)
+                        if (check(x, newNodeId)) {
+                            if (y > 0) {
+                                pos += w
+                            } else {
+                                neg += w
                             }
-                            i+= 1
                         }
-                        (true, (pos, neg))
-                    } else {
-                        (false, (pos, neg))
+                        i+= 1
                     }
-                }).filter(_._1).map(_._2).reduce((a, b) =>
+                    (pos, neg)
+                }).reduce((a, b) =>
                     (a._1 + b._1, a._2 + b._2)
                 )
                 println("Actual prediction should be " + 0.5 * log(pos / neg))
