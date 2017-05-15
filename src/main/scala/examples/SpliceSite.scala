@@ -3,7 +3,7 @@ package sparkboost.examples
 import collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.annotation.tailrec
-import util.Random.{nextDouble => rand}
+import util.Random
 
 import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext
@@ -117,6 +117,10 @@ object SpliceSite extends Comparison {
 
     type BaseInstance = (Int, SparseVector)
 
+    def rand(obj: Object) = {
+        (new Random(System.identityHashCode(obj))).nextDouble
+    }
+
     def parseOptions(options: Array[String]) = {
         options.zip(options.slice(1, options.size))
                .zip(0 until options.size).filter(_._2 % 2 == 0).map(_._1)
@@ -140,7 +144,7 @@ object SpliceSite extends Comparison {
 
         val sampleSize = (weightsTrain.count * sampleFrac).ceil.toInt
         val segSize = scaledSumWeight / sampleSize
-        val offset = rand() * segSize
+        val offset = Random.nextDouble() * segSize
 
         val partitionSum = weightsTrain.mapPartitions((iterator: Iterator[(Double, BaseInstance)]) => {
             List(
@@ -170,9 +174,10 @@ object SpliceSite extends Comparison {
             }
         ).cache()
 
-        val splits = weightedSample.map((rand, _)).sortByKey().map(_._2)
+        val splits = weightedSample.map(t => (rand(t), t)).sortByKey().map(_._2)
                                    .randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
-        val (train, test): (RDD[BaseInstance], RDD[BaseInstance]) = (splits(0), splits(1))
+        val (train, test): (RDD[BaseInstance], RDD[BaseInstance]) =
+            (splits(0).map(t => (rand(t), t)).sortByKey().map(_._2), splits(1))
         train.setName("sampled train data")
         test.setName("sampled test data")
         train.cache()
@@ -229,7 +234,7 @@ object SpliceSite extends Comparison {
 
         val trainInstance = sc.textFile(trainPath, minPartitions=numCores)
                               .map(InstanceFactory.rowToInstance)
-                              .map(t => (rand, t))
+                              .map(t => (rand(t), t))
                               .sortByKey()
                               .map(t => t._2)
                               .cache

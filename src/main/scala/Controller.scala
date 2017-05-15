@@ -65,6 +65,11 @@ class Controller(
                          .map { case (array, idx) => {
                              (idx.toInt, array, array.map(_ => 1.0), emptyMap)
                          }}.cache()
+
+        {
+            // glomTrain.map(_._2.slice(0, 20).map(_._1).toList).collect().foreach{t => println(t.toList)}
+        }
+
         this.test = test
         if (testRef != null) {
             if (this.testRef != null) {
