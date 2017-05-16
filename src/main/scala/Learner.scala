@@ -40,7 +40,7 @@ object Learner extends Comparison {
         val (glomId, data, weights, board) = glom
         val numFeatures = data(0)._2.size
         val tree = getTreeTopology()
-        val rangeSt = glomId + featuresOffset
+        val rangeSt = (glomId * featuresPerCore + featuresOffset) % numFeatures
         val rangeEd = rangeSt + featuresPerCore
         val range =
             if (rangeEd <= numFeatures) {
