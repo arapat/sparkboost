@@ -29,7 +29,8 @@ class Controller(
     val minImproveFact: Double,
     val rawImproveWindow: Int,
     val modelWritePath: String,
-    val maxIters: Int
+    val maxIters: Int,
+    val numCores: Int
 ) extends java.io.Serializable with Comparison {
     val printStatsInterval = 20
     val emptyMap = Map[Int, (Double, Array[Double])]()
@@ -183,7 +184,7 @@ class Controller(
                     // TODO: let 0, 8 be two parameters
                     val glomResults = learnerFunc(
                         sc, glomTrain, nodes, depth,
-                        0, 8,
+                        0, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
                         scanned, start, seqChunks, thrFunc
                     ).cache()
                     val results = glomResults.map(_._5).filter(_._1 != 0).cache()

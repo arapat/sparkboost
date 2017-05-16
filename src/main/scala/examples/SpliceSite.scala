@@ -291,7 +291,8 @@ object SpliceSite extends Comparison {
                     improveFact,
                     improveWindow,
                     modelWritePath,
-                    maxIters
+                    maxIters,
+                    numCores
                 )
                 controller.setDatasets(train, test, testRef)
                 controller.setNodes(baseNodes, lastResample, lastDepth)
