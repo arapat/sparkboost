@@ -67,7 +67,7 @@ object Learner extends Comparison {
                     (0.0, ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => 0.0)))
                 }
             var wsum = prevw
-            var result = (0, 0.0, 0, 0, 0, true)
+            var result = (0, 0.0, 0.0, 0, 0, 0, true)
 
             val candidIter = candid.iterator
             var earlyStop = false
@@ -93,7 +93,7 @@ object Learner extends Comparison {
                             0.0
                         }
                     )
-                    val result1 = (nScanned, val1, nodeIndex, j, 0, true)
+                    val result1 = (nScanned, val1, wsum, nodeIndex, j, 0, true)
                     if (abs(val1) > thr) {
                         earlyStop = true
                         result = result1
@@ -109,7 +109,7 @@ object Learner extends Comparison {
                             0.0
                         }
                     )
-                    val result2 = (nScanned, val2, nodeIndex, j, 0, false)
+                    val result2 = (nScanned, val2, wsum, nodeIndex, j, 0, false)
                     if (abs(val2) > thr) {
                         earlyStop = true
                         result = result2

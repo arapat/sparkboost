@@ -20,8 +20,8 @@ object Types {
     type BoardElem = (Int, (Double, Array[Double]))
     type BoardList = List[BoardElem]
 
-    // steps, score, nodeId, featureId, splitId, dir
-    type ResultType = (Int, Double, Int, Int, Int, Boolean)
+    // steps, score, wsum, nodeId, featureId, splitId, dir
+    type ResultType = (Int, Double, Double, Int, Int, Int, Boolean)
 
     // glomId, instances, weights, board
     type GlomType = (Int, Array[BaseInstance], Array[Double], BoardType)

@@ -31,8 +31,8 @@ object Utils extends Comparison {
         2 * alpha + (2 * beta  - 1) * wsum
         */
         val kbr = 1
-        val n = max(1000.0, wsum)
-        (1 + 2 * gamma) * sqrt(kbr * n * log(log(n) / delta)) + 2 * n * gamma
+        val n = max(100.0, wsum)
+        sqrt(kbr * n * log(log(n) / delta)) + 2 * n * gamma
     }
 
     def printStats(train: Types.BaseRDD, glomTrain: Types.TrainRDDType,

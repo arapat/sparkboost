@@ -128,7 +128,8 @@ object SpliceSite extends Comparison {
                .toMap
     }
 
-    def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, getWeight: (Int, Double, Double) => Double,
+    def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, numCores: Int,
+                   getWeight: (Int, Double, Double) => Double,
                    url: String, trainSavePath: String, testSavePath: String)
                   (nodes: Array[SplitterNode]) = {
         val weightsTrain = trainInstance.map(t =>
@@ -177,7 +178,8 @@ object SpliceSite extends Comparison {
         val splits = weightedSample.map(t => (rand(t), t)).sortByKey().map(_._2)
                                    .randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
         val (train, test): (RDD[BaseInstance], RDD[BaseInstance]) =
-            (splits(0).map(t => (rand(t), t)).sortByKey().map(_._2), splits(1))
+            (splits(0).map(t => (rand(t), t)).sortByKey().map(_._2)
+                                             .repartition(numCores), splits(1))
         train.setName("sampled train data")
         test.setName("sampled test data")
         train.cache()
@@ -248,7 +250,8 @@ object SpliceSite extends Comparison {
             else                 loadNodes
         }
         val hdfsURL = sc.master.split("://")(1).split(":")(0) + ":9000"
-        val curSampleFunc = sampleData(trainInstance, sampleFrac, UpdateFunc.adaboostWeightUpdate,
+        val curSampleFunc = sampleData(trainInstance, sampleFrac, numCores,
+                                       UpdateFunc.adaboostWeightUpdate,
                                        hdfsURL, trainSavePath, testSavePath) _
         val (train, test) =
             if (source == 2) {

@@ -39,6 +39,7 @@ class Controller(
     var test: Types.BaseRDD = null
     var testRef: Types.BaseRDD = null
     var maxPartSize: Int = 0
+    var minPartSize: Int = 0
 
     var depth: Int = 100
 
@@ -48,6 +49,7 @@ class Controller(
 
     // Early stop
     val MIN_GAMMA = 0.001
+    val INIT_GAMMA = 0.25
     var gamma = 0.25
     var delta = pow(10, -3)
     val initSeqChunks = 8000
@@ -81,7 +83,9 @@ class Controller(
 
         glomTrain.count
         maxPartSize = glomTrain.map(_._2.size).max
+        minPartSize = glomTrain.map(_._2.size).min
         println(s"Max partition size is $maxPartSize")
+        println(s"Min partition size is $minPartSize")
         println
     }
 
@@ -167,7 +171,7 @@ class Controller(
             //    Simulating TMSN using Spark's computation model ==>
             //        Ask workers to scan a batch of examples at a time until one of them find
             //        a valid weak rule (as per early stop rule).
-            var resSplit: Types.ResultType = (0, 0.0, 0, 0, 0, true)
+            var resSplit: Types.ResultType = (0, 0.0, 0.0, 0, 0, 0, true)
 
             while (gamma > MIN_GAMMA && resSplit._1 == 0) {
                 var scanned = 0
@@ -214,6 +218,7 @@ class Controller(
                     start = 0
                     seqChunks = initSeqChunks
                 }
+                gamma = INIT_GAMMA
             }
 
             if (resSplit._1 == 0) {
@@ -224,13 +229,13 @@ class Controller(
             println(s"Stopped after scanning $seqChunks examples in (ms) " +
                     (System.currentTimeMillis() - timerStart))
 
-            val (steps, score, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
+            val (steps, score, wsum, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
             val splitVal = 0.5  // TODO: fix this
             val pred = if (score > 0) (0.5 * log((0.5 + gamma) / (0.5 - gamma)))
                        else           (0.5 * log((0.5 - gamma) / (0.5 + gamma)))
 
-            println(s"$steps steps achieved score $score, threshold was " +
-                Utils.getThreshold(gamma, delta)(steps))
+            println(s"$steps steps achieved score $score, threshold was $wsum => " +
+                Utils.getThreshold(gamma, delta)(wsum))
 
             // add the new node to the nodes list
             val newNodeId = nodes.size
