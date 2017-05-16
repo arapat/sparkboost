@@ -1,15 +1,29 @@
+## Author: Saket Choudhar [saketkc\\gmail]
+## License: GPL v3
+## Copyright © 2017 Saket Choudhary<saketkc__AT__gmail>
+## Modification: Julaiti Alafate [jalafate\\gmail]
+
 from operator import itemgetter
+
 import seaborn
 import matplotlib.pyplot as plt
 plt.style.use('seaborn-ticks')
 from matplotlib import transforms
 import matplotlib.patheffects
+from matplotlib.font_manager import FontProperties
+import matplotlib as mpl
+
 import numpy as np
 
-COLOR_SCHEME = {'G': 'orange', 
-                'A': 'red', 
-                'C': 'blue', 
-                'T': 'darkgreen'}
+COLOR_SCHEME = {'G': 'orange',
+                'A': 'red',
+                'C': 'blue',
+                'T': 'darkgreen',
+                "is": "green",
+                "isnot": "red"}
+
+BASES = list(COLOR_SCHEME.keys())
+
 
 class Scale(matplotlib.patheffects.RendererBase):
     def __init__(self, sx, sy=None):
@@ -21,49 +35,118 @@ class Scale(matplotlib.patheffects.RendererBase):
         renderer.draw_path(gc, tpath, affine, rgbFace)
 
 
-def draw_logo(all_scores):
-    fig = plt.figure()
-    fig.set_size_inches(len(all_scores), 2.5)
-    ax = fig.add_subplot(111)
-    ax.set_xticks(range(len(all_scores)))
+def draw_logo(all_scores, fontfamily='Arial', size=80):
+    mpl.rcParams['font.family'] = fontfamily
 
-    xshift = 0
+    fig, ax = plt.subplots(figsize=(len(all_scores), 5.0))
+
+    font = FontProperties()
+    font.set_size(size)
+    font.set_weight('bold')
+
+    #font.set_family(fontfamily)
+
+    ax.set_xticks(range(1,len(all_scores)+1))
+    ax.set_yticks(range(0,5))
+    ax.set_xticklabels(range(1,len(all_scores)+1), rotation=90)
+    ax.set_yticklabels(np.arange(-2,3,1))
+    seaborn.despine(ax=ax, trim=True)
+
+    max_scores = 0.0
+    for index, scores in enumerate(all_scores):
+        max_scores = max(max_scores, sum(map(lambda t: abs(t[1]), scores)))
+    scale_fact = 2.0 / max_scores
+
+    ax.axhline(2, lw=10.0, c="gray")
+    ax.axvline(59.5, lw=10.0, c="blue")
+
+    # Positive scores
     trans_offset = transforms.offset_copy(
-        ax.transAxes, 
-        fig=fig, 
-        x=0, 
-        y=0, 
+        ax.transData,
+        fig=fig,
+        x=1,
+        y=0,
         units='points'
     )
-
-    for scores in all_scores:
-        yshift = 0
-        for base, score in scores:
-            txt = ax.text(0, 
-                          0, 
-                          base, 
-                          transform=trans_offset,
-                          fontsize=80, 
-                          color=COLOR_SCHEME[base],
-                          weight='bold',
-                          ha='center',
-                          family='sans-serif')
-            txt.set_clip_on(False) 
+    for index, scores in enumerate(all_scores):
+        for base, score, mark in scores:
+            if score <= 0:
+                continue
+            txt = ax.text(
+                index+1,
+                2,
+                base,
+                transform=trans_offset,
+                fontsize=80,
+                color=COLOR_SCHEME[mark],
+                ha='center',
+                fontproperties=font
+            )
+            score *= scale_fact
             txt.set_path_effects([Scale(1.0, score)])
             fig.canvas.draw()
             window_ext = txt.get_window_extent(txt._renderer)
-            yshift = window_ext.height * score
-            trans_offset = transforms.offset_copy(txt._transform, fig=fig, y=yshift, units='points')
-        xshift += window_ext.width
-        trans_offset = transforms.offset_copy(ax.transAxes, fig=fig, x=xshift, units='points')
+            yshift = window_ext.height*score
+            trans_offset = transforms.offset_copy(
+                txt._transform,
+                fig=fig,
+                y=yshift,
+                units='points'
+            )
+        trans_offset = transforms.offset_copy(
+            ax.transData,
+            fig=fig,
+            x=1,
+            y=0,
+            units='points'
+        )
 
-
-    ax.set_yticks(range(0,3))
-
-
-    seaborn.despine(ax=ax, offset=30, trim=True)
-    ax.set_xticklabels(range(1,len(all_scores)+1), rotation=90)
-    ax.set_yticklabels(np.arange(0,3,1))
+    # Positive examples
+    trans_offset = transforms.offset_copy(
+        ax.transData,
+        fig=fig,
+        x=1,
+        y=0,
+        units='points'
+    )
+    for index, scores in enumerate(all_scores):
+        offset = 0.0
+        for base, score, mark in scores:
+            if score < 0:
+                offset -= score
+        offset = 2.0 - offset * scale_fact
+        for base, score, mark in scores:
+            if score >= 0:
+                continue
+            score = -score
+            txt = ax.text(
+                index+1,
+                offset,
+                base,
+                transform=trans_offset,
+                fontsize=80,
+                color=COLOR_SCHEME[mark],
+                ha='center',
+                fontproperties=font
+            )
+            score *= scale_fact
+            txt.set_path_effects([Scale(1.0, score)])
+            fig.canvas.draw()
+            window_ext = txt.get_window_extent(txt._renderer)
+            yshift = window_ext.height*score
+            trans_offset = transforms.offset_copy(
+                txt._transform,
+                fig=fig,
+                y=yshift,
+                units='points'
+            )
+        trans_offset = transforms.offset_copy(
+            ax.transData,
+            fig=fig,
+            x=1,
+            y=0,
+            units='points'
+        )
 
     plt.show()
 
