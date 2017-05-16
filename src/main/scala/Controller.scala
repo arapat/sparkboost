@@ -33,7 +33,7 @@ class Controller(
     val numCores: Int
 ) extends java.io.Serializable with Comparison {
     val printStatsInterval = 20
-    val emptyMap = Map[Int, (Double, Array[Double])]()
+    val emptyMap: Types.BoardType = Map[Int, (Double, Array[(Double, Double)])]()
 
     var train: Types.BaseRDD = null
     var glomTrain: Types.TrainRDDType = null
@@ -49,10 +49,8 @@ class Controller(
     var lastResample = 0
 
     // Early stop
-    val MIN_GAMMA = 0.001
-    val INIT_GAMMA = 0.25
-    var gamma = INIT_GAMMA
     var delta = pow(10, -3)
+    var thrFact = 0.40
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
@@ -159,6 +157,8 @@ class Controller(
         // TODO: is this func still needed?
         // setMetaData()
 
+        println(s"Threshold factor is $thrFact")
+
         var start = 0
         var curIter = 0
         var terminate = false
@@ -172,55 +172,47 @@ class Controller(
             //    Simulating TMSN using Spark's computation model ==>
             //        Ask workers to scan a batch of examples at a time until one of them find
             //        a valid weak rule (as per early stop rule).
-            var resSplit: Types.ResultType = (0, 0.0, 0.0, 0, 0, 0, true)
+            var resSplit: Types.ResultType = (0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, true)
 
-            // gamma = INIT_GAMMA
-            while (gamma > MIN_GAMMA && resSplit._1 == 0) {
-                var scanned = 0
-                setGlomTrain()
-                while (scanned < maxPartSize && resSplit._1 == 0) {
-                    val thrFunc = Utils.getThreshold(gamma, delta) _
-                    println(s"Now scan $seqChunks examples from $start for a $gamma weak learner.")
-                    // TODO: let 0, 8 be two parameters
-                    val glomResults = learnerFunc(
-                        sc, glomTrain, nodes, depth,
-                        0, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
-                        scanned, start, seqChunks, thrFunc
-                    ).cache()
-                    val results = glomResults.map(_._5).filter(_._1 != 0).cache()
-                    if (results.count > 0) {
-                        // for simulation: select the earliest stopped one
-                        resSplit = results.reduce((a, b) => if (a._1 < b._1) a else b)
-                    } else {
-                        setGlomTrain(glomResults)
-                    }
-                    start = (start + seqChunks) % maxPartSize
-                    scanned += seqChunks
-
-                    println("We have " + results.count + " potential biased rules.")
-
-                    {
-                        // Debug
-                        // setGlomTrain(glomResults)
-                        // println(glomResults.first._4.keys.toList.take(5).toList)
-                        // println(glomResults.first._4.values.toList.head.toList)
-                        // println(glomTrain.first._4)
-                    }
-
-                    glomResults.unpersist()
-                    println("Testing progress: most extreme outlier " +
-                        safeMaxAbs3(glomTrain.map(t =>
-                            safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
-                        )) + ", threshold " + thrFunc(scanned))
+            var scanned = 0
+            setGlomTrain()
+            while (scanned < maxPartSize && resSplit._1 == 0) {
+                println(s"Now scan $seqChunks examples from $start, threshold factor $thrFact.")
+                // TODO: let 0, 8 be two parameters
+                val glomResults = learnerFunc(
+                    sc, glomTrain, nodes, depth,
+                    0, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
+                    scanned, start, seqChunks, thrFact, delta
+                ).cache()
+                val results = glomResults.map(_._5).filter(_._1 != 0).cache()
+                if (results.count > 0) {
+                    // for simulation: select the earliest stopped one
+                    resSplit = results.reduce((a, b) => if (a._1 < b._1) a else b)
+                } else {
+                    setGlomTrain(glomResults)
                 }
-                seqChunks = scanned
-                if (resSplit._1 == 0) {
-                    println(s"=== !!!  Cannot find a valid weak learner for $gamma.  !!! ===")
-                    gamma /= 2.0
-                    start = 0
-                    seqChunks = initSeqChunks
+                start = (start + seqChunks) % maxPartSize
+                scanned += seqChunks
+
+                println("We have " + results.count + " potential biased rules.")
+
+                {
+                    // Debug
+                    // setGlomTrain(glomResults)
+                    // println(glomResults.first._4.keys.toList.take(5).toList)
+                    // println(glomResults.first._4.values.toList.head.toList)
+                    // println(glomTrain.first._4)
                 }
+
+                glomResults.unpersist()
+                /*
+                println("Testing progress: most extreme outlier " +
+                    safeMaxAbs3(glomTrain.map(t =>
+                        safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
+                    )) + ", threshold " + (scanned))
+                */
             }
+            seqChunks = scanned
 
             if (resSplit._1 == 0) {
                 println("=== !!!  Cannot find a valid weak learner at all.  !!! ===")
@@ -230,13 +222,14 @@ class Controller(
             println(s"Stopped after scanning $seqChunks examples in (ms) " +
                     (System.currentTimeMillis() - timerStart))
 
-            val (steps, score, wsum, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
+            val (steps, gamma1, val1, wsum1, wsum, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
+            val gamma = gamma1 * (1.0 - thrFact)
             val splitVal = 0.5  // TODO: fix this
-            val pred = if (score > 0) (0.5 * log((0.5 + gamma) / (0.5 - gamma)))
-                       else           (0.5 * log((0.5 - gamma) / (0.5 + gamma)))
+            val pred = if (val1 > 0) (0.5 * log((1.0 + gamma) / (1.0 - gamma)))
+                       else           (0.5 * log((1.0 - gamma) / (1.0 + gamma)))
 
-            println(s"$steps steps achieved score $score, threshold was $wsum => " +
-                Utils.getThreshold(gamma, delta)(wsum))
+            println(s"$steps steps achieved score $val1, wsum $wsum1 out of $wsum =>" +
+                    s"gamma $gamma which is $thrFact discount on $gamma1")
 
             // add the new node to the nodes list
             val newNodeId = nodes.size
@@ -278,7 +271,8 @@ class Controller(
                 }).reduce((a, b) =>
                     (a._1 + b._1, a._2 + b._2)
                 )
-                println("Actual prediction should be " + 0.5 * log(pos / neg))
+                println("Actual prediction should be " + 0.5 * log(pos / neg) + " (gamma=" +
+                        abs(pos - neg) / (pos + neg) + ")")
             }
 
             glomTrain = updateFunc(glomTrain, nodes)
