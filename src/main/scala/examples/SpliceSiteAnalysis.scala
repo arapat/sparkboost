@@ -97,7 +97,9 @@ object SpliceSiteAnalysis {
             sc.stop()
         } else {
             nodes.sortBy(-_.pred.abs).foreach(node => {
-                println(node.index + ", " + node.depth + ", " + node.pred + ", " + desc(node.index))
+                println(node.index + ", " + node.depth + ", " + node.pred + ", " +
+                    node.prtIndex + ", " + node.splitIndex + ", " + node.splitVal + ", " +
+                    node.splitEval + ", " + desc(node.index))
             })
         }
     }
