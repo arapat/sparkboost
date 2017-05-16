@@ -50,7 +50,7 @@ class Controller(
     // Early stop
     val MIN_GAMMA = 0.001
     val INIT_GAMMA = 0.25
-    var gamma = 0.25
+    var gamma = INIT_GAMMA
     var delta = pow(10, -3)
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
@@ -173,6 +173,7 @@ class Controller(
             //        a valid weak rule (as per early stop rule).
             var resSplit: Types.ResultType = (0, 0.0, 0.0, 0, 0, 0, true)
 
+            // gamma = INIT_GAMMA
             while (gamma > MIN_GAMMA && resSplit._1 == 0) {
                 var scanned = 0
                 setGlomTrain()
@@ -218,7 +219,6 @@ class Controller(
                     start = 0
                     seqChunks = initSeqChunks
                 }
-                gamma = INIT_GAMMA
             }
 
             if (resSplit._1 == 0) {
