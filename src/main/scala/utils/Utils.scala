@@ -23,17 +23,17 @@ object Utils extends Comparison {
         }
     }
 
+    /*
     def getThreshold(gamma: Double, delta: Double)(wsum: Double) = {
-        /*
-        val rho = log((0.5 + 2 * gamma) * (0.5 - gamma) / (0.5 - 2 * gamma) / (0.5 + gamma))
-        val alpha = 1.0 / rho * log((1.0 - delta) / delta)
-        val beta = 1.0 / rho * log((0.5 - gamma) / (0.5 - 2 * gamma))
-        2 * alpha + (2 * beta  - 1) * wsum
-        */
+        // val rho = log((0.5 + 2 * gamma) * (0.5 - gamma) / (0.5 - 2 * gamma) / (0.5 + gamma))
+        // val alpha = 1.0 / rho * log((1.0 - delta) / delta)
+        // val beta = 1.0 / rho * log((0.5 - gamma) / (0.5 - 2 * gamma))
+        // 2 * alpha + (2 * beta  - 1) * wsum
         val kbr = 1
         val n = max(100.0, wsum)
         sqrt(kbr * n * log(log(n) / delta)) + 2 * n * gamma
     }
+    */
 
     def printStats(train: Types.BaseRDD, glomTrain: Types.TrainRDDType,
                    test: Types.BaseRDD, testRef: Types.BaseRDD,

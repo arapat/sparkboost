@@ -2,6 +2,7 @@ package sparkboost
 
 import collection.mutable.ArrayBuffer
 import math.abs
+import math.log
 import math.min
 import math.max
 import math.sqrt
@@ -15,12 +16,13 @@ import sparkboost.utils.Comparison
 
 
 object Learner extends Comparison {
-    // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
+    val K = 1
 
+    // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
     def findBestSplit(
             nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            prevScanned: Int, headTest: Int, numTests: Int, getThreshold: Double => Double
+            prevScanned: Int, headTest: Int, numTests: Int, thrFact: Double, delta: Double
     )(glom: Types.GlomType): Types.GlomResultType = {
 
         // TODO:
@@ -59,15 +61,15 @@ object Learner extends Comparison {
             val timer = System.currentTimeMillis()
 
             val node = nodes(nodeIndex).value
-            val (prevw, curScores): (Double, ArrayBuffer[Double]) =
+            val (prevw, curScores): (Double, ArrayBuffer[(Double, Double)]) =
                 if (board.contains(nodeIndex)) {
                     (board(nodeIndex)._1, ArrayBuffer() ++ board(nodeIndex)._2)
                 } else {
                     // TODO: Add support for multiple splits
-                    (0.0, ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => 0.0)))
+                    (0.0, ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => (0.0, 0.0))))
                 }
             var wsum = prevw
-            var result = (0, 0.0, 0.0, 0, 0, 0, true)
+            var result = (0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, true)
 
             val candidIter = candid.iterator
             var earlyStop = false
@@ -77,8 +79,6 @@ object Learner extends Comparison {
                 val (y, x) = data(idx)
                 val w = weights(idx)
                 wsum += w
-                val thr = getThreshold(wsum)
-                val score = y * w
 
                 var k = 0
                 range.foreach(j => {
@@ -86,35 +86,51 @@ object Learner extends Comparison {
                     val splitVal = 0.5
 
                     // Check left tree
-                    val val1 = curScores(k) + (
-                        if ((compare(x(j), splitVal) <= 0) == true) {
-                            score
+                    var (val1, wsum1) = curScores(k)
+                    if ((compare(x(j), splitVal) <= 0) == true) {
+                        val1 += y * w
+                        wsum1 += w
+                    }
+                    val alpha1 =
+                        if (log(wsum1) > delta) {
+                            sqrt(K * wsum1 * log(log(wsum1) / delta))
                         } else {
-                            0.0
+                            Double.MaxValue
                         }
-                    )
-                    val result1 = (nScanned, val1, wsum, nodeIndex, j, 0, true)
-                    if (abs(val1) > thr) {
+                    val bt1 = abs(val1) - alpha1
+                    val gamma1 = bt1 / wsum1
+
+                    if (alpha1 <= bt1 * thrFact) {
+                        val result1 = (nScanned, gamma1, val1, wsum1, wsum, nodeIndex, j, 0, true)
                         earlyStop = true
                         result = result1
                     }
-                    curScores(k) = val1
+
+                    curScores(k) = (val1, wsum1)
                     k += 1
 
                     // Check right tree
-                    val val2 = curScores(k) + (
-                        if ((compare(x(j), splitVal) <= 0) == false) {
-                            score
+                    var (val2, wsum2) = curScores(k)
+                    if ((compare(x(j), splitVal) <= 0) == false) {
+                        val2 += y * w
+                        wsum2 += w
+                    }
+                    val alpha2 =
+                        if (log(wsum2) > delta) {
+                            sqrt(K * wsum2 * log(log(wsum2) / delta))
                         } else {
-                            0.0
+                            Double.MaxValue
                         }
-                    )
-                    val result2 = (nScanned, val2, wsum, nodeIndex, j, 0, false)
-                    if (abs(val2) > thr) {
+                    val bt2 = abs(val2) - alpha2
+                    val gamma2 = bt2 / wsum2
+
+                    if (alpha2 <= bt2 * thrFact) {
+                        val result2 = (nScanned, gamma2, val2, wsum2, wsum, nodeIndex, j, 0, false)
                         earlyStop = true
                         result = result2
                     }
-                    curScores(k) = val2
+
+                    curScores(k) = (val2, wsum2)
                     k += 1
                 })
             }
@@ -153,13 +169,13 @@ object Learner extends Comparison {
     def partitionedGreedySplit(
             sc: SparkContext, train: Types.TrainRDDType, nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            prevScanned: Int, headTest: Int, numTests: Int, getThreshold: Double => Double
+            prevScanned: Int, headTest: Int, numTests: Int, thrFact: Double, delta: Double
     ): RDD[Types.GlomResultType] = {
         var tStart = System.currentTimeMillis()
 
         val f = findBestSplit(nodes, maxDepth,
                               featuresOffset, featuresPerCore,
-                              prevScanned, headTest, numTests, getThreshold) _
+                              prevScanned, headTest, numTests, thrFact, delta) _
         val trainAndResult = train.map(f).cache()
         trainAndResult.count()
 
