@@ -2,6 +2,8 @@ package sparkboost.utils
 
 import math.exp
 import math.log
+import math.max
+import math.sqrt
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
@@ -22,10 +24,15 @@ object Utils extends Comparison {
     }
 
     def getThreshold(gamma: Double, delta: Double)(wsum: Double) = {
-        val rou = (0.5 + gamma) * (0.5 - gamma / 2) / (0.5 - gamma) / (0.5 + gamma / 2)
-        val alpha = 1.0 / rou * log((1.0 - delta) / delta)
-        val beta = 1.0 / rou * log((0.5 - gamma / 2) / (0.5 - gamma))
-        alpha + beta * wsum
+        /*
+        val rho = log((0.5 + 2 * gamma) * (0.5 - gamma) / (0.5 - 2 * gamma) / (0.5 + gamma))
+        val alpha = 1.0 / rho * log((1.0 - delta) / delta)
+        val beta = 1.0 / rho * log((0.5 - gamma) / (0.5 - 2 * gamma))
+        2 * alpha + (2 * beta  - 1) * wsum
+        */
+        val kbr = 1
+        val n = max(1000.0, wsum)
+        (1 + 2 * gamma) * sqrt(kbr * n * log(log(n) / delta)) + 2 * n * gamma
     }
 
     def printStats(train: Types.BaseRDD, glomTrain: Types.TrainRDDType,

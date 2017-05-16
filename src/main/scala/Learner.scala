@@ -49,7 +49,7 @@ object Learner extends Comparison {
                 (0 until (rangeEd % numFeatures)) ++ (rangeSt until numFeatures)
             }
         var testStart = headTest % data.size
-        testStart = if (testStart + numTests > data.size) 0 else testStart
+        testStart = if (testStart + numTests > data.size) max(0, data.size - numTests) else testStart
         val totTests = min(testStart + numTests, data.size)
 
         // time stamp

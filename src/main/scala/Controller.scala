@@ -47,8 +47,9 @@ class Controller(
     var lastResample = 0
 
     // Early stop
+    val MIN_GAMMA = 0.001
     var gamma = 0.25
-    var delta = pow(10, -8)
+    var delta = pow(10, -3)
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
@@ -168,7 +169,7 @@ class Controller(
             //        a valid weak rule (as per early stop rule).
             var resSplit: Types.ResultType = (0, 0.0, 0, 0, 0, true)
 
-            while (gamma > 0.02 && resSplit._1 == 0) {
+            while (gamma > MIN_GAMMA && resSplit._1 == 0) {
                 var scanned = 0
                 setGlomTrain()
                 while (scanned < maxPartSize && resSplit._1 == 0) {
@@ -194,22 +195,23 @@ class Controller(
 
                     {
                         // Debug
-                        setGlomTrain(glomResults)
+                        // setGlomTrain(glomResults)
                         // println(glomResults.first._4.keys.toList.take(5).toList)
                         // println(glomResults.first._4.values.toList.head.toList)
                         // println(glomTrain.first._4)
                     }
 
                     glomResults.unpersist()
-                    // println("Testing progress: most extreme outlier " +
-                    //     safeMaxAbs3(glomTrain.map(t =>
-                    //         safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
-                    //     )) + ", threshold " + thrFunc(scanned))
+                    println("Testing progress: most extreme outlier " +
+                        safeMaxAbs3(glomTrain.map(t =>
+                            safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
+                        )) + ", threshold " + thrFunc(scanned))
                 }
                 seqChunks = scanned
                 if (resSplit._1 == 0) {
                     println(s"=== !!!  Cannot find a valid weak learner for $gamma.  !!! ===")
                     gamma /= 2.0
+                    start = 0
                     seqChunks = initSeqChunks
                 }
             }
