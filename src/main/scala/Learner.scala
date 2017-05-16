@@ -51,8 +51,6 @@ object Learner extends Comparison {
                 (0 until (rangeEd % numFeatures)) ++ (rangeSt until numFeatures)
             }
         var testStart = headTest % data.size
-        testStart = if (testStart + numTests > data.size) max(0, data.size - numTests) else testStart
-        val totTests = min(testStart + numTests, data.size)
 
         // time stamp
         val timeStamp1 = System.currentTimeMillis() - timer
@@ -75,7 +73,12 @@ object Learner extends Comparison {
             var earlyStop = false
             while (candidIter.hasNext && !earlyStop) {
                 val idx = candidIter.next
-                val nScanned = idx - testStart + 1 + prevScanned
+                val nScanned =
+                    if (idx < testStart) {
+                        idx + 1 + data.size - testStart + prevScanned
+                    } else {
+                        idx - testStart + 1 + prevScanned
+                    }
                 val (y, x) = data(idx)
                 val w = weights(idx)
                 wsum += w
@@ -100,7 +103,8 @@ object Learner extends Comparison {
                     val bt1 = abs(val1) - alpha1
                     val gamma1 = bt1 / wsum1
 
-                    if (alpha1 <= bt1 * thrFact) {
+                    // TODO: fix this heuristic
+                    if ((wsum1 / wsum) * nScanned >= 100.0 && alpha1 <= bt1 * thrFact) {
                         val result1 = (nScanned, gamma1, val1, wsum1, wsum, nodeIndex, j, 0, true)
                         earlyStop = true
                         result = result1
@@ -124,7 +128,8 @@ object Learner extends Comparison {
                     val bt2 = abs(val2) - alpha2
                     val gamma2 = bt2 / wsum2
 
-                    if (alpha2 <= bt2 * thrFact) {
+                    // TODO: fix this heuristic
+                    if ((wsum2 / wsum) * nScanned >= 100.0 && alpha2 <= bt2 * thrFact) {
                         val result2 = (nScanned, gamma2, val2, wsum2, wsum, nodeIndex, j, 0, false)
                         earlyStop = true
                         result = result2
@@ -160,7 +165,17 @@ object Learner extends Comparison {
             (newBoard, bestSplit)
         }
 
-        val (newBoard, bestSplit) = travelTree(0, (headTest until totTests).toArray)
+        val initSamples =
+            if (numTests >= data.size) {
+                testStart = 0
+                (0 until data.size).toArray
+            } else if (testStart + numTests > data.size) {
+                ((0 until (numTests - (data.size - testStart))).toList ++
+                    (testStart until data.size).toList).toArray
+            } else {
+                (testStart until (testStart + numTests)).toArray
+            }
+        val (newBoard, bestSplit) = travelTree(0, initSamples)
 
         (glomId, data, weights,
             newBoard.toMap, bestSplit)

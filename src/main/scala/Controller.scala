@@ -50,7 +50,7 @@ class Controller(
 
     // Early stop
     var delta = pow(10, -3)
-    var thrFact = 0.25
+    var thrFact = 0.40
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
@@ -157,6 +157,8 @@ class Controller(
         // TODO: is this func still needed?
         // setMetaData()
 
+        println(s"Threshold factor is $thrFact")
+
         var start = 0
         var curIter = 0
         var terminate = false
@@ -226,7 +228,8 @@ class Controller(
             val pred = if (val1 > 0) (0.5 * log((1.0 + gamma) / (1.0 - gamma)))
                        else           (0.5 * log((1.0 - gamma) / (1.0 + gamma)))
 
-            println(s"$steps steps achieved score $val1, wsum $wsum => gamma $gamma")
+            println(s"$steps steps achieved score $val1, wsum $wsum1 out of $wsum =>" +
+                    s"gamma $gamma which is $thrFact discount on $gamma1")
 
             // add the new node to the nodes list
             val newNodeId = nodes.size
@@ -268,7 +271,8 @@ class Controller(
                 }).reduce((a, b) =>
                     (a._1 + b._1, a._2 + b._2)
                 )
-                println("Actual prediction should be " + 0.5 * log(pos / neg))
+                println("Actual prediction should be " + 0.5 * log(pos / neg) + " (gamma=" +
+                        abs(pos - neg) / (pos + neg) + ")")
             }
 
             glomTrain = updateFunc(glomTrain, nodes)
