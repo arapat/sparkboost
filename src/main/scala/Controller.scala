@@ -268,18 +268,11 @@ class Controller(
                     s"g $g, gamma $gamma1\n" +
                     s"Node effective ratio is $nodeEffectRatio")
 
-            // add the new node to the nodes list
-            val newNodeId = nodes.size
-            val newNode = SplitterNode(newNodeId, nodeIndex, localNodes(nodeIndex).depth + 1,
-                                       (dimIndex, splitVal, splitEval))
-            newNode.setPredict(pred)
-            localNodes(nodeIndex).addChild(localNodes.size)
-            val brNewNode = sc.broadcast(newNode)
-            nodes :+= brNewNode
-            localNodes :+= newNode
-            println("Depth: " + newNode.depth)
+            println("Depth: " + localNodes(nodeIndex).depth + 1)
             println(s"Predicts $pred. Father $nodeIndex. " +
                     s"Feature $dimIndex, split at $splitVal, eval $splitEval")
+
+            var redflag = false
 
             {
                 // Debug
@@ -295,7 +288,7 @@ class Controller(
                     while (i < t._3.size) {
                         val (y, x) = t._2(i)
                         val w = t._3(i)
-                        if (check(x, newNodeId)) {
+                        if ((x(dimIndex) <= 0.5) == splitEval && check(x, nodeIndex)) {
                             if (y > 0) {
                                 pos += w
                             } else {
@@ -312,9 +305,22 @@ class Controller(
                 println("Actual prediction should be " + 0.5 * log(pos / neg) + " (gamma=" +
                         abs(pos - neg) / (pos + neg) + ")")
                 if (actualPred > 0 && pred < 0 || actualPred < 0 && pred > 0 || abs(actualPred) < abs(pred)) {
-                    println("=== ERROR: overweightted/overfitted tree node just added ===")
+                    redflag = true
+                    println("=== ERROR: overweightted/overfitted tree node detected ===")
                 }
             }
+
+            if (!redflag) {
+
+            // add the new node to the nodes list
+            val newNodeId = nodes.size
+            val newNode = SplitterNode(newNodeId, nodeIndex, localNodes(nodeIndex).depth + 1,
+                                       (dimIndex, splitVal, splitEval))
+            newNode.setPredict(pred)
+            localNodes(nodeIndex).addChild(localNodes.size)
+            val brNewNode = sc.broadcast(newNode)
+            nodes :+= brNewNode
+            localNodes :+= newNode
 
             glomTrain = updateFunc(glomTrain, nodes)
             val effectCounts = glomTrain.map(_._4).collect.sorted
@@ -333,6 +339,8 @@ class Controller(
                     train, glomTrain, test, testRef, localNodes, curIter
                 )
                 println("printStats took (ms) " + (System.currentTimeMillis() - timerPrint))
+            }
+
             }
 
             println("Running time for Iteration " + curIter + " is (ms) " +

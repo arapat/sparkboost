@@ -113,13 +113,16 @@ object Learner extends Comparison {
                         }
                     val bt1 = abs(val1) - alpha1
                     val gamma1 = bt1 / wsum
-                    bestGamma = max(bestGamma, gamma1)
 
-                    if (gamma1 > gamma) {
-                        val result1 = (nScanned, gamma1, val1, wsum1, wsq1, cnt1,
-                                        wsum, nodeIndex, j, 0, true)
-                        earlyStop = true
-                        result = result1
+                    // TODO: need better rule to avoid over-fitting
+                    if ((wsum1 * wsum1) / wsq1 > 100 && cnt1 > 1000) {
+                        bestGamma = max(bestGamma, gamma1)
+                        if (gamma1 > gamma) {
+                            val result1 = (nScanned, gamma1, val1, wsum1, wsq1, cnt1,
+                                            wsum, nodeIndex, j, 0, true)
+                            earlyStop = true
+                            result = result1
+                        }
                     }
 
                     curScores(k) = (val1, wsum1, wsq1, cnt1)
@@ -141,13 +144,16 @@ object Learner extends Comparison {
                         }
                     val bt2 = abs(val2) - alpha2
                     val gamma2 = bt2 / wsum
-                    bestGamma = max(bestGamma, gamma2)
 
-                    if (gamma2 > gamma) {
-                        val result2 = (nScanned, gamma2, val2, wsum2, wsq2, cnt2,
-                                        wsum, nodeIndex, j, 0, false)
-                        earlyStop = true
-                        result = result2
+                    // TODO: need better rule to avoid over-fitting
+                    if ((wsum2 * wsum2) / wsq2 > 100 && cnt2 > 1000) {
+                        bestGamma = max(bestGamma, gamma2)
+                        if (gamma2 > gamma) {
+                            val result2 = (nScanned, gamma2, val2, wsum2, wsq2, cnt2,
+                                            wsum, nodeIndex, j, 0, false)
+                            earlyStop = true
+                            result = result2
+                        }
                     }
 
                     curScores(k) = (val2, wsum2, wsq2, cnt2)
