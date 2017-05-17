@@ -185,8 +185,8 @@ object Learner extends Comparison {
                 testStart = 0
                 (0 until data.size).toArray
             } else if (testStart + numTests > data.size) {
-                ((0 until (numTests - (data.size - testStart))).toList ++
-                    (testStart until data.size).toList).toArray
+                ((testStart until data.size).toList ++
+                    (0 until (numTests - (data.size - testStart))).toList).toArray
             } else {
                 (testStart until (testStart + numTests)).toArray
             }

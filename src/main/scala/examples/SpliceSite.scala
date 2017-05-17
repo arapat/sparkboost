@@ -113,7 +113,7 @@ object SpliceSite extends Comparison {
     // TODO: support BINSIZE > 1
     val BINSIZE = 1
     // training/testing split
-    val TRAIN_PORTION = 0.75
+    val TRAIN_PORTION = 0.9
 
     type BaseInstance = (Int, SparseVector)
 

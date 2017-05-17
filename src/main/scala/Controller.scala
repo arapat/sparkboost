@@ -32,7 +32,7 @@ class Controller(
     val maxIters: Int,
     val numCores: Int
 ) extends java.io.Serializable with Comparison {
-    val printStatsInterval = 20
+    val printStatsInterval = 100
     val emptyMap: Types.BoardType = Map[Int, (Double, Array[Types.BoardInfo])]()
 
     var train: Types.BaseRDD = null
@@ -163,9 +163,9 @@ class Controller(
 
         val featureSize = train.first._2.size
 
-        var start = 0
         var curIter = 0
         var terminate = false
+        var start = 0
         while (!terminate && (maxIters == 0 || curIter < maxIters)) {
             val timerStart = System.currentTimeMillis()
 
@@ -183,6 +183,9 @@ class Controller(
             var scanned = 0
             setGlomTrain()
             val featureOffset = randomInt(featureSize)
+            if (start + scanned > minPartSize) {
+                start = 0
+            }
             while (scanned < maxPartSize && resSplit._1._1 == 0) {
                 println(s"Now scan $seqChunks examples from $start, threshold factor $thrFact.")
                 // TODO: let 0, 8 be two parameters
@@ -219,18 +222,19 @@ class Controller(
                     )) + ", threshold " + (scanned))
                 */
             }
-            seqChunks = scanned
 
             if (resSplit._1._1 == 0) {
                 println("=== !!!  Cannot find a valid weak learner at all.  !!! ===")
                 return localNodes
             }
 
-            println(s"Stopped after scanning $seqChunks examples in (ms) " +
+            println(s"Stopped after scanning $scanned examples in (ms) " +
                     (System.currentTimeMillis() - timerStart))
 
             val ((steps, gamma1, val1, wsum1, wsq1, cnt1, wsum,
                 nodeIndex, dimIndex, splitIndex, splitEval), nodeEffectRatio) = resSplit
+            seqChunks = ((seqChunks + steps) / 2).ceil.toInt
+
             val gamma = gamma1 * (1.0 - thrFact)
             val splitVal = 0.5  // TODO: fix this
             val pred = if (val1 > 0) (0.5 * log((1.0 + gamma) / (1.0 - gamma)))
@@ -282,8 +286,12 @@ class Controller(
                 }).reduce((a, b) =>
                     (a._1 + b._1, a._2 + b._2)
                 )
+                val actualPred = 0.5 * log(pos / neg)
                 println("Actual prediction should be " + 0.5 * log(pos / neg) + " (gamma=" +
                         abs(pos - neg) / (pos + neg) + ")")
+                if (actualPred > 0 && pred < 0 || actualPred < 0 && pred > 0 || abs(actualPred) < abs(pred)) {
+                    println("=== ERROR: overweightted/overfitted tree node just added ===")
+                }
             }
 
             glomTrain = updateFunc(glomTrain, nodes)
