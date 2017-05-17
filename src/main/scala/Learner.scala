@@ -17,6 +17,8 @@ import sparkboost.utils.Comparison
 
 object Learner extends Comparison {
     val K = 1
+    val MIN_EFFECT_COUNT = 0.1
+    val MIN_CNT = 100
 
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
     def findBestSplit(
@@ -39,7 +41,12 @@ object Learner extends Comparison {
 
         val timer = System.currentTimeMillis()
 
-        val (glomId, data, weights, board) = glom
+        val (glomId, data, weights, effectRatio, board) = glom
+        if (effectRatio < MIN_EFFECT_COUNT) {
+            return (glomId, data, weights, effectRatio, board,
+                    (0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, 0, true))
+        }
+
         val numFeatures = data(0)._2.size
         val tree = getTreeTopology()
         val rangeSt = (glomId * featuresPerCore + featuresOffset) % numFeatures
@@ -59,15 +66,15 @@ object Learner extends Comparison {
             val timer = System.currentTimeMillis()
 
             val node = nodes(nodeIndex).value
-            val (prevw, curScores): (Double, ArrayBuffer[(Double, Double, Double)]) =
+            val (prevw, curScores): (Double, ArrayBuffer[Types.BoardInfo]) =
                 if (board.contains(nodeIndex)) {
                     (board(nodeIndex)._1, ArrayBuffer() ++ board(nodeIndex)._2)
                 } else {
                     // TODO: Add support for multiple splits
-                    (0.0, ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => (0.0, 0.0, 0.0))))
+                    (0.0, ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => (0.0, 0.0, 0.0, 0))))
                 }
             var wsum = prevw
-            var result = (0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, true)
+            var result: Types.ResultType = (0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, 0, true)
 
             val candidIter = candid.iterator
             var earlyStop = false
@@ -89,11 +96,12 @@ object Learner extends Comparison {
                     val splitVal = 0.5
 
                     // Check left tree
-                    var (val1, wsum1, wsq1) = curScores(k)
+                    var (val1, wsum1, wsq1, cnt1) = curScores(k)
                     if ((compare(x(j), splitVal) <= 0) == true) {
                         val1 += y * w
                         wsum1 += w
                         wsq1 += w * w
+                        cnt1 += 1
                     }
                     val alpha1 =
                         if (log(wsq1) > delta) {
@@ -105,22 +113,24 @@ object Learner extends Comparison {
                     val gamma1 = bt1 / wsum1
 
                     // TODO: fix this heuristic
-                    if (alpha1 <= bt1 * thrFact) {
-                        val result1 = (nScanned, gamma1, val1, wsum1, wsq1,
+                    val effectCount1 = (wsum1 * wsum1) / wsq1 / cnt1
+                    if (cnt1 > MIN_CNT && effectCount1 > MIN_EFFECT_COUNT && alpha1 <= bt1 * thrFact) {
+                        val result1 = (nScanned, gamma1, val1, wsum1, wsq1, cnt1,
                                         wsum, nodeIndex, j, 0, true)
                         earlyStop = true
                         result = result1
                     }
 
-                    curScores(k) = (val1, wsum1, wsq1)
+                    curScores(k) = (val1, wsum1, wsq1, cnt1)
                     k += 1
 
                     // Check right tree
-                    var (val2, wsum2, wsq2) = curScores(k)
+                    var (val2, wsum2, wsq2, cnt2) = curScores(k)
                     if ((compare(x(j), splitVal) <= 0) == false) {
                         val2 += y * w
                         wsum2 += w
                         wsq2 += w * w
+                        cnt2 += 1
                     }
                     val alpha2 =
                         if (log(wsq2) > delta) {
@@ -132,14 +142,15 @@ object Learner extends Comparison {
                     val gamma2 = bt2 / wsum2
 
                     // TODO: fix this heuristic
-                    if (alpha2 <= bt2 * thrFact) {
-                        val result2 = (nScanned, gamma2, val2, wsum2, wsq2,
+                    val effectCount2 = (wsum2 * wsum2) / wsq2 / cnt2
+                    if (cnt2 > MIN_CNT && effectCount2 > MIN_EFFECT_COUNT && alpha2 <= bt2 * thrFact) {
+                        val result2 = (nScanned, gamma2, val2, wsum2, wsq2, cnt2,
                                         wsum, nodeIndex, j, 0, false)
                         earlyStop = true
                         result = result2
                     }
 
-                    curScores(k) = (val2, wsum2, wsq2)
+                    curScores(k) = (val2, wsum2, wsq2, cnt2)
                     k += 1
                 })
             }
@@ -181,7 +192,7 @@ object Learner extends Comparison {
             }
         val (newBoard, bestSplit) = travelTree(0, initSamples)
 
-        (glomId, data, weights,
+        (glomId, data, weights, effectRatio,
             newBoard.toMap, bestSplit)
     }
 

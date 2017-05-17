@@ -31,7 +31,7 @@ object UpdateFunc extends Comparison {
         val nodeIdx = nodes.size - 1
         val pred = nodes.last.value.pred
         glomTrain.map(glom => {
-            val (glomId, data, weights, board) = glom
+            val (glomId, data, weights, effectRatio, board) = glom
             val weightItr = weights.iterator
             val newWeights = data.map {case (y, x) => {
                 val w = weightItr.next
@@ -41,7 +41,9 @@ object UpdateFunc extends Comparison {
                     w
                 }
             }}
-            (glomId, data, newWeights, board)
+            val wsum = newWeights.sum
+            val wsq = newWeights.map(t => t * t).sum
+            (glomId, data, newWeights, (wsum * wsum) / wsq / newWeights.size, board)
         }).cache()
     }
 

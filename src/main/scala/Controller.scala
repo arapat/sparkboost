@@ -33,7 +33,7 @@ class Controller(
     val numCores: Int
 ) extends java.io.Serializable with Comparison {
     val printStatsInterval = 20
-    val emptyMap: Types.BoardType = Map[Int, (Double, Array[(Double, Double, Double)])]()
+    val emptyMap: Types.BoardType = Map[Int, (Double, Array[Types.BoardInfo])]()
 
     var train: Types.BaseRDD = null
     var glomTrain: Types.TrainRDDType = null
@@ -50,7 +50,7 @@ class Controller(
 
     // Early stop
     var delta = pow(10, -3)
-    var thrFact = 0.40
+    var thrFact = 0.2
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
@@ -65,7 +65,7 @@ class Controller(
         glomTrain = train.glom()
                          .zipWithIndex()
                          .map { case (array, idx) => {
-                             (idx.toInt, array, array.map(_ => 1.0), emptyMap)
+                             (idx.toInt, array, array.map(_ => 1.0), 1.0, emptyMap)
                          }}.cache()
 
         {
@@ -91,9 +91,9 @@ class Controller(
     def setGlomTrain(glomResults: Types.ResultRDDType = null) {
         val toDestroy = glomTrain
         if (glomResults == null) {
-            glomTrain = glomTrain.map(t => (t._1, t._2, t._3, emptyMap)).cache
+            glomTrain = glomTrain.map(t => (t._1, t._2, t._3, t._4, emptyMap)).cache
         } else {
-            glomTrain = glomResults.map(t => (t._1, t._2, t._3, t._4)).cache
+            glomTrain = glomResults.map(t => (t._1, t._2, t._3, t._4, t._5)).cache
         }
         glomTrain.count
         toDestroy.unpersist()
@@ -158,6 +158,7 @@ class Controller(
         // setMetaData()
 
         println(s"Threshold factor is $thrFact")
+        println()
 
         var start = 0
         var curIter = 0
@@ -172,11 +173,13 @@ class Controller(
             //    Simulating TMSN using Spark's computation model ==>
             //        Ask workers to scan a batch of examples at a time until one of them find
             //        a valid weak rule (as per early stop rule).
-            var resSplit: Types.ResultType = (0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, true)
+            var resSplit: (Types.ResultType, Double) = (
+                (0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, 0, true), 0.0
+            )
 
             var scanned = 0
             setGlomTrain()
-            while (scanned < maxPartSize && resSplit._1 == 0) {
+            while (scanned < maxPartSize && resSplit._1._1 == 0) {
                 println(s"Now scan $seqChunks examples from $start, threshold factor $thrFact.")
                 // TODO: let 0, 8 be two parameters
                 val glomResults = learnerFunc(
@@ -184,10 +187,10 @@ class Controller(
                     0, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
                     scanned, start, seqChunks, thrFact, delta
                 ).cache()
-                val results = glomResults.map(_._5).filter(_._1 != 0).cache()
+                val results = glomResults.map(t => (t._6, t._4)).filter(_._1._1 != 0).cache()
                 if (results.count > 0) {
                     // for simulation: select the earliest stopped one
-                    resSplit = results.reduce((a, b) => if (a._1 < b._1) a else b)
+                    resSplit = results.reduce((a, b) => if (a._1._1 < b._1._1) a else b)
                 } else {
                     setGlomTrain(glomResults)
                 }
@@ -214,7 +217,7 @@ class Controller(
             }
             seqChunks = scanned
 
-            if (resSplit._1 == 0) {
+            if (resSplit._1._1 == 0) {
                 println("=== !!!  Cannot find a valid weak learner at all.  !!! ===")
                 return localNodes
             }
@@ -222,14 +225,18 @@ class Controller(
             println(s"Stopped after scanning $seqChunks examples in (ms) " +
                     (System.currentTimeMillis() - timerStart))
 
-            val (steps, gamma1, val1, wsum1, wsq1, wsum, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
+            val ((steps, gamma1, val1, wsum1, wsq1, cnt1, wsum,
+                nodeIndex, dimIndex, splitIndex, splitEval), nodeEffectRatio) = resSplit
             val gamma = gamma1 * (1.0 - thrFact)
             val splitVal = 0.5  // TODO: fix this
             val pred = if (val1 > 0) (0.5 * log((1.0 + gamma) / (1.0 - gamma)))
                        else           (0.5 * log((1.0 - gamma) / (1.0 + gamma)))
 
-            println(s"$steps steps achieved score $val1, wsum $wsum1 out of $wsum, wsq $wsq1 =>" +
-                    s"gamma $gamma which is $thrFact discount on $gamma1")
+            val eff1 = (wsum1 * wsum1) / wsq1 / cnt1
+            println(s"$steps steps ($cnt1 hits) achieved score $val1,\n" +
+                    s"wsum $wsum1 out of $wsum, wsq $wsq1, effective $eff1\n" +
+                    s"gamma $gamma which is $thrFact discount on $gamma1\n" +
+                    s"Node effective ratio is $nodeEffectRatio")
 
             // add the new node to the nodes list
             val newNodeId = nodes.size
@@ -276,7 +283,12 @@ class Controller(
             }
 
             glomTrain = updateFunc(glomTrain, nodes)
-            glomTrain.count
+            val effectCounts = glomTrain.map(_._4).collect.sorted
+            val numParts = effectCounts.size
+            val numValidParts = effectCounts.count(_ > 0.1)
+            println(s"Effective parts: $numValidParts out of $numParts")
+            println(effectCounts.slice(0, 5) ++
+                effectCounts.slice(effectCounts.size - 5, effectCounts.size))
 
             if (curIter % printStatsInterval == 0) {
                 SplitterNode.save(localNodes, modelWritePath)
