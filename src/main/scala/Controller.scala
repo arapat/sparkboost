@@ -169,6 +169,8 @@ class Controller(
         // setMetaData()
 
         val featureSize = train.first._2.size
+        val featuresPerCore = (featureSize / glomTrain.count).ceil.toInt
+        println("Number of features per partition: $featuresPerCore")
 
         var curIter = 0
         var terminate = false
@@ -202,7 +204,7 @@ class Controller(
                     println(s"Now scan $seqChunks examples from $start, threshold $gamma.")
                     val (glomResults, bestGamma) = learnerFunc(
                         sc, glomTrain, nodes, depth,
-                        featureOffset, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
+                        featureOffset, featuresPerCore,
                         scanned, start, seqChunks, gamma, delta
                     )
                     glomResults.cache()
