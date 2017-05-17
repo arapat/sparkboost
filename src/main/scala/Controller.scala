@@ -50,10 +50,12 @@ class Controller(
     var localNodes: Array[SplitterNode] = null
     var lastResample = 0
 
+    var checkpoint = 0
+
     // Early stop
     val INIT_GAMMA = 0.25
-    val MIN_GAMMA = 0.005
-    var delta = pow(10, -3)
+    val MIN_GAMMA = 0.0
+    var delta = pow(10, -2) / 600
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
@@ -101,6 +103,11 @@ class Controller(
         }
         glomTrain.count
         toDestroy.unpersist()
+
+        checkpoint += 1
+        if (checkpoint % 10 == 0) {
+            glomTrain.checkpoint()
+        }
     }
 
     // TT: good
@@ -182,13 +189,15 @@ class Controller(
             )
 
             var scanned = 0
-            setGlomTrain()
-            val featureOffset = randomInt(featureSize)
-            if (start + scanned > minPartSize) {
-                start = 0
-            }
             while (gamma > MIN_GAMMA && resSplit._1._1 == 0) {
+                scanned = 0
                 var nextGamma = 0.0
+                setGlomTrain()
+                val featureOffset = randomInt(featureSize)
+                if (start + scanned > minPartSize) {
+                    start = 0
+                }
+
                 while (scanned < maxPartSize && resSplit._1._1 == 0) {
                     println(s"Now scan $seqChunks examples from $start, threshold $gamma.")
                     val (glomResults, bestGamma) = learnerFunc(
@@ -208,7 +217,9 @@ class Controller(
                     start = (start + seqChunks) % maxPartSize
                     scanned += seqChunks
 
-                    println("We have " + results.count + " potential biased rules.")
+                    println("We have " + results.count +
+                        s" potential biased rules, best gamma is $bestGamma, " +
+                        s"next gamma threshold will be $nextGamma")
 
                     {
                         // Debug
@@ -227,7 +238,8 @@ class Controller(
                     */
                 }
                 if (resSplit._1._1 == 0) {
-                    gamma = nextGamma * 0.95
+                    gamma = nextGamma * 0.85
+                    println(s"\nSetting gamma threshold to $gamma\n")
                 }
             }
 
