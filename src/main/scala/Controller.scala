@@ -73,6 +73,7 @@ class Controller(
                          .map { case (array, idx) => {
                              (idx.toInt, array, array.map(_ => 1.0), 1.0, emptyMap)
                          }}.cache()
+        glomTrain.setName("glomTrain in setDatasets")
 
         {
             // glomTrain.map(_._2.slice(0, 20).map(_._1).toList).collect().foreach{t => println(t.toList)}
@@ -102,6 +103,7 @@ class Controller(
             glomTrain = glomResults.map(t => (t._1, t._2, t._3, t._4, t._5)).cache
         }
         glomTrain.count
+        glomTrain.setName(s"glomTrain $checkpoint")
         toDestroy.unpersist()
 
         checkpoint += 1
@@ -207,6 +209,7 @@ class Controller(
                         featureOffset, featuresPerCore,
                         scanned, start, seqChunks, gamma, delta
                     )
+                    glomResults.setName(s"glomResults $curIter $scanned")
                     glomResults.cache()
                     nextGamma = max(nextGamma, bestGamma)
                     val results = glomResults.map(t => (t._6, t._4)).filter(_._1._1 != 0).cache()
@@ -322,13 +325,16 @@ class Controller(
             nodes :+= brNewNode
             localNodes :+= newNode
 
-            glomTrain = updateFunc(glomTrain, nodes)
+            val toDestroy = glomTrain
+            glomTrain = updateFunc(glomTrain, nodes).cache()
+            glomTrain.setName("glomTrain after updateFunc")
             val effectCounts = glomTrain.map(_._4).collect.sorted
             val numParts = effectCounts.size
             val numValidParts = effectCounts.count(_ > 0.1)
             println(s"Effective parts: $numValidParts out of $numParts")
             println((effectCounts.slice(0, 5) ++
                 effectCounts.slice(effectCounts.size - 5, effectCounts.size)).toList)
+            toDestroy.unpersist()
 
             if (curIter % printStatsInterval == 0) {
                 SplitterNode.save(localNodes, modelWritePath)

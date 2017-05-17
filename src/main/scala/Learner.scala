@@ -213,9 +213,12 @@ object Learner extends Comparison {
                               featuresOffset, featuresPerCore,
                               prevScanned, headTest, numTests, gamma, delta) _
         val trainAndResult = train.map(f).cache()
+        trainAndResult.setName("trainAndResult")
         val bestGamma = trainAndResult.map(_._2).reduce(max)
         val glomResults = trainAndResult.map(_._1).cache
+        glomResults.setName("glomResults in learner")
         glomResults.count
+        trainAndResult.unpersist()
 
         println("FindWeakLearner took in total (ms) " + (System.currentTimeMillis() - tStart))
         (glomResults, bestGamma)
