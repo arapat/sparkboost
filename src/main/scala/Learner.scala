@@ -24,8 +24,8 @@ object Learner extends Comparison {
     def findBestSplit(
             nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            prevScanned: Int, headTest: Int, numTests: Int, thrFact: Double, delta: Double
-    )(glom: Types.GlomType): Types.GlomResultType = {
+            prevScanned: Int, headTest: Int, numTests: Int, gamma: Double, delta: Double
+    )(glom: Types.GlomType): (Types.GlomResultType, Double) = {
 
         // TODO:
         // Is this better than serialize the whole tree and pass it as part of the function?
@@ -40,11 +40,12 @@ object Learner extends Comparison {
         }
 
         val timer = System.currentTimeMillis()
+        var bestGamma = 0.0
 
         val (glomId, data, weights, effectRatio, board) = glom
         if (effectRatio < MIN_EFFECT_COUNT) {
-            return (glomId, data, weights, effectRatio, board,
-                    (0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, 0, true))
+            return ((glomId, data, weights, effectRatio, board,
+                    (0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, 0, true)), bestGamma)
         }
 
         val numFeatures = data(0)._2.size
@@ -71,7 +72,8 @@ object Learner extends Comparison {
                     (board(nodeIndex)._1, ArrayBuffer() ++ board(nodeIndex)._2)
                 } else {
                     // TODO: Add support for multiple splits
-                    (0.0, ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2).map(_ => (0.0, 0.0, 0.0, 0))))
+                    (0.0, ArrayBuffer() ++ range.flatMap(_ => (0 until 1 * 2)
+                                                .map(_ => (0.0, 0.0, 0.0, 0))))
                 }
             var wsum = prevw
             var result: Types.ResultType = (0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, 0, true)
@@ -110,11 +112,10 @@ object Learner extends Comparison {
                             Double.MaxValue
                         }
                     val bt1 = abs(val1) - alpha1
-                    val gamma1 = bt1 / wsum1
+                    val gamma1 = bt1 / wsum
+                    bestGamma = max(bestGamma, gamma1)
 
-                    // TODO: fix this heuristic
-                    val effectCount1 = (wsum1 * wsum1) / wsq1 / cnt1
-                    if (cnt1 > MIN_CNT && effectCount1 > MIN_EFFECT_COUNT && alpha1 <= bt1 * thrFact) {
+                    if (gamma1 > gamma) {
                         val result1 = (nScanned, gamma1, val1, wsum1, wsq1, cnt1,
                                         wsum, nodeIndex, j, 0, true)
                         earlyStop = true
@@ -139,11 +140,10 @@ object Learner extends Comparison {
                             Double.MaxValue
                         }
                     val bt2 = abs(val2) - alpha2
-                    val gamma2 = bt2 / wsum2
+                    val gamma2 = bt2 / wsum
+                    bestGamma = max(bestGamma, gamma2)
 
-                    // TODO: fix this heuristic
-                    val effectCount2 = (wsum2 * wsum2) / wsq2 / cnt2
-                    if (cnt2 > MIN_CNT && effectCount2 > MIN_EFFECT_COUNT && alpha2 <= bt2 * thrFact) {
+                    if (gamma2 > gamma) {
                         val result2 = (nScanned, gamma2, val2, wsum2, wsq2, cnt2,
                                         wsum, nodeIndex, j, 0, false)
                         earlyStop = true
@@ -192,25 +192,27 @@ object Learner extends Comparison {
             }
         val (newBoard, bestSplit) = travelTree(0, initSamples)
 
-        (glomId, data, weights, effectRatio,
-            newBoard.toMap, bestSplit)
+        ((glomId, data, weights, effectRatio,
+            newBoard.toMap, bestSplit), bestGamma)
     }
 
     def partitionedGreedySplit(
             sc: SparkContext, train: Types.TrainRDDType, nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
-            prevScanned: Int, headTest: Int, numTests: Int, thrFact: Double, delta: Double
-    ): RDD[Types.GlomResultType] = {
+            prevScanned: Int, headTest: Int, numTests: Int, gamma: Double, delta: Double
+    ): (RDD[Types.GlomResultType], Double) = {
         var tStart = System.currentTimeMillis()
 
         val f = findBestSplit(nodes, maxDepth,
                               featuresOffset, featuresPerCore,
-                              prevScanned, headTest, numTests, thrFact, delta) _
+                              prevScanned, headTest, numTests, gamma, delta) _
         val trainAndResult = train.map(f).cache()
-        trainAndResult.count()
+        val bestGamma = trainAndResult.map(_._2).reduce(max)
+        val glomResults = trainAndResult.map(_._1).cache
+        glomResults.count
 
         println("FindWeakLearner took in total (ms) " + (System.currentTimeMillis() - tStart))
-        trainAndResult
+        (glomResults, bestGamma)
     }
 }
 

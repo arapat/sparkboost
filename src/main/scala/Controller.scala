@@ -32,6 +32,8 @@ class Controller(
     val maxIters: Int,
     val numCores: Int
 ) extends java.io.Serializable with Comparison {
+    val EPS = 0.001
+
     val printStatsInterval = 100
     val emptyMap: Types.BoardType = Map[Int, (Double, Array[Types.BoardInfo])]()
 
@@ -49,8 +51,9 @@ class Controller(
     var lastResample = 0
 
     // Early stop
+    val INIT_GAMMA = 0.25
+    val MIN_GAMMA = 0.005
     var delta = pow(10, -3)
-    var thrFact = 0.2
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
 
@@ -158,14 +161,12 @@ class Controller(
         // TODO: is this func still needed?
         // setMetaData()
 
-        println(s"Threshold factor is $thrFact")
-        println()
-
         val featureSize = train.first._2.size
 
         var curIter = 0
         var terminate = false
         var start = 0
+        var gamma = INIT_GAMMA
         while (!terminate && (maxIters == 0 || curIter < maxIters)) {
             val timerStart = System.currentTimeMillis()
 
@@ -186,41 +187,48 @@ class Controller(
             if (start + scanned > minPartSize) {
                 start = 0
             }
-            while (scanned < maxPartSize && resSplit._1._1 == 0) {
-                println(s"Now scan $seqChunks examples from $start, threshold factor $thrFact.")
-                // TODO: let 0, 8 be two parameters
-                val glomResults = learnerFunc(
-                    sc, glomTrain, nodes, depth,
-                    featureOffset, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
-                    scanned, start, seqChunks, thrFact, delta
-                ).cache()
-                val results = glomResults.map(t => (t._6, t._4)).filter(_._1._1 != 0).cache()
-                if (results.count > 0) {
-                    // for simulation: select the earliest stopped one
-                    resSplit = results.reduce((a, b) => if (a._1._1 < b._1._1) a else b)
-                } else {
-                    setGlomTrain(glomResults)
+            while (gamma > MIN_GAMMA && resSplit._1._1 == 0) {
+                var nextGamma = 0.0
+                while (scanned < maxPartSize && resSplit._1._1 == 0) {
+                    println(s"Now scan $seqChunks examples from $start, threshold $gamma.")
+                    val (glomResults, bestGamma) = learnerFunc(
+                        sc, glomTrain, nodes, depth,
+                        featureOffset, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
+                        scanned, start, seqChunks, gamma, delta
+                    )
+                    glomResults.cache()
+                    nextGamma = max(nextGamma, bestGamma)
+                    val results = glomResults.map(t => (t._6, t._4)).filter(_._1._1 != 0).cache()
+                    if (results.count > 0) {
+                        // for simulation: select the earliest stopped one
+                        resSplit = results.reduce((a, b) => if (a._1._1 < b._1._1) a else b)
+                    } else {
+                        setGlomTrain(glomResults)
+                    }
+                    start = (start + seqChunks) % maxPartSize
+                    scanned += seqChunks
+
+                    println("We have " + results.count + " potential biased rules.")
+
+                    {
+                        // Debug
+                        // setGlomTrain(glomResults)
+                        // println(glomResults.first._4.keys.toList.take(5).toList)
+                        // println(glomResults.first._4.values.toList.head.toList)
+                        // println(glomTrain.first._4)
+                    }
+
+                    glomResults.unpersist()
+                    /*
+                    println("Testing progress: most extreme outlier " +
+                        safeMaxAbs3(glomTrain.map(t =>
+                            safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
+                        )) + ", threshold " + (scanned))
+                    */
                 }
-                start = (start + seqChunks) % maxPartSize
-                scanned += seqChunks
-
-                println("We have " + results.count + " potential biased rules.")
-
-                {
-                    // Debug
-                    // setGlomTrain(glomResults)
-                    // println(glomResults.first._4.keys.toList.take(5).toList)
-                    // println(glomResults.first._4.values.toList.head.toList)
-                    // println(glomTrain.first._4)
+                if (resSplit._1._1 == 0) {
+                    gamma = nextGamma * 0.95
                 }
-
-                glomResults.unpersist()
-                /*
-                println("Testing progress: most extreme outlier " +
-                    safeMaxAbs3(glomTrain.map(t =>
-                        safeMaxAbs2(t._4.values.map(safeMaxAbs(scanned)).toIterator)
-                    )) + ", threshold " + (scanned))
-                */
             }
 
             if (resSplit._1._1 == 0) {
@@ -235,15 +243,15 @@ class Controller(
                 nodeIndex, dimIndex, splitIndex, splitEval), nodeEffectRatio) = resSplit
             seqChunks = ((seqChunks + steps) / 2).ceil.toInt
 
-            val gamma = gamma1 * (1.0 - thrFact)
             val splitVal = 0.5  // TODO: fix this
-            val pred = if (val1 > 0) (0.5 * log((1.0 + gamma) / (1.0 - gamma)))
-                       else           (0.5 * log((1.0 - gamma) / (1.0 + gamma)))
+            val g = gamma1 * wsum / wsum1 - EPS
+            val pred = if (val1 > 0) (0.5 * log((1.0 + g) / (1.0 - g)))
+                       else           (0.5 * log((1.0 - g) / (1.0 + g)))
 
             val eff1 = (wsum1 * wsum1) / wsq1 / cnt1
             println(s"$steps steps ($cnt1 hits) achieved score $val1,\n" +
                     s"wsum $wsum1 out of $wsum, wsq $wsq1, effective $eff1\n" +
-                    s"gamma $gamma which is $thrFact discount on $gamma1\n" +
+                    s"g $g, gamma $gamma1\n" +
                     s"Node effective ratio is $nodeEffectRatio")
 
             // add the new node to the nodes list
