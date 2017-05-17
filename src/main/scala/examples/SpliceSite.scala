@@ -178,8 +178,7 @@ object SpliceSite extends Comparison {
         val splits = weightedSample.map(t => (rand(t), t)).sortByKey().map(_._2)
                                    .randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
         val (train, test): (RDD[BaseInstance], RDD[BaseInstance]) =
-            (splits(0).map(t => (rand(t), t)).sortByKey().map(_._2)
-                                             .repartition(numCores), splits(1))
+            (splits(0).map(t => (rand(t), t)).sortByKey().map(_._2), splits(1))
         train.setName("sampled train data")
         test.setName("sampled test data")
         train.cache()

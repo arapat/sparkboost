@@ -62,7 +62,8 @@ class Controller(
         }
         this.train = train
         // TODO: weights are not corrected for pre-loaded models
-        glomTrain = train.glom()
+        // TODO: hard coded the number of partitions
+        glomTrain = train.repartition(10).glom()
                          .zipWithIndex()
                          .map { case (array, idx) => {
                              (idx.toInt, array, array.map(_ => 1.0), 1.0, emptyMap)
@@ -80,9 +81,9 @@ class Controller(
             this.testRef = testRef
         }
 
-        glomTrain.count
         maxPartSize = glomTrain.map(_._2.size).max
         minPartSize = glomTrain.map(_._2.size).min
+        println("Number of partitions: " + glomTrain.count)
         println(s"Max partition size is $maxPartSize")
         println(s"Min partition size is $minPartSize")
         println
@@ -160,6 +161,8 @@ class Controller(
         println(s"Threshold factor is $thrFact")
         println()
 
+        val featureSize = train.first._2.size
+
         var start = 0
         var curIter = 0
         var terminate = false
@@ -179,12 +182,13 @@ class Controller(
 
             var scanned = 0
             setGlomTrain()
+            val featureOffset = randomInt(featureSize)
             while (scanned < maxPartSize && resSplit._1._1 == 0) {
                 println(s"Now scan $seqChunks examples from $start, threshold factor $thrFact.")
                 // TODO: let 0, 8 be two parameters
                 val glomResults = learnerFunc(
                     sc, glomTrain, nodes, depth,
-                    0, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
+                    featureOffset, (glomTrain.map(_._2(0)._2.size).first / numCores).ceil.toInt,
                     scanned, start, seqChunks, thrFact, delta
                 ).cache()
                 val results = glomResults.map(t => (t._6, t._4)).filter(_._1._1 != 0).cache()
@@ -287,8 +291,8 @@ class Controller(
             val numParts = effectCounts.size
             val numValidParts = effectCounts.count(_ > 0.1)
             println(s"Effective parts: $numValidParts out of $numParts")
-            println(effectCounts.slice(0, 5) ++
-                effectCounts.slice(effectCounts.size - 5, effectCounts.size))
+            println((effectCounts.slice(0, 5) ++
+                effectCounts.slice(effectCounts.size - 5, effectCounts.size)).toList)
 
             if (curIter % printStatsInterval == 0) {
                 SplitterNode.save(localNodes, modelWritePath)
