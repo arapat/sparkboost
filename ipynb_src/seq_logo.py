@@ -167,7 +167,7 @@ def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
     print("line 159")
 
     # plt.xlim(xrange[0], xrange[-1])
-    plt.title("Sequence logo of the informative bases around the splice site", fontsize=40)
+    plt.title("Sequence logo of the informative bases around the splice site\n\n", fontsize=40)
     plt.show()
 
 

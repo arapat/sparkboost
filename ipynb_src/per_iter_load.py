@@ -1,5 +1,6 @@
 from math import isnan
 from operator import itemgetter
+base = "/home/arapat/workspace/research/boosting/data/core/"
 
 
 def extractLines(filename, prefix):
