@@ -36,7 +36,7 @@ object Types {
 
     type SampleFunc = Array[SplitterNode] => (RDD[BaseInstance], RDD[BaseInstance])
     type LossFunc = (Double, Double, Double) => Double
-    type LearnerFunc = (SparkContext, TrainRDDType, ABrNode, Int,
+    type LearnerFunc = (SparkContext, TrainRDDType, ABrNode,
                         Int, Int,
                         Int, Int, Int, Double, Double) => (ResultRDDType, Double)
     type UpdateFunc = (TrainRDDType, ABrNode) => TrainRDDType

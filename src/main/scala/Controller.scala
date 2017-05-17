@@ -44,8 +44,6 @@ class Controller(
     var maxPartSize: Int = 0
     var minPartSize: Int = 0
 
-    var depth: Int = 100
-
     var nodes: ArrayBuffer[Types.BrNode] = null
     var localNodes: Array[SplitterNode] = null
     var lastResample = 0
@@ -68,7 +66,8 @@ class Controller(
         this.train = train
         // TODO: weights are not corrected for pre-loaded models
         // TODO: hard coded the number of partitions
-        glomTrain = train.repartition(10).glom()
+        println("We will be using $numCores cores.")
+        glomTrain = train.repartition(numCores).glom()
                          .zipWithIndex()
                          .map { case (array, idx) => {
                              (idx.toInt, array, array.map(_ => 1.0), 1.0, emptyMap)
@@ -105,11 +104,6 @@ class Controller(
         glomTrain.count
         glomTrain.setName(s"glomTrain $checkpoint")
         toDestroy.unpersist()
-
-        checkpoint += 1
-        if (checkpoint % 10 == 0) {
-            glomTrain.checkpoint()
-        }
     }
 
     // TT: good
@@ -171,8 +165,10 @@ class Controller(
         // setMetaData()
 
         val featureSize = train.first._2.size
-        val featuresPerCore = (featureSize / glomTrain.count).ceil.toInt
-        println("Number of features per partition: $featuresPerCore")
+        val nparts = glomTrain.count
+        val featuresPerCore = (featureSize / nparts).ceil.toInt
+        println(s"Number of partitions: $nparts")
+        println(s"Number of features per partition: $featuresPerCore")
 
         var curIter = 0
         var terminate = false
@@ -182,6 +178,13 @@ class Controller(
             val timerStart = System.currentTimeMillis()
 
             curIter += 1
+            checkpoint += 1
+            if (checkpoint % 20 == 0) {
+                glomTrain.checkpoint()
+                println()
+                println(s"Checkpoint $checkpoint")
+                println()
+            }
             println("Node " + localNodes.size)
 
             // 1. Find a good weak rule
@@ -205,7 +208,7 @@ class Controller(
                 while (scanned < maxPartSize && resSplit._1._1 == 0) {
                     println(s"Now scan $seqChunks examples from $start, threshold $gamma.")
                     val (glomResults, bestGamma) = learnerFunc(
-                        sc, glomTrain, nodes, depth,
+                        sc, glomTrain, nodes,
                         featureOffset, featuresPerCore,
                         scanned, start, seqChunks, gamma, delta
                     )
