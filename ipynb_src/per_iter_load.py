@@ -1,7 +1,32 @@
 from math import isnan
-from per_iter_funcs import *
+from operator import itemgetter
 
-base = "/home/arapat/workspace/research/boosting/experiments/results/splice-site/auto/"
+
+def extractLines(filename, prefix):
+    rollback = []
+    ret = [[] for k in prefix]
+    with open(filename) as f:
+        lineId = 0
+        for line in f:
+            line = line.strip()
+            if line.startswith("Rollback"):
+                a, b = line[33:-6].split(" nodes to ")
+                diff = int(a) - int(b)
+                rollback.append((lineId - diff, lineId))
+            else:
+                for idx, s in enumerate(prefix):
+                    if line.startswith(s):
+                        ret[idx].append(line)
+                        lineId = max(lineId, len(ret[idx]))
+    return ret, rollback
+
+
+def extractNums(linesList, pos=-1):
+    ret = []
+    for ll in linesList:
+        ret.append([float(t.split()[pos]) for t in ll])
+    return ret
+
 
 labels = ["Training auPRC", "Testing auPRC", "Testing (ref) auPRC",
           "Training average score =", "Training average score (positive)",
@@ -28,4 +53,3 @@ for nums in [joint1, joint2]:
                 nums[idx][j] = last
             else:
                 last = nums[idx][j]
-

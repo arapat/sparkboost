@@ -25,16 +25,19 @@ def extractTestInfo(filename):
 def plot(data):
     plt.figure(figsize=(10, 8))
     for node, au, pr in data:
-        x = map(itemgetter(0), pr)
-        y = map(itemgetter(1), pr)
+        x = list(map(itemgetter(0), pr))
+        y = list(map(itemgetter(1), pr))
         if y[0] == 1.0:
             y[0] = y[1]
-        plt.xlim(0.0, 0.2)
+        # plt.xlim(0.0, 0.2)
         # plt.ylim(0.95, 1.0)
-        plt.plot(x, y, label="Iteration: " + str(node) + ": %.4f" % (au))
+        if node == 0:
+            label = "Iteration: " + str(node) + " (random guess): auPRC=%.4f" % (au)
+        else:
+            label = "Iteration: " + str(node) + ": auPRC=%.4f" % (au)
+        plt.plot(x, y, label=label)
         plt.grid()
         plt.xlabel("recall")
         plt.ylabel("preceision")
-        plt.legend(loc=(1, 0))
+        plt.legend(loc="upper right")
         plt.title("Precision-Recall curve after every 1000 iterations")
-

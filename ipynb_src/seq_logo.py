@@ -35,8 +35,12 @@ class Scale(matplotlib.patheffects.RendererBase):
         renderer.draw_path(gc, tpath, affine, rgbFace)
 
 
-def draw_logo(all_scores, fontfamily='Arial', size=80):
-    mpl.rcParams['font.family'] = fontfamily
+def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
+    def xtick(k):
+        if k >= 59:
+            return '+' + str(k - 58)
+        return k - 59
+    # mpl.rcParams['font.family'] = fontfamily
 
     fig, ax = plt.subplots(figsize=(len(all_scores), 5.0))
 
@@ -46,20 +50,24 @@ def draw_logo(all_scores, fontfamily='Arial', size=80):
 
     #font.set_family(fontfamily)
 
+    # ax.set_xticks([k + 1 for k in xrange]) # range(1,len(all_scores)+1))
     ax.set_xticks(range(1,len(all_scores)+1))
     ax.set_yticks(range(0,5))
-    ax.set_xticklabels(range(1,len(all_scores)+1), rotation=90)
+    # ax.set_xticklabels(range(1,len(all_scores)+1), rotation=90)
+    ax.set_xticklabels([xtick(k) for k in xrange])
     ax.set_yticklabels(np.arange(-2,3,1))
     seaborn.despine(ax=ax, trim=True)
 
     max_scores = 0.0
     for index, scores in enumerate(all_scores):
-        max_scores = max(max_scores, sum(map(lambda t: abs(t[1]), scores)))
+        # if index in xrange:
+            max_scores = max(max_scores, sum(map(lambda t: abs(t[1]), scores)))
     scale_fact = 2.0 / max_scores
 
-    ax.axhline(2, lw=10.0, c="gray")
-    ax.axvline(59.5, lw=10.0, c="blue")
+    ax.axhline(2, lw=3.0, c="black")
+    ax.axvline(59.5-xrange[0], lw=3.0, c="black")
 
+    print("line 64")
     # Positive scores
     trans_offset = transforms.offset_copy(
         ax.transData,
@@ -68,17 +76,21 @@ def draw_logo(all_scores, fontfamily='Arial', size=80):
         y=0,
         units='points'
     )
+    print("line 72")
     for index, scores in enumerate(all_scores):
+        # if index not in xrange:
+        #     continue
         for base, score, mark in scores:
             if score <= 0:
                 continue
             txt = ax.text(
+                # index-xrange[0]+1,
                 index+1,
                 2,
                 base,
                 transform=trans_offset,
                 fontsize=80,
-                color=COLOR_SCHEME[mark],
+                color=COLOR_SCHEME[base],
                 ha='center',
                 fontproperties=font
             )
@@ -101,6 +113,7 @@ def draw_logo(all_scores, fontfamily='Arial', size=80):
             units='points'
         )
 
+    print("line 109")
     # Positive examples
     trans_offset = transforms.offset_copy(
         ax.transData,
@@ -109,23 +122,27 @@ def draw_logo(all_scores, fontfamily='Arial', size=80):
         y=0,
         units='points'
     )
+    print("line 118")
     for index, scores in enumerate(all_scores):
+        # if index not in xrange:
+        #     continue
         offset = 0.0
         for base, score, mark in scores:
             if score < 0:
                 offset -= score
         offset = 2.0 - offset * scale_fact
-        for base, score, mark in scores:
+        for base, score, mark in scores[-1::-1]:
             if score >= 0:
                 continue
             score = -score
             txt = ax.text(
+                # index-xrange[0]+1,
                 index+1,
                 offset,
                 base,
                 transform=trans_offset,
                 fontsize=80,
-                color=COLOR_SCHEME[mark],
+                color=COLOR_SCHEME[base],
                 ha='center',
                 fontproperties=font
             )
@@ -147,7 +164,10 @@ def draw_logo(all_scores, fontfamily='Arial', size=80):
             y=0,
             units='points'
         )
+    print("line 159")
 
+    # plt.xlim(xrange[0], xrange[-1])
+    plt.title("Sequence logo of the informative bases around the splice site", fontsize=40)
     plt.show()
 
 
@@ -168,8 +188,12 @@ def getScores(filepath, leftBound=None, rightBound=None):
                 scoresMap = negScoresMap
             if pos not in scoresMap:
                 scoresMap[pos] = {}
-            scoresMap[pos][base] = scoresMap[pos].get(base, {})
-            scoresMap[pos][base][isornot] = scoresMap.get(isornot, 0.0) + abs(float(score))
+            if isornot == "is":
+                scoresMap[pos][base] = scoresMap[pos].get(base, 0.0) + abs(float(score))
+            else:
+                for c in ["A", "C", "G", "T"]:
+                    if c != base:
+                        scoresMap[pos][c] = scoresMap[pos].get(c, 0.0) + abs(float(score)) / 3.0
 
     posScores, negScores = [], []
 
@@ -183,8 +207,7 @@ def getScores(filepath, leftBound=None, rightBound=None):
                 scoresMap[i] = {}
             r = []
             for c in ['A', 'C', 'G', 'T']:
-                for isornot in ["is", "isnot"]:
-                    r.append((c, isornot, scoresMap[i].get(c, {}).get(isornot, 0.0)))
+                r.append((c, "is", scoresMap[i].get(c, 0.0)))
             maxRsum = max(maxRsum, sum(map(itemgetter(2), r)))
             scores.append(sorted(r, key=itemgetter(2)))
         for idx in range(len(scores)):

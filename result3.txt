@@ -1,0 +1,1188 @@
+Number of cores is set to 80
+Train data size: 3749085
+Test data size: 1250915
+Referenced test data size: 4627840
+Distinct positive samples in the training data: 1874334
+Distinct negative samples in the training data: 1874751
+Distinct positive samples in the test data: 625364
+Distinct negative samples in the test data: 625551
+
+Max partition size is 43712
+
+Root node predicts (-1.112271398806894E-4, 0.0)
+Node 1
+Now scan 8000 examples from 0 for a 0.25 weak learner.
+FindWeakLearner took in total (ms) 1713
+Testing progress: most extreme outlier -681.0, threshold 1805.9042331355354
+Now scan 8000 examples from 8000 for a 0.25 weak learner.
+FindWeakLearner took in total (ms) 414
+Testing progress: most extreme outlier 1064.0, threshold 3607.9713802829324
+Now scan 8000 examples from 16000 for a 0.25 weak learner.
+FindWeakLearner took in total (ms) 753
+Testing progress: most extreme outlier -1371.4645537072993, threshold 5410.03852743033
+Now scan 8000 examples from 24000 for a 0.25 weak learner.
+FindWeakLearner took in total (ms) 249
+Testing progress: most extreme outlier -1828.6194049430655, threshold 7212.105674577727
+Now scan 8000 examples from 32000 for a 0.25 weak learner.
+FindWeakLearner took in total (ms) 189
+Testing progress: most extreme outlier -2285.774256178832, threshold 9014.172821725124
+Now scan 8000 examples from 40000 for a 0.25 weak learner.
+FindWeakLearner took in total (ms) 164
+Testing progress: most extreme outlier -2742.9291074145985, threshold 10816.239968872522
+=== !!!  Cannot find a valid weak learner for 0.25.  !!! ===
+Now scan 8000 examples from 0 for a 0.125 weak learner.
+FindWeakLearner took in total (ms) 317
+Testing progress: most extreme outlier -681.0, threshold 956.6579777631805
+Now scan 8000 examples from 8000 for a 0.125 weak learner.
+FindWeakLearner took in total (ms) 378
+Testing progress: most extreme outlier -1064.0, threshold 1907.9878875542609
+Now scan 8000 examples from 16000 for a 0.125 weak learner.
+FindWeakLearner took in total (ms) 281
+Testing progress: most extreme outlier -1371.4645537072993, threshold 2859.3177973453408
+Now scan 8000 examples from 24000 for a 0.125 weak learner.
+FindWeakLearner took in total (ms) 271
+Testing progress: most extreme outlier -1828.6194049430655, threshold 3810.647707136421
+Now scan 8000 examples from 32000 for a 0.125 weak learner.
+FindWeakLearner took in total (ms) 183
+Testing progress: most extreme outlier -2285.774256178832, threshold 4761.977616927501
+Now scan 8000 examples from 40000 for a 0.125 weak learner.
+FindWeakLearner took in total (ms) 195
+Testing progress: most extreme outlier -2742.9291074145985, threshold 5713.307526718581
+=== !!!  Cannot find a valid weak learner for 0.125.  !!! ===
+Now scan 8000 examples from 0 for a 0.0625 weak learner.
+FindWeakLearner took in total (ms) 302
+Testing progress: most extreme outlier -681.0, threshold 492.61568499434765
+Now scan 8000 examples from 8000 for a 0.0625 weak learner.
+FindWeakLearner took in total (ms) 436
+Testing progress: most extreme outlier 1064.0, threshold 979.1431935541829
+Now scan 8000 examples from 16000 for a 0.0625 weak learner.
+FindWeakLearner took in total (ms) 298
+Testing progress: most extreme outlier -1371.4645537072993, threshold 1465.6707021140182
+Now scan 8000 examples from 24000 for a 0.0625 weak learner.
+FindWeakLearner took in total (ms) 334
+Testing progress: most extreme outlier -1828.6194049430655, threshold 1952.1982106738533
+Now scan 8000 examples from 32000 for a 0.0625 weak learner.
+FindWeakLearner took in total (ms) 221
+Testing progress: most extreme outlier -2285.774256178832, threshold 2438.7257192336883
+Now scan 8000 examples from 40000 for a 0.0625 weak learner.
+FindWeakLearner took in total (ms) 128
+Testing progress: most extreme outlier -2742.9291074145985, threshold 2925.253227793524
+=== !!!  Cannot find a valid weak learner for 0.0625.  !!! ===
+Now scan 8000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 296
+Testing progress: most extreme outlier -681.0, threshold 252.87768879407076
+Now scan 8000 examples from 8000 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 305
+Testing progress: most extreme outlier 1064.0, threshold 499.26800829889856
+Now scan 8000 examples from 16000 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 967
+Testing progress: most extreme outlier -1371.4645537072993, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 22572
+20001 steps achieved score 689.0, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.097855418264451 (7730.0/7041.0), hit 14771 samples (0.7385130743462827). Father 0. Feature 132, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.021716902526166117, ratio 1.0443908586256034 (392833.0 / 376136.0), estimated with 768969 out of 1048000 samples (0.7337490458015267).
+Running time for Iteration 1 is (ms) 23043
+
+Node 2
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 604
+Testing progress: most extreme outlier -2446.9623394847304, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 1256
+20001 steps achieved score -1054.1087792812014, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8569445938426586 (6314.42630510418/7368.535084385579), hit 13662 samples (0.6830658467076646). Father 0. Feature 135, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.07562566677205194, ratio 0.8596316172451032 (334301.57175555517 / 388889.3393973865), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 2 is (ms) 1692
+
+Node 3
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 896
+Testing progress: most extreme outlier -1785.2744359979902, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 1649
+20001 steps achieved score 665.9478459185401, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.2277972314460872 (3589.371636853243/2923.423790934695), hit 6529 samples (0.3264336783160842). Father 0. Feature 131, split at 0.5, eval false. Depth 1
+Actual prediction should be 0.06531520478765923, ratio 1.1395465379841172 (171886.1913524438 / 150837.35996997036), estimated with 323203 out of 1048000 samples (0.30839980916030535).
+Running time for Iteration 3 is (ms) 2049
+
+Node 4
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 723
+Testing progress: most extreme outlier -2180.523113985371, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 1445
+20001 steps achieved score -771.1670550576272, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.6605082270776448 (1500.3667980882826/2271.53385314595), hit 3751 samples (0.18754062296885154). Father 0. Feature 134, split at 0.5, eval false. Depth 1
+Actual prediction should be -0.15267755312608647, ratio 0.7368616637430524 (89735.12384518965 / 121780.14987149714), estimated with 211332 out of 1048000 samples (0.20165267175572518).
+Running time for Iteration 4 is (ms) 1797
+
+Node 5
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 689
+Testing progress: most extreme outlier -3672.380473632557, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 1388
+20001 steps achieved score -658.9637619422549, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9091778141280772 (6596.573589598028/7255.5373515403), hit 13900 samples (0.6949652517374131). Father 0. Feature 131, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.020165349897577605, ratio 0.960471758812915 (353881.1217661118 / 368445.10889470344), estimated with 724797 out of 1048000 samples (0.6916001908396947).
+Running time for Iteration 5 is (ms) 1777
+
+Node 6
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 827
+Testing progress: most extreme outlier -2884.493014248062, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 1906
+20001 steps achieved score 872.1575897640504, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1288516923142304 (7640.850915396926/6768.6933256330685), hit 14433 samples (0.7216139193040348). Father 0. Feature 136, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.05474609780541145, ratio 1.1157113634554798 (402587.5566371427 / 360834.8626926996), estimated with 764174 out of 1048000 samples (0.7291736641221374).
+Running time for Iteration 6 is (ms) 2406
+
+Node 7
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1201
+Testing progress: most extreme outlier -3684.791237036058, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2346
+20001 steps achieved score -629.4365758126696, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9223290772909873 (7474.452934693413/8103.889510506328), hit 15632 samples (0.7815609219539023). Father 0. Feature 129, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.0297028693928732, ratio 0.9423243540428353 (392722.8189009715 / 416759.7040404195), estimated with 813426 out of 1048000 samples (0.7761698473282442).
+Running time for Iteration 7 is (ms) 2886
+
+Node 8
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 790
+Testing progress: most extreme outlier -2727.5344321258635, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2021
+20001 steps achieved score 947.1159235749, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1255873798469853 (8488.605559945378/7541.489636370422), hit 16056 samples (0.8027598620068996). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.056616296041444934, ratio 1.1198923807598158 (441171.6702072685 / 393941.13022533985), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 8 is (ms) 2491
+
+Node 9
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1164
+Testing progress: most extreme outlier -2669.954518010041, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2121
+20001 steps achieved score -547.7836680774075, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9068314422584888 (5331.707024450294/5879.490692527743), hit 11252 samples (0.5625718714064297). Father 8. Feature 133, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.025109660064959818, ratio 0.9510208236157719 (395786.7873876274 / 416170.4744622204), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 9 is (ms) 2633
+
+Node 10
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1071
+Testing progress: most extreme outlier -2669.954518010041, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2280
+20001 steps achieved score 1344.681767944398, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1988568504570503 (8106.740831305223/6762.059063360753), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.03473284766725264, ratio 1.0719352881925381 (397894.78508833796 / 371192.91572092474), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 10 is (ms) 2735
+
+Node 11
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 969
+Testing progress: most extreme outlier -3502.4606299900775, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2042
+20001 steps achieved score -632.5060009829165, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8944226854169754 (5358.421154922165/5990.927155905148), hit 11393 samples (0.5696215189240538). Father 10. Feature 121, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.03593806498823939, ratio 0.9306461678343838 (391281.61997656006 / 420440.8007041747), estimated with 815746 out of 1048000 samples (0.7783835877862595).
+Running time for Iteration 11 is (ms) 2562
+
+Node 12
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1157
+Testing progress: most extreme outlier -2855.5764702107613, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2155
+20001 steps achieved score 641.9405750286979, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0854782894032777 (8151.924449416006/7509.983874387189), hit 15699 samples (0.7849107544622769). Father 0. Feature 129, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.011082850871100045, ratio 1.0224131860811616 (408671.8687965093 / 399713.0263576901), estimated with 813426 out of 1048000 samples (0.7761698473282442).
+Running time for Iteration 12 is (ms) 2625
+
+Node 13
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1011
+Testing progress: most extreme outlier -3867.6178744668914, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2057
+20001 steps achieved score -642.5836222703169, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9096994616746631 (6473.471654780173/7116.055277050706), hit 13662 samples (0.6830658467076646). Father 0. Feature 135, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.043204155495210936, ratio 0.9172196438900622 (343440.6968441853 / 374436.70022984163), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 13 is (ms) 2606
+
+Node 14
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1147
+Testing progress: most extreme outlier -2784.049994906364, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2135
+20001 steps achieved score 452.66148325141404, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0674950684840798 (7159.24751120795/6706.586027956644), hit 13979 samples (0.6989150542472876). Father 13. Feature 135, split at 0.5, eval true. Depth 2
+Actual prediction should be 0.019377415981786477, ratio 1.0395155964087255 (365620.5417487677 / 351722.035736547), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 14 is (ms) 2625
+
+Node 15
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1065
+Testing progress: most extreme outlier -3867.6178744668914, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2089
+20001 steps achieved score -728.7350965239219, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9091209986890338 (7290.005052595953/8018.740149120139), hit 15402 samples (0.7700614969251537). Father 0. Feature 133, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.03746460354362589, ratio 0.9278091663170447 (391044.4900330149 / 421470.81989421713), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 15 is (ms) 2636
+
+Node 16
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1367
+Testing progress: most extreme outlier -2784.049994906364, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2323
+20001 steps achieved score 1172.9610851242749, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1713162206757404 (8019.721307230741/6846.760222106469), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.022015514314548908, ratio 1.0450147797613945 (392818.3865577898 / 375897.4458212744), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 16 is (ms) 2756
+
+Node 17
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1209
+Testing progress: most extreme outlier -3614.9760310146066, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2231
+20001 steps achieved score -646.674078246018, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8917906203695208 (5329.462929972554/5976.13700821864), hit 11394 samples (0.5696715164241788). Father 16. Feature 137, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.04042656728371706, ratio 0.9223291397661063 (388912.9510956899 / 421663.9530594408), estimated with 815112 out of 1048000 samples (0.7777786259541984).
+Running time for Iteration 17 is (ms) 2748
+
+Node 18
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1432
+Testing progress: most extreme outlier -2999.716693845183, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2507
+20001 steps achieved score 937.9772921653268, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1349992910699056 (7885.993720486467/6948.016428321065), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.007543208042618336, ratio 1.015200790503245 (387096.3753391125 / 381300.30921983917), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 18 is (ms) 3038
+
+Node 19
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1317
+Testing progress: most extreme outlier -3829.22193057556, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2484
+20001 steps achieved score -829.51823224508, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8851474420539428 (6392.9437405643/7222.46197280961), hit 13662 samples (0.6830658467076646). Father 0. Feature 135, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.057564424473499375, ratio 0.891251299716734 (338374.2036486414 / 379661.9469235969), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 19 is (ms) 3071
+
+Node 20
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1329
+Testing progress: most extreme outlier -2780.318657110618, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2305
+20001 steps achieved score -700.8962464271817, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9093499940828135 (7030.99785921092/7731.894105638071), hit 14796 samples (0.7397630118494075). Father 0. Feature 132, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.020817360742388533, ratio 0.9592200990802412 (374138.7433373536 / 390044.72872920474), estimated with 768969 out of 1048000 samples (0.7337490458015267).
+Wrote model to disk at iteration 20
+Training auPRC = 0.5454181964883797
+Training average score = 0.9948329765906915
+Training average score (positive) = 1.0399452024214466
+Training average score (negative) = 0.949730785051515
+Training scores = 3729713.3900415124
+Testing auPRC = 0.5456353568217459
+Testing average score = 0.9948186718422909
+Testing average score (positive) = 1.0399487092486275
+Testing average score (negative) = 0.9497021254494686
+Testing (ref) auPRC = 0.0038280580535472817
+Testing (ref) average score = 0.9502666035952403
+Testing (ref) average score (positive) = 1.0387733885848598
+Testing (ref) average score (negative) = 0.9499874785162427
+Effective count = 0.9842918706248727
+printStats took (ms) 41104
+Running time for Iteration 20 is (ms) 43851
+
+Node 21
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1267
+Testing progress: most extreme outlier 2595.863359896142, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2234
+20001 steps achieved score 886.864748722044, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1170008224684151 (8466.852051475524/7579.987302753249), hit 16056 samples (0.8027598620068996). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.05209793647705284, ratio 1.109817816921538 (439002.74968697754 / 395562.8959937793), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 21 is (ms) 2693
+
+Node 22
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1539
+Testing progress: most extreme outlier -2887.3943814257045, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2489
+20001 steps achieved score -604.0410395247604, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9007827579167066 (5484.024168109776/6088.065207634527), hit 11595 samples (0.5797210139493025). Father 21. Feature 128, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.011698769368027388, ratio 0.9768740612922906 (377936.50551828113 / 386883.550801129), estimated with 768929 out of 1048000 samples (0.7337108778625954).
+Running time for Iteration 22 is (ms) 2935
+
+Node 23
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1415
+Testing progress: most extreme outlier 2595.863359896142, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2430
+20001 steps achieved score 662.9315499185886, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0962136047776352 (7553.137477145797/6890.2059272270535), hit 14584 samples (0.7291635418229089). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.02262451219281731, ratio 1.0462883787903183 (392613.1255144514 / 375243.70285788405), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 23 is (ms) 2861
+
+Node 24
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1648
+Testing progress: most extreme outlier -3365.644488715831, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2637
+20001 steps achieved score -488.32358244137663, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9171122067574634 (5403.057564750424/5891.381147191839), hit 11394 samples (0.5696715164241788). Father 23. Feature 137, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.011800977290873661, ratio 0.9766743931632764 (400074.9988137597 / 409629.8639692879), estimated with 815112 out of 1048000 samples (0.7777786259541984).
+Running time for Iteration 24 is (ms) 3116
+
+Node 25
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1591
+Testing progress: most extreme outlier 2336.393082552021, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2542
+20001 steps achieved score 630.8468333009049, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.234931650304654 (3316.0824432448026/2685.235609943866), hit 6047 samples (0.3023348832558372). Father 0. Feature 123, split at 0.5, eval false. Depth 1
+Actual prediction should be 0.09066141204811605, ratio 1.198802119043743 (170804.59758598433 / 142479.3924473801), estimated with 315069 out of 1048000 samples (0.30063835877862594).
+Running time for Iteration 25 is (ms) 2958
+
+Node 26
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1546
+Testing progress: most extreme outlier 2951.4605470929678, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2506
+20001 steps achieved score 756.61204962849, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1002815342443246 (8301.4911276165/7544.879077987963), hit 15950 samples (0.7974601269936503). Father 0. Feature 122, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.014306102620381572, ratio 1.0290254664072522 (417399.853466229 / 405626.3592032782), estimated with 828824 out of 1048000 samples (0.7908625954198474).
+Running time for Iteration 26 is (ms) 2948
+
+Node 27
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1492
+Testing progress: most extreme outlier -3527.678537023499, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2450
+20001 steps achieved score -861.3311364659796, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8873238001837364 (6782.972965648242/7644.3041021143645), hit 14494 samples (0.7246637668116594). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.061627724409803755, ratio 0.8840378073004559 (360603.0877495834 / 407904.5995224343), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 27 is (ms) 2886
+
+Node 28
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1647
+Testing progress: most extreme outlier 2687.2253788264043, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2590
+20001 steps achieved score 627.8253994344841, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0895988221862885 (7634.897413498129/7007.072014063533), hit 14811 samples (0.7405129743512824). Father 0. Feature 116, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.021779493374619235, ratio 1.0445216054289022 (389616.6924834554 / 373009.701722226), estimated with 768000 out of 1048000 samples (0.732824427480916).
+Running time for Iteration 28 is (ms) 3018
+
+Node 29
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1568
+Testing progress: most extreme outlier -3217.3512772013355, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2513
+20001 steps achieved score -721.2100088226484, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9124784743493094 (7519.162898995231/8240.372907818088), hit 15851 samples (0.7925103744812759). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.043206664126189384, ratio 0.9172150419703813 (398282.07425911666 / 434229.76732208673), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 29 is (ms) 2947
+
+Node 30
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1876
+Testing progress: most extreme outlier -2994.5326798179644, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2825
+20001 steps achieved score 634.3103639097056, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.085658404046335 (8039.425728498963/7405.115364589253), hit 15584 samples (0.7791610419479026). Father 0. Feature 118, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.027074795686112384, ratio 1.0556425053552623 (421983.4094077631 / 399740.82823213935), estimated with 827990 out of 1048000 samples (0.7900667938931297).
+Running time for Iteration 30 is (ms) 3254
+
+Node 31
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2245
+Testing progress: most extreme outlier -3835.063913530886, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3202
+20001 steps achieved score -772.989261892002, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8920863354688087 (6390.044865900065/7163.034127792096), hit 13662 samples (0.6830658467076646). Father 0. Feature 135, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.05120044065492608, ratio 0.9026676165507278 (339546.91118070437 / 376159.4023702551), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 31 is (ms) 3624
+
+Node 32
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1962
+Testing progress: most extreme outlier -2748.8450087902893, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2908
+20001 steps achieved score 194.3591494193257, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1840180253180828 (1250.5554056468184/1056.1962562274848), hit 2327 samples (0.11634418279086045). Father 25. Feature 131, split at 0.5, eval false. Depth 2
+Actual prediction should be -0.008158325388181226, ratio 0.9838157447082413 (159847.84272393148 / 162477.41874809665), estimated with 323203 out of 1048000 samples (0.30839980916030535).
+Running time for Iteration 32 is (ms) 3326
+
+Node 33
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2411
+Testing progress: most extreme outlier -3390.251739688582, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3340
+20001 steps achieved score -469.2904066020727, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9176551586693574 (5229.796494515385/5699.0869011174445), hit 10996 samples (0.5497725113744313). Father 27. Feature 133, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.01497432178060724, ratio 0.9704953734549356 (398871.31676650536 / 410997.64890844864), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 33 is (ms) 3794
+
+Node 34
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1742
+Testing progress: most extreme outlier -2672.009010236151, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2684
+20001 steps achieved score 662.4668210147421, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0868115359676256 (8293.558860002016/7631.092038987217), hit 16037 samples (0.8018099095045248). Father 0. Feature 130, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.036795806120961526, ratio 1.0763671405620403 (431418.1461759621 / 400809.47282605735), estimated with 836848 out of 1048000 samples (0.7985190839694657).
+Running time for Iteration 34 is (ms) 3114
+
+Node 35
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1914
+Testing progress: most extreme outlier -3712.2912088428257, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2849
+20001 steps achieved score -678.4611363853863, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9094229238723944 (6811.967627616841/7490.428764002282), hit 14393 samples (0.719614019299035). Father 0. Feature 132, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.040693066726054807, ratio 0.9218376703512673 (365949.39558311726 / 396978.131131994), estimated with 768969 out of 1048000 samples (0.7337490458015267).
+Running time for Iteration 35 is (ms) 3280
+
+Node 36
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1923
+Testing progress: most extreme outlier -2934.347215389013, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2890
+20001 steps achieved score 675.6898776018016, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1036469343681008 (7194.839543931619/6519.149666329717), hit 13867 samples (0.6933153342332883). Father 0. Feature 131, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.03597438295051327, ratio 1.0746002864759785 (371536.4109188468 / 345743.8226982569), estimated with 724797 out of 1048000 samples (0.6916001908396947).
+Running time for Iteration 36 is (ms) 3351
+
+Node 37
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2106
+Testing progress: most extreme outlier -2934.347215389013, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3118
+20001 steps achieved score -985.0184671422276, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8826194970962312 (7406.651723177313/8391.670190319592), hit 15885 samples (0.7942102894855257). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.019541695240715584, ratio 0.9616705116356152 (407607.4792766018 / 423853.56974639936), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 37 is (ms) 3559
+
+Node 38
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2076
+Testing progress: most extreme outlier -2422.902640234602, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3080
+20001 steps achieved score 860.1383276217117, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1164383814749763 (8247.207064976044/7387.068737354132), hit 15731 samples (0.7865106744662766). Father 0. Feature 137, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.039110980868997065, ratio 1.081362653168199 (419929.1711901384 / 388333.34030893433), estimated with 815112 out of 1048000 samples (0.7777786259541984).
+Running time for Iteration 38 is (ms) 3566
+
+Node 39
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2496
+Testing progress: most extreme outlier -3235.8101721193443, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3440
+20001 steps achieved score 770.9784068378113, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1098273248259263 (7790.892695560393/7019.914288722685), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.005709889309465482, ratio 0.9886451795484905 (380945.42889924225 / 385320.6759913786), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 39 is (ms) 3884
+
+Node 40
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 1932
+Testing progress: most extreme outlier -4057.884819022786, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 2884
+20001 steps achieved score -824.6434195712073, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8998179561162225 (7406.8059260620585/8231.449345633395), hit 15731 samples (0.7865106744662766). Father 0. Feature 137, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.0691473686837327, ratio 0.8708419842430958 (376672.33738297486 / 432538.1001357724), estimated with 815112 out of 1048000 samples (0.7777786259541984).
+Wrote model to disk at iteration 40
+Training auPRC = 0.5560070021297013
+Training average score = 0.9918573353902386
+Training average score (positive) = 0.974877820162853
+Training average score (negative) = 1.0088330738718858
+Training scores = 3718557.4582515126
+Testing auPRC = 0.5558054941388005
+Testing average score = 0.9918764641208881
+Testing average score (positive) = 0.9749390773684519
+Testing average score (negative) = 1.0088087876709273
+Testing (ref) auPRC = 0.00397705969112498
+Testing (ref) average score = 1.0075761412870772
+Testing (ref) average score (positive) = 0.9763432346748111
+Testing (ref) average score (negative) = 1.0076746409391264
+Effective count = 0.9828664893333511
+printStats took (ms) 39059
+Running time for Iteration 40 is (ms) 42391
+
+Node 41
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2410
+Testing progress: most extreme outlier -3254.351813196005, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3381
+20001 steps achieved score -533.1689565771217, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9076548889476309 (5240.487607383294/5773.656563960462), hit 11107 samples (0.5553222338883056). Father 39. Feature 133, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.020199053867570715, ratio 0.9604070175722998 (396657.33305968513 / 413009.61550900433), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 41 is (ms) 3822
+
+Node 42
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2123
+Testing progress: most extreme outlier -2422.902640234602, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3055
+20001 steps achieved score 657.520773066037, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0936783059525252 (7676.443312071695/7018.922539005649), hit 14780 samples (0.7389630518474076). Father 0. Feature 128, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.035333403170526245, ratio 1.0732235749983428 (395809.70189962 / 368804.51671053836), estimated with 768929 out of 1048000 samples (0.7337108778625954).
+Running time for Iteration 42 is (ms) 3496
+
+Node 43
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2615
+Testing progress: most extreme outlier -3305.109609923883, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3538
+20001 steps achieved score -734.6462139675474, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9059546454904074 (7076.969976948518/7811.616190916096), hit 15037 samples (0.751812409379531). Father 0. Feature 121, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.032326842808116, ratio 0.9373920395179811 (391544.8995381886 / 417695.9938122858), estimated with 815746 out of 1048000 samples (0.7783835877862595).
+Running time for Iteration 43 is (ms) 3974
+
+Node 44
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2204
+Testing progress: most extreme outlier -2361.660706744982, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3159
+20001 steps achieved score 763.6155681254647, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1028234117551676 (8190.091261656397/7426.475693530741), hit 15731 samples (0.7865106744662766). Father 0. Feature 137, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.033408903291856154, ratio 1.0691006773246656 (417429.4025077733 / 390449.104898479), estimated with 815112 out of 1048000 samples (0.7777786259541984).
+Running time for Iteration 44 is (ms) 3602
+
+Node 45
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2202
+Testing progress: most extreme outlier -3174.661842888847, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3153
+20001 steps achieved score -659.6592726990117, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9120275508367905 (6838.816431611326/7498.475704310327), hit 14422 samples (0.7210639468026598). Father 0. Feature 128, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.027559712329968965, ratio 0.9463721210357882 (371500.96913531685 / 392552.73996101593), estimated with 768929 out of 1048000 samples (0.7337108778625954).
+Running time for Iteration 45 is (ms) 3592
+
+Node 46
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2957
+Testing progress: most extreme outlier -2397.86019675227, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3899
+20001 steps achieved score 664.5712740893202, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0858792084820508 (8403.013276941518/7738.442002852306), hit 16250 samples (0.8124593770311485). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.030063712688194428, ratio 1.061971860087973 (428369.29347668384 / 403371.60481935745), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 46 is (ms) 4334
+
+Node 47
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2488
+Testing progress: most extreme outlier -2983.6821210836747, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3465
+20001 steps achieved score 698.2705357789632, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1319203083050287 (5991.394428155171/5293.123892376191), hit 11351 samples (0.567521623918804). Father 45. Feature 124, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.020737807504662135, ratio 0.9593727293512996 (375284.6681030102 / 391177.1271180149), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 47 is (ms) 4103
+
+Node 48
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2276
+Testing progress: most extreme outlier -3792.042075247233, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3208
+20001 steps achieved score -1030.593344893796, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8670347409600393 (6720.25339759383/7750.84674248775), hit 14577 samples (0.7288135593220338). Father 0. Feature 136, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.06569287723862637, ratio 0.8768794489665156 (355143.4356180891 / 405008.2779755631), estimated with 764174 out of 1048000 samples (0.7291736641221374).
+Running time for Iteration 48 is (ms) 3648
+
+Node 49
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2752
+Testing progress: most extreme outlier -3086.8131406416883, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3712
+20001 steps achieved score -578.485567678662, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.904522916231273 (5480.40882712659/6058.894394805285), hit 11595 samples (0.5797210139493025). Father 46. Feature 128, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.016374131114048205, ratio 0.9677821562502077 (375651.665353284 / 388157.2551500568), estimated with 768929 out of 1048000 samples (0.7337108778625954).
+Running time for Iteration 49 is (ms) 4175
+
+Node 50
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2448
+Testing progress: most extreme outlier -2428.3162780223493, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3392
+20001 steps achieved score 871.9306918556111, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.124499311322989 (7875.428804335648/7003.498112480031), hit 15047 samples (0.752312384380781). Father 0. Feature 104, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.03559866250332367, ratio 1.0737930911933642 (396357.0474579294 / 369118.64185812225), estimated with 770980 out of 1048000 samples (0.7356679389312977).
+Running time for Iteration 50 is (ms) 3821
+
+Node 51
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2371
+Testing progress: most extreme outlier -3250.3786846836324, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3362
+20001 steps achieved score 543.3234965098826, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1011643298972218 (5914.025769355771/5370.702272845836), hit 11402 samples (0.5700714964251787). Father 50. Feature 124, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.03016465907028245, ratio 0.9414544445009814 (371625.574601847 / 394735.5889310474), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 51 is (ms) 3839
+
+Node 52
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3596
+Testing progress: most extreme outlier -4062.4627799252394, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4555
+20001 steps achieved score -1054.1227242109092, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8559823088921902 (6265.274747741448/7319.397471952368), hit 13662 samples (0.6830658467076646). Father 0. Feature 135, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.0729900155616753, ratio 0.8641749596155185 (332472.4996643041 / 384728.2265760454), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 52 is (ms) 5002
+
+Node 53
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2668
+Testing progress: most extreme outlier -3289.762884013286, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3642
+20001 steps achieved score -410.49967867401114, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.90558770163697 (3937.4474192292782/4347.947097903184), hit 8386 samples (0.4192790360481976). Father 51. Feature 137, split at 0.5, eval true. Depth 3
+Actual prediction should be -0.026896783597854485, ratio 0.947627707756982 (392990.207529172 / 414709.4943639553), estimated with 815112 out of 1048000 samples (0.7777786259541984).
+Running time for Iteration 53 is (ms) 4106
+
+Node 54
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2679
+Testing progress: most extreme outlier -2527.0402845108356, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3651
+20001 steps achieved score 436.5340735660231, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.3137388518951958 (1827.9271730469409/1391.393099480904), hit 3246 samples (0.16229188540572972). Father 52. Feature 125, split at 0.5, eval false. Depth 2
+Actual prediction should be 0.015123050442691141, ratio 1.0307081609343012 (117592.56495228905 / 114089.09855307196), estimated with 233023 out of 1048000 samples (0.22235019083969465).
+Running time for Iteration 54 is (ms) 4093
+
+Node 55
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2581
+Testing progress: most extreme outlier -3033.233912667767, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3600
+20001 steps achieved score 670.6632051699282, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0948700544759198 (7739.94559226952/7069.28238709971), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.011612524335068364, ratio 0.9770425768967326 (378603.39109720243 / 387499.37827655027), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 55 is (ms) 4051
+
+Node 56
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3470
+Testing progress: most extreme outlier -4152.157782779531, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4443
+20001 steps achieved score -1060.8085138740819, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8628312191940769 (6672.791709452627/7733.600223326775), hit 14494 samples (0.7246637668116594). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.07419409581206737, ratio 0.8620963913794768 (355635.96028841985 / 412524.589877185), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 56 is (ms) 4890
+
+Node 57
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3486
+Testing progress: most extreme outlier -3033.233912667767, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4482
+20001 steps achieved score 479.8272856431872, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0980887185932813 (5371.5956003332485/4891.768314690083), hit 10410 samples (0.520473976301185). Father 52. Feature 120, split at 0.5, eval true. Depth 2
+Actual prediction should be 0.004054972859447957, ratio 1.0081429204093844 (381462.23874496156 / 378381.1114698482), estimated with 766499 out of 1048000 samples (0.7313921755725191).
+Running time for Iteration 57 is (ms) 4942
+
+Node 58
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3626
+Testing progress: most extreme outlier -3911.2967413081747, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4693
+20001 steps achieved score -657.2470699385929, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9081572642571439 (6498.97562554723/7156.222695485758), hit 13752 samples (0.687565621718914). Father 0. Feature 135, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.044375554365032606, ratio 0.9150732989893114 (341945.2815894175 / 373680.75537456106), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 58 is (ms) 5149
+
+Node 59
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2801
+Testing progress: most extreme outlier -2786.3753629920034, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3775
+20001 steps achieved score 627.7091347553283, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0920545018809835 (7446.594924467786/6818.885789712485), hit 14363 samples (0.7181140942952853). Father 0. Feature 123, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.010162244510080923, ratio 1.020532437875852 (367786.09466644016 / 360386.4816212548), estimated with 732931 out of 1048000 samples (0.699361641221374).
+Running time for Iteration 59 is (ms) 4213
+
+Node 60
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2687
+Testing progress: most extreme outlier -3605.7562486735915, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3671
+20001 steps achieved score -689.021449223846, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9019097453556355 (6335.340468500847/7024.361917724633), hit 13472 samples (0.6735663216839158). Father 0. Feature 131, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.03946240629867742, ratio 0.9241094032188778 (345001.40532505466 / 373333.9408984892), estimated with 724797 out of 1048000 samples (0.6916001908396947).
+Wrote model to disk at iteration 60
+Training auPRC = 0.5556971539780081
+Training average score = 0.9924899546520846
+Training average score (positive) = 0.9989922218884921
+Training average score (negative) = 0.9859891337119785
+Training scores = 3720929.2016368103
+Testing auPRC = 0.5559437810912423
+Testing average score = 0.9923835865995547
+Testing average score (positive) = 0.9988824257074714
+Testing average score (negative) = 0.9858866902315795
+Testing (ref) auPRC = 0.003999885365068257
+Testing (ref) average score = 0.985647063396586
+Testing (ref) average score (positive) = 0.9984808623200315
+Testing (ref) average score (negative) = 0.9856065892663963
+Effective count = 0.9716000364803475
+printStats took (ms) 33501
+Running time for Iteration 60 is (ms) 37614
+
+Node 61
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4183
+Testing progress: most extreme outlier -2938.567350639065, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5139
+20001 steps achieved score -634.7546302637156, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8897843415050203 (5124.450903064367/5759.205533328049), hit 10896 samples (0.5447727613619319). Father 59. Feature 134, split at 0.5, eval true. Depth 2
+Actual prediction should be 0.01137718811800293, ratio 1.0230152318330414 (421114.4795281961 / 411640.4784840222), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 61 is (ms) 5617
+
+Node 62
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4102
+Testing progress: most extreme outlier -2514.4184586286087, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5078
+20001 steps achieved score 907.7685288409874, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1201599268274347 (8462.437983197024/7554.669454356134), hit 16056 samples (0.8027598620068996). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.05475694908114972, ratio 1.1157355775015305 (439571.5882427496 / 393974.6989399436), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 62 is (ms) 5527
+
+Node 63
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3231
+Testing progress: most extreme outlier -3366.8278857767236, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4201
+20001 steps achieved score -474.6466018145686, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9209754264104781 (5531.66991790427/6006.3165197187445), hit 11566 samples (0.5782710864456777). Father 56. Feature 134, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.00782462239585027, ratio 0.9844725683837093 (412905.60934273485 / 419418.09513355605), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 63 is (ms) 4671
+
+Node 64
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2890
+Testing progress: most extreme outlier -2644.929996972693, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3856
+20001 steps achieved score 808.503853316268, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1256030970812496 (7245.477718645033/6436.973865328688), hit 13779 samples (0.6889155542222889). Father 0. Feature 131, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.04554751153798167, ratio 1.0953730860333117 (375401.00945324486 / 342715.2029202116), estimated with 724797 out of 1048000 samples (0.6916001908396947).
+Running time for Iteration 64 is (ms) 4304
+
+Node 65
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3099
+Testing progress: most extreme outlier -3073.2178150711748, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4066
+20001 steps achieved score 360.5371861317303, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0870407551896868 (4502.702374680397/4142.165188548688), hit 8681 samples (0.43402829858507075). Father 61. Feature 118, split at 0.5, eval true. Depth 3
+Actual prediction should be -0.005289051557663792, ratio 0.9894776482629897 (408548.795311167 / 412893.4049479209), estimated with 827990 out of 1048000 samples (0.7900667938931297).
+Running time for Iteration 65 is (ms) 4529
+
+Node 66
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2853
+Testing progress: most extreme outlier -3470.784598340274, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 3847
+20001 steps achieved score -683.8036038115713, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9167207870136899 (7527.172212255722/8210.975816067445), hit 15851 samples (0.7925103744812759). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.03978662310753834, ratio 0.9235103738517569 (399810.6898643787 / 432924.958056353), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 66 is (ms) 4293
+
+Node 67
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4145
+Testing progress: most extreme outlier -2762.4327434817133, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5112
+20001 steps achieved score 1058.622561529406, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.153700377024896 (7946.195526675718/6887.572965146257), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.014739289923681807, ratio 1.029917374248256 (388921.0829911013 / 377623.57710974396), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 67 is (ms) 5557
+
+Node 68
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3267
+Testing progress: most extreme outlier -3853.973296853192, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4261
+20001 steps achieved score -679.0365077768947, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9149638542351345 (7306.232599486253/7985.269107263161), hit 15402 samples (0.7700614969251537). Father 0. Feature 133, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.036828900747855234, ratio 0.9289895382857408 (390141.1304074102 / 419962.8890625996), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 68 is (ms) 4738
+
+Node 69
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3189
+Testing progress: most extreme outlier -3116.2813892614777, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4202
+20001 steps achieved score 704.0294659569371, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.094312959505367 (8168.851582125189/7464.822116168247), hit 15729 samples (0.7864106794660267). Father 0. Feature 125, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.021348941642157743, ratio 1.043622551400104 (413038.7455485483 / 395774.070802153), estimated with 814977 out of 1048000 samples (0.7776498091603053).
+Running time for Iteration 69 is (ms) 4652
+
+Node 70
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 2991
+Testing progress: most extreme outlier -3332.1859072195707, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4002
+20001 steps achieved score -659.0506741564012, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9129920490095116 (6915.552182868215/7574.602857024627), hit 14552 samples (0.7275636218189091). Father 0. Feature 132, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.06055499672956783, ratio 0.8859365070124198 (359119.3465807184 / 405355.62507944374), estimated with 768969 out of 1048000 samples (0.7337490458015267).
+Running time for Iteration 70 is (ms) 4462
+
+Node 71
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3355
+Testing progress: most extreme outlier -2503.7541073927705, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4350
+20001 steps achieved score 881.0472399132962, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1264941030201905 (7846.172244773586/6965.125004860284), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.003304685098555359, ratio 1.0066312602843013 (384374.3842117031 / 381842.2886083876), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 71 is (ms) 4798
+
+Node 72
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4300
+Testing progress: most extreme outlier -3627.3303866201345, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5284
+20001 steps achieved score -863.7758822084289, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8865323335478674 (6748.752948398288/7612.528830606826), hit 14494 samples (0.7246637668116594). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.05927688637844502, ratio 0.8882040531920352 (361056.8643963974 / 406502.1580331999), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 72 is (ms) 5733
+
+Node 73
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3566
+Testing progress: most extreme outlier -2503.7541073927705, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4592
+20001 steps achieved score 881.0472399132965, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1264941030201905 (7846.172244773586/6965.125004860284), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.0033046850985549176, ratio 1.0066312602843004 (384374.3842117029 / 381842.28860838775), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 73 is (ms) 5046
+
+Node 74
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3153
+Testing progress: most extreme outlier -3627.3303866201345, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4162
+20001 steps achieved score -1114.1827875854913, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8688395421849727 (7380.624307071052/8494.807094656546), hit 15885 samples (0.7942102894855257). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.03135951451182936, ratio 0.9392073266194368 (403275.94134904974 / 429379.0411544091), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 74 is (ms) 4616
+
+Node 75
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3373
+Testing progress: most extreme outlier -3069.4366501550526, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4364
+20001 steps achieved score 690.9296567494881, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0892417484237844 (8433.154220396931/7742.22456364746), hit 16250 samples (0.8124593770311485). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.031222056965169966, ratio 1.0644349701686873 (429320.0238211071 / 403331.3784806133), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 75 is (ms) 4814
+
+Node 76
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3301
+Testing progress: most extreme outlier -3627.3303866201345, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4308
+20001 steps achieved score -694.3165815658277, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9026591270503199 (6438.520432590396/7132.8370141561445), hit 13662 samples (0.6830658467076646). Father 0. Feature 135, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.046212719584463005, ratio 0.9117171868214159 (341472.99033330206 / 374538.2836576806), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 76 is (ms) 4775
+
+Node 77
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3637
+Testing progress: most extreme outlier -2851.3410907982247, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4708
+20001 steps achieved score 501.0368653020098, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1092413972682356 (5087.547820226013/4586.5109549240415), hit 9735 samples (0.48672566371681414). Father 76. Feature 136, split at 0.5, eval true. Depth 2
+Actual prediction should be 0.01673306065239608, ratio 1.0340324114639552 (386181.8878387151 / 373471.74378409394), estimated with 764174 out of 1048000 samples (0.7291736641221374).
+Running time for Iteration 77 is (ms) 5168
+
+Node 78
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3343
+Testing progress: most extreme outlier -3302.254809563658, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4364
+20001 steps achieved score -764.5334112701568, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9067100823495416 (7430.708159579323/8195.241570849485), hit 15781 samples (0.7890105494725264). Father 0. Feature 122, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.026926635831797576, ratio 0.9475711318378706 (400199.9996941962 / 422342.963232728), estimated with 828824 out of 1048000 samples (0.7908625954198474).
+Running time for Iteration 78 is (ms) 4823
+
+Node 79
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3481
+Testing progress: most extreme outlier -2380.059914945525, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4478
+20001 steps achieved score 792.0682487620356, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1044923743468402 (8372.221860094955/7580.153611332994), hit 16088 samples (0.8043597820108994). Father 0. Feature 126, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.04892729540670415, ratio 1.1028024158469487 (435691.59885553434 / 395076.7540901011), estimated with 835085 out of 1048000 samples (0.7968368320610687).
+Running time for Iteration 79 is (ms) 4936
+
+Node 80
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3499
+Testing progress: most extreme outlier -3410.9074800290873, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4502
+20001 steps achieved score -620.9832690176128, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9221033573414297 (7350.904193956488/7971.887462974119), hit 15450 samples (0.7724613769311535). Father 0. Feature 129, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.0340016603478945, ratio 0.9342573711875442 (389122.6298427871 / 416504.7468110092), estimated with 813426 out of 1048000 samples (0.7761698473282442).
+Wrote model to disk at iteration 80
+Training auPRC = 0.5562375336736688
+Training average score = 0.9919745440570868
+Training average score (positive) = 1.014737166775457
+Training average score (negative) = 0.9692169844183862
+Training scores = 3718996.8835062636
+Testing auPRC = 0.5566446656074839
+Testing average score = 0.9918660607352984
+Testing average score (positive) = 1.0145792893390122
+Testing average score (negative) = 0.9691596219436845
+Testing (ref) auPRC = 0.004040967345924351
+Testing (ref) average score = 0.9703835373130846
+Testing (ref) average score (positive) = 1.0121200745666004
+Testing (ref) average score (negative) = 0.970251912214971
+Effective count = 0.9729291996820918
+printStats took (ms) 35084
+Running time for Iteration 80 is (ms) 40080
+
+Node 81
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3526
+Testing progress: most extreme outlier -2528.837415898841, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4597
+20001 steps achieved score 590.7863982543832, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1039147466017365 (6276.0853339156665/5685.298935661301), hit 12014 samples (0.6006699665016749). Father 80. Feature 134, split at 0.5, eval true. Depth 2
+Actual prediction should be 0.025528280930410305, ratio 1.0523824163075828 (426558.90548284305 / 405326.9029137517), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 81 is (ms) 5070
+
+Node 82
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3596
+Testing progress: most extreme outlier -3049.750574415241, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4620
+20001 steps achieved score -620.9389844368958, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9109164475542766 (6349.359879825409/6970.298864262284), hit 13452 samples (0.672566371681416). Father 0. Feature 131, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.01929160460474449, ratio 0.9621516415313652 (351420.39840579615 / 365244.29542777035), estimated with 724797 out of 1048000 samples (0.6916001908396947).
+Running time for Iteration 82 is (ms) 5085
+
+Node 83
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3504
+Testing progress: most extreme outlier 2978.395312953332, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4505
+20001 steps achieved score 647.8384108532659, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0846986848316575 (8296.580680474312/7648.742269621097), hit 16088 samples (0.8043597820108994). Father 0. Feature 126, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.03992647392497611, ratio 1.083127779694645 (431871.69869857235 / 398726.45388185454), estimated with 835085 out of 1048000 samples (0.7968368320610687).
+Running time for Iteration 83 is (ms) 4968
+
+Node 84
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3664
+Testing progress: most extreme outlier -3507.368552144314, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4697
+20001 steps achieved score -609.0262888710548, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8903844130025931 (4946.992755075805/5556.019043946805), hit 10581 samples (0.5290235488225589). Father 83. Feature 124, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.03433809620237034, ratio 0.9336289472816365 (369997.9934418025 / 396300.9014652903), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 84 is (ms) 5163
+
+Node 85
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3704
+Testing progress: most extreme outlier 2726.1288146763936, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4737
+20001 steps achieved score 854.3845596555468, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1132036155938594 (8401.710280423133/7547.325720767699), hit 16099 samples (0.8049097545122744). Father 0. Feature 122, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.02234908656374707, ratio 1.0457121882327005 (419997.94692442025 / 401638.1865398693), estimated with 828824 out of 1048000 samples (0.7908625954198474).
+Running time for Iteration 85 is (ms) 5196
+
+Node 86
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3802
+Testing progress: most extreme outlier -3380.8802017286325, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4842
+20001 steps achieved score -659.1042535312857, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9207772820107194 (7660.532717525839/8319.636971057087), hit 16056 samples (0.8027598620068996). Father 0. Feature 134, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.0423495218966743, ratio 0.9187887579754658 (398443.2352268759 / 433661.4175654895), estimated with 836668 out of 1048000 samples (0.7983473282442748).
+Running time for Iteration 86 is (ms) 5295
+
+Node 87
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3807
+Testing progress: most extreme outlier -2530.0029947775975, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4861
+20001 steps achieved score 632.8946643458287, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.106150834308899 (6595.115013025868/5962.220348679992), hit 12637 samples (0.631818409079546). Father 83. Feature 133, split at 0.5, eval true. Depth 2
+Actual prediction should be 0.020376933172592804, ratio 1.041595702235002 (412449.92434530397 / 395978.9037726349), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 87 is (ms) 5342
+
+Node 88
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3859
+Testing progress: most extreme outlier -3269.1819296055764, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4879
+20001 steps achieved score -734.5077870351122, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8981879182795979 (6479.840202158132/7214.347989193299), hit 13788 samples (0.6893655317234139). Father 0. Feature 115, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.043432835651586295, ratio 0.9168002399435424 (348171.44151014235 / 379768.0523421145), estimated with 734990 out of 1048000 samples (0.7013263358778626).
+Running time for Iteration 88 is (ms) 5351
+
+Node 89
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3830
+Testing progress: most extreme outlier -2546.4470086295128, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4850
+20001 steps achieved score 674.4279207943732, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.098195288092254 (7542.6589112747915/6868.230990480419), hit 14584 samples (0.7291635418229089). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.020459499361493414, ratio 1.0417677176122828 (390386.97801690584 / 374735.1462489809), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 89 is (ms) 5323
+
+Node 90
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3855
+Testing progress: most extreme outlier -3592.6766796810125, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4869
+20001 steps achieved score -626.6076944961172, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8794740213714595 (4572.335318672133/5198.94301316825), hit 9870 samples (0.49347532623368834). Father 89. Feature 135, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.022560531196639456, ratio 0.9558817534952967 (348894.80716778804 / 364997.8733164559), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 90 is (ms) 5343
+
+Node 91
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3929
+Testing progress: most extreme outlier -2871.98114765355, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4946
+20001 steps achieved score 828.8813390088366, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1186651703932808 (7813.9245177424655/6985.043178733617), hit 14908 samples (0.7453627318634068). Father 0. Feature 124, split at 0.5, eval true. Depth 1
+Actual prediction should be 6.8167092863564E-4, ratio 1.001364271630266 (382950.87408920313 / 382429.1368671881), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Running time for Iteration 91 is (ms) 5417
+
+Node 92
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3830
+Testing progress: most extreme outlier -3769.996648700512, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4887
+20001 steps achieved score -716.3006028429857, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8977254125308342 (6287.4001264209155/7003.700729263875), hit 13452 samples (0.672566371681416). Father 0. Feature 131, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.02357323742499295, ratio 0.9539476580163521 (349852.40038343915 / 366741.71527495084), estimated with 724797 out of 1048000 samples (0.6916001908396947).
+Running time for Iteration 92 is (ms) 5361
+
+Node 93
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3964
+Testing progress: most extreme outlier -3769.996648700512, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4971
+20001 steps achieved score -676.7136515570203, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8016185640215483 (2734.460626012665/3411.1742775697), hit 6101 samples (0.30503474826258686). Father 0. Feature 131, split at 0.5, eval false. Depth 1
+Actual prediction should be -0.08181781021618435, ratio 0.8490513424828012 (148500.33719994998 / 174901.4809466108), estimated with 323203 out of 1048000 samples (0.30839980916030535).
+Running time for Iteration 93 is (ms) 5427
+
+Node 94
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 5781
+Testing progress: most extreme outlier -2729.7721044630043, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 6797
+20001 steps achieved score 224.8149601118768, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.277329643574131 (1035.4566110170554/810.6416509051774), hit 1840 samples (0.0919954002299885). Father 93. Feature 136, split at 0.5, eval false. Depth 2
+Actual prediction should be 0.025858861662273743, ratio 1.053078441073371 (143275.39210806147 / 136053.86504924097), estimated with 283826 out of 1048000 samples (0.2708263358778626).
+Running time for Iteration 94 is (ms) 7280
+
+Node 95
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3961
+Testing progress: most extreme outlier 3878.583731914303, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 4968
+20001 steps achieved score 289.48915951613935, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.4553692870452941 (925.2131043489615/635.7239448328188), hit 1572 samples (0.07859607019649018). Father 94. Feature 135, split at 0.5, eval true. Depth 3
+Actual prediction should be 0.033846966097154645, ratio 1.0700377542469803 (369027.9959949846 / 344873.8089196501), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 95 is (ms) 5433
+
+Node 96
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3922
+Testing progress: most extreme outlier -4969.0735786290215, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5003
+20001 steps achieved score 658.5574589499374, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0994788213244875 (7278.634478176097/6620.077019226153), hit 13979 samples (0.6989150542472876). Father 0. Feature 135, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.027679494932577535, ratio 1.0569199701365963 (366774.6316009954 / 347022.1416609182), estimated with 721612 out of 1048000 samples (0.6885610687022901).
+Running time for Iteration 96 is (ms) 5462
+
+Node 97
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 3970
+Testing progress: most extreme outlier -5932.154783621224, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5005
+20001 steps achieved score -632.560599309884, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9210049962276162 (7375.042022402093/8007.602621711981), hit 15608 samples (0.7803609819509024). Father 0. Feature 133, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.0348024458804402, ratio 0.9327622891741256 (389867.8624018197 / 417971.2955023208), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 97 is (ms) 5459
+
+Node 98
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4139
+Testing progress: most extreme outlier -5269.695797329671, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5158
+20001 steps achieved score 726.5115359159669, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.0983171998770584 (8115.97682606319/7389.465290147202), hit 15569 samples (0.7784110794460277). Father 0. Feature 133, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.027779125596561746, ratio 1.0571305943973401 (415046.0337740854 / 392615.6673298242), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 98 is (ms) 5621
+
+Node 99
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4069
+Testing progress: most extreme outlier -5932.154783621224, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5098
+20001 steps achieved score -653.6304449601996, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9179428460602163 (7311.9205591590335/7965.551004119246), hit 15402 samples (0.7700614969251537). Father 0. Feature 133, split at 0.5, eval true. Depth 1
+Actual prediction should be -0.0348024458804399, ratio 0.9327622891741262 (389867.86240181996 / 417971.29550232086), estimated with 816751 out of 1048000 samples (0.7793425572519084).
+Running time for Iteration 99 is (ms) 5582
+
+Node 100
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4201
+Testing progress: most extreme outlier -5269.695797329671, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5221
+20001 steps achieved score -493.1969063944472, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.9040204012642237 (4645.3628801719315/5138.559786566368), hit 9960 samples (0.49797510124493777). Father 96. Feature 124, split at 0.5, eval true. Depth 2
+Actual prediction should be -0.004531726587417682, ratio 0.9909774961095339 (380875.70846851805 / 384343.44872995926), estimated with 771962 out of 1048000 samples (0.736604961832061).
+Wrote model to disk at iteration 100
+Training auPRC = 0.5604327435268533
+Training average score = 0.991977380460084
+Training average score (positive) = 1.0387879890922378
+Training average score (negative) = 0.9451771838900118
+Training scores = 3719007.517422194
+Testing auPRC = 0.5607874582548634
+Testing average score = 0.9917941185972023
+Testing average score (positive) = 1.0386288768593994
+Testing average score (negative) = 0.9449733609517335
+Testing (ref) auPRC = 0.0040308466425202265
+Testing (ref) average score = 0.943771898714383
+Testing (ref) average score (positive) = 1.040932908318501
+Testing (ref) average score (negative) = 0.9434654806868338
+Effective count = 0.9626320804205326
+printStats took (ms) 37478
+Running time for Iteration 100 is (ms) 43212
+
+Node 101
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4077
+Testing progress: most extreme outlier -4534.613737797208, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5104
+20001 steps achieved score 718.4196583377393, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1041562299811363 (7615.93945593338/6897.519797595574), hit 14552 samples (0.7275636218189091). Father 0. Feature 132, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.03347235300567169, ratio 1.0692363541971748 (394347.4644962133 / 368812.24899269827), estimated with 768969 out of 1048000 samples (0.7337490458015267).
+Running time for Iteration 101 is (ms) 5581
+
+Node 102
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4319
+Testing progress: most extreme outlier -5215.099033700107, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5383
+20001 steps achieved score -542.4886769378326, threshold was 622.4939668412504
+Predicts -0.06258157147700302, pos/neg 0.8984386396974571 (4798.998236213304/5341.486913151168), hit 10176 samples (0.5087745612719364). Father 101. Feature 115, split at 0.5, eval true. Depth 2
+Actual prediction should be 0.002765054357105391, ratio 1.0055454279914773 (364954.27082162467 / 362941.6042899236), estimated with 734990 out of 1048000 samples (0.7013263358778626).
+Running time for Iteration 102 is (ms) 5871
+
+Node 103
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 4133
+Testing progress: most extreme outlier -4777.045934989458, threshold 745.6583278037263
+Stopped after scanning 24000 examples in (ms) 5157
+20001 steps achieved score 825.553342169781, threshold was 622.4939668412504
+Predicts 0.062581571477003, pos/neg 1.1114331545285974 (8234.060672526053/7408.507330356221), hit 15731 samples (0.7865106744662766). Father 0. Feature 137, split at 0.5, eval true. Depth 1
+Actual prediction should be 0.036127664674096144, ratio 1.0749297701453702 (417881.63303903054 / 388752.4977399384), estimated with 815112 out of 1048000 samples (0.7777786259541984).
+Running time for Iteration 103 is (ms) 5628
+
+Node 104
+Now scan 24000 examples from 0 for a 0.03125 weak learner.
+FindWeakLearner took in total (ms) 6734
