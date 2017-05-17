@@ -33,7 +33,7 @@ class Controller(
     val numCores: Int
 ) extends java.io.Serializable with Comparison {
     val printStatsInterval = 20
-    val emptyMap: Types.BoardType = Map[Int, (Double, Array[(Double, Double)])]()
+    val emptyMap: Types.BoardType = Map[Int, (Double, Array[(Double, Double, Double)])]()
 
     var train: Types.BaseRDD = null
     var glomTrain: Types.TrainRDDType = null
@@ -172,7 +172,7 @@ class Controller(
             //    Simulating TMSN using Spark's computation model ==>
             //        Ask workers to scan a batch of examples at a time until one of them find
             //        a valid weak rule (as per early stop rule).
-            var resSplit: Types.ResultType = (0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, true)
+            var resSplit: Types.ResultType = (0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, true)
 
             var scanned = 0
             setGlomTrain()
@@ -222,13 +222,13 @@ class Controller(
             println(s"Stopped after scanning $seqChunks examples in (ms) " +
                     (System.currentTimeMillis() - timerStart))
 
-            val (steps, gamma1, val1, wsum1, wsum, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
+            val (steps, gamma1, val1, wsum1, wsq1, wsum, nodeIndex, dimIndex, splitIndex, splitEval) = resSplit
             val gamma = gamma1 * (1.0 - thrFact)
             val splitVal = 0.5  // TODO: fix this
             val pred = if (val1 > 0) (0.5 * log((1.0 + gamma) / (1.0 - gamma)))
                        else           (0.5 * log((1.0 - gamma) / (1.0 + gamma)))
 
-            println(s"$steps steps achieved score $val1, wsum $wsum1 out of $wsum =>" +
+            println(s"$steps steps achieved score $val1, wsum $wsum1 out of $wsum, wsq $wsq1 =>" +
                     s"gamma $gamma which is $thrFact discount on $gamma1")
 
             // add the new node to the nodes list

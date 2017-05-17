@@ -16,12 +16,12 @@ object Types {
     type BrNode = Broadcast[SplitterNode]
 
     type ABrNode = ArrayBuffer[Broadcast[SplitterNode]]
-    type BoardType = Map[Int, (Double, Array[(Double, Double)])]
-    type BoardElem = (Int, (Double, Array[(Double, Double)]))
+    type BoardType = Map[Int, (Double, Array[(Double, Double, Double)])]
+    type BoardElem = (Int, (Double, Array[(Double, Double, Double)]))
     type BoardList = List[BoardElem]
 
-    // steps, gamma, val1, wsum1, wsum, nodeId, featureId, splitId, dir
-    type ResultType = (Int, Double, Double, Double, Double, Int, Int, Int, Boolean)
+    // steps, gamma, val1, wsum1, wsq1, wsum, nodeId, featureId, splitId, dir
+    type ResultType = (Int, Double, Double, Double, Double, Double, Int, Int, Int, Boolean)
 
     // glomId, instances, weights, board
     type GlomType = (Int, Array[BaseInstance], Array[Double], BoardType)
