@@ -140,6 +140,15 @@ object SpliceSite extends Comparison {
                 println("Error: " + e)
             }
         }
+        try {
+            hdfs.mkdirs(new org.apache.hadoop.fs.Path(checkpointPath))
+            println("New checkpoint dir created.")
+        } catch {
+            case e : Throwable => {
+                println("Failed to create a new checkpoint dir")
+                println("Error: " + e)
+            }
+        }
     }
 
     def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, numCores: Int,
