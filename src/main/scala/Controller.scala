@@ -447,4 +447,92 @@ class Controller(
         }
         localNodes
     }
+
+    def checkEarlyStop() {
+        def isIn(x: SparseVector, idx: Int): Boolean = {
+            val dim = nodes(idx).value.splitIndex
+            if (dim < 0) {
+                true
+            } else if (nodes(idx).value.check(x(dim), dim, true)) {
+                isIn(x, nodes(idx).value.prtIndex)
+            } else {
+                false
+            }
+        }
+
+        var evil = baseTrain.map(t => (t._1, t._2, 1.0)).cache()
+        evil.count
+
+        def doit(i: Int) {
+            println(nodes(i).value)
+            val stats = evil.map(t => {
+                val (y, x, w) = t
+                if (isIn(x, i)) {
+                    (1, w * y, w, w * w, w)
+                } else {
+                    (0, 0.0, 0.0, 0.0, w)
+                }
+            }).collect()
+            var (cnt, score, w1, wsq, w) = (0, 0.0, 0.0, 0.0, 0.0)
+            var j = 0
+            for (item <- stats) {
+                cnt += item._1
+                score += item._2
+                w1 += item._3
+                wsq += item._4
+                w += item._5
+                if (j % 100 == 0) {
+                    println(s"$j, $cnt, $score, $w1, $wsq, $w")
+                }
+                j += 1
+            }
+            println()
+
+            val toDestroy = evil
+            evil = evil.map { case (y, x, w) => {
+                if (isIn(x, i)) {
+                    (y, x, w * exp(-y * nodes(i).value.pred))
+                } else {
+                    (y, x, w)
+                }
+            }}.cache()
+
+            if (i % 100 == 0) {
+                evil.checkpoint()
+            }
+            evil.count
+            toDestroy.unpersist()
+        }
+
+        def getWeightedError() = {
+            evil.map { case (_, _, w) => w * log(1.0 / w) } sum
+        }
+
+
+        // before re-sampling
+        (0 until 1343).foreach(doit)
+
+        println()
+        println("Weighted error now: " + getWeightedError)
+        println()
+
+        println()
+        println("Now we resample.")
+        println()
+
+        val (train, test) = sampleFunc(localNodes)
+        evil = train.map(t => (t._1, t._2, 1.0)).cache()
+        evil.count
+
+        println()
+        println("Weighted error now: " + getWeightedError)
+        println()
+
+        // after re-sampling
+        (1442 until nodes.size).foreach(doit)
+
+        println()
+        println("Weighted error now: " + getWeightedError)
+        println()
+    }
 }

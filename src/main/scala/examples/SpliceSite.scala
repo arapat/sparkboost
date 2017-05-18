@@ -294,8 +294,8 @@ object SpliceSite {
                 test.filter(_._1 < 0).count)
         println()
 
-        val nodes = algo.toInt match {
-            case 1 => {
+        // val nodes = algo.toInt match {
+        //     case 1 => {
                 val controller = new Controller(
                     sc,
                     curSampleFunc,
@@ -313,13 +313,14 @@ object SpliceSite {
                 )
                 controller.setDatasets(train, trainCSC, y, test, testRef)
                 controller.setNodes(baseNodes, lastResample, lastDepth)
-                controller.runADTree
-            }
-            // TODO: Support LogitBoost
-        }
+                // controller.runADTree
+                controller.checkEarlyStop
+        //     }
+        //     // TODO: Support LogitBoost
+        // }
 
-        nodes.foreach(println)
-        SplitterNode.save(nodes, modelWritePath)
+        // nodes.foreach(println)
+        // SplitterNode.save(nodes, modelWritePath)
         sc.stop()
     }
 

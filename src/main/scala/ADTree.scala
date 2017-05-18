@@ -43,7 +43,7 @@ class SplitterNode(val index: Int, val prtIndex: Int, val depth: Int,
         } else ""
 
         s"Node $index: Index $splitIndex <= $splitVal == $splitEval (predict $pred)" + position +
-        s" has $nChild children."
+        s" has $nChild children, depth $depth."
     }
 }
 
