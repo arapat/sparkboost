@@ -169,7 +169,7 @@ class Controller(
 
         val featureSize = train.first._2.size
         val nparts = glomTrain.count
-        val featuresPerCore = (featureSize / nparts).ceil.toInt
+        val featuresPerCore = (featureSize.toDouble / nparts).ceil.toInt
         println(s"Feature size: $featureSize")
         println(s"Number of partitions: $nparts")
         println(s"Number of features per partition: $featuresPerCore")
