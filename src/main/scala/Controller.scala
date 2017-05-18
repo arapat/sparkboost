@@ -1,4 +1,4 @@
-package sparkboost
+nackage sparkboost
 
 import math.abs
 import math.log
@@ -17,6 +17,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.SparseVector
 
 import java.io._
+import java.util.Calendar
 
 import sparkboost.utils.Comparison
 import sparkboost.utils.Utils
@@ -68,8 +69,6 @@ class Controller(
         // TODO: weights are not corrected for pre-loaded models
         // TODO: hard coded the number of partitions
         println(s"We will be using $numCores cores.")
-        train.checkpoint()
-        train.count()
         glomTrain = train.repartition(numCores).glom()
                          .zipWithIndex()
                          .map { case (array, idx) => {
@@ -103,6 +102,22 @@ class Controller(
             glomTrain = glomTrain.map(t => (t._1, t._2, t._3, t._4, emptyMap)).cache
         } else {
             glomTrain = glomResults.map(t => (t._1, t._2, t._3, t._4, t._5)).cache
+        }
+        checkpoint += 1
+        if (checkpoint % 50 == 0) {
+            println("glomTrain need to be checkpointed now...")
+            val timerStart = System.currentTimeMillis()
+            if (checkpoint % 500 == 0) {
+                clearCheckpoints()
+            }
+            // glomResults.checkpoint()
+            glomTrain.checkpoint()
+            // glomResults.count()
+            glomTrain.count()
+            // println("glomResults isCheckpointed: " + glomResults.isCheckpointed)
+            println("glomTrain isCheckpointed: " + glomTrain.isCheckpointed)
+            println("Checkpoint took (ms) " + (System.currentTimeMillis() - timerStart))
+            println()
         }
         glomTrain.count
         glomTrain.setName(s"glomTrain $checkpoint")
@@ -182,7 +197,7 @@ class Controller(
             val timerStart = System.currentTimeMillis()
 
             curIter += 1
-            println("Node " + localNodes.size)
+            println("[" + Calendar.getInstance().getTime() + "] Node " + localNodes.size)
 
             // 1. Find a good weak rule
             //    Simulating TMSN using Spark's computation model ==>
@@ -211,19 +226,6 @@ class Controller(
                     )
                     glomResults.setName(s"glomResults $curIter $scanned")
                     glomResults.cache()
-                    checkpoint += 1
-                    if (checkpoint % 20 == 0) {
-                        if (checkpoint % 100 == 0) {
-                            clearCheckpoints()
-                        }
-                        glomResults.checkpoint()
-                        glomTrain.checkpoint()
-                        glomResults.count()
-                        glomTrain.count()
-                        println()
-                        println(s"Checkpoint $checkpoint")
-                        println()
-                    }
                     nextGamma = max(nextGamma, bestGamma)
                     val results = glomResults.map(t => (t._6, t._4)).filter(_._1._1 != 0).cache()
                     if (results.count > 0) {
