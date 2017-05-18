@@ -202,8 +202,8 @@ object SpliceSite extends Comparison {
                                    .randomSplit(Array(TRAIN_PORTION, 1.0 - TRAIN_PORTION))
         val (train, test): (RDD[BaseInstance], RDD[BaseInstance]) =
             (splits(0).map(t => (rand(t), t)).sortByKey().map(_._2), splits(1))
-        train.checkpoint()
-        println("train isCheckpointed: " + train.isCheckpointed)
+        // train.checkpoint()
+        // println("train isCheckpointed: " + train.isCheckpointed)
         train.setName("sampled train data")
         test.setName("sampled test data")
         train.cache()
@@ -284,7 +284,7 @@ object SpliceSite extends Comparison {
                 val trainObjFile = options("load-train-rdd")
                 val testObjFile = options("load-test-rdd")
                 val (t1, t2) = (sc.objectFile[BaseInstance](trainObjFile), sc.objectFile[BaseInstance](testObjFile))
-                t1.checkpoint()
+                // t1.checkpoint()
                 (t1, t2)
             } else {
                 curSampleFunc(baseNodes)
@@ -322,7 +322,8 @@ object SpliceSite extends Comparison {
                     improveWindow,
                     modelWritePath,
                     maxIters,
-                    numCores
+                    numCores,
+                    1
                 )
                 controller.setDatasets(train, test, testRef)
                 controller.setNodes(baseNodes, lastResample, lastDepth)

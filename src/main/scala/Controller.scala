@@ -1,4 +1,4 @@
-nackage sparkboost
+package sparkboost
 
 import math.abs
 import math.log
@@ -32,7 +32,8 @@ class Controller(
     val rawImproveWindow: Int,
     val modelWritePath: String,
     val maxIters: Int,
-    val numCores: Int
+    val numCores: Int,
+    var maxDepth: Int
 ) extends java.io.Serializable with Comparison {
     val EPS = 0.001
 
@@ -54,7 +55,7 @@ class Controller(
 
     // Early stop
     val INIT_GAMMA = 0.25
-    val MIN_GAMMA = 0.0
+    val MIN_GAMMA = 0.05
     var delta = pow(10, -2) / 600
     val initSeqChunks = 8000
     var seqChunks = initSeqChunks
@@ -208,7 +209,7 @@ class Controller(
             )
 
             var scanned = 0
-            while (gamma > MIN_GAMMA && resSplit._1._1 == 0) {
+            while (resSplit._1._1 == 0) {
                 scanned = 0
                 var nextGamma = 0.0
                 setGlomTrain()
@@ -222,7 +223,8 @@ class Controller(
                     val (glomResults, bestGamma) = learnerFunc(
                         sc, glomTrain, nodes,
                         featureOffset, featuresPerCore,
-                        scanned, start, seqChunks, gamma, delta
+                        scanned, start, seqChunks, gamma, delta,
+                        maxDepth
                     )
                     glomResults.setName(s"glomResults $curIter $scanned")
                     glomResults.cache()
@@ -257,15 +259,18 @@ class Controller(
                         )) + ", threshold " + (scanned))
                     */
                 }
+
                 if (resSplit._1._1 == 0) {
                     gamma = nextGamma * 0.85
+                    if (gamma <= MIN_GAMMA && resSplit._1._1 == 0) {
+                        gamma = INIT_GAMMA
+                        println("=== !!!  Cannot find a valid weak learner in $maxDepth level.  !!! ===")
+                        maxDepth += 1
+                        println("Start searching in $maxDepth level.")
+                        // return localNodes
+                    }
                     println(s"\nSetting gamma threshold to $gamma\n")
                 }
-            }
-
-            if (resSplit._1._1 == 0) {
-                println("=== !!!  Cannot find a valid weak learner at all.  !!! ===")
-                return localNodes
             }
 
             println(s"Stopped after scanning $scanned examples in (ms) " +

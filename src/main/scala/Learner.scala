@@ -22,7 +22,7 @@ object Learner extends Comparison {
 
     // @transient lazy val log = org.apache.log4j.LogManager.getLogger("Learner")
     def findBestSplit(
-            nodes: Types.ABrNode,
+            nodes: Types.ABrNode, maxDepth: Int,
             featuresOffset: Int, featuresPerCore: Int,
             prevScanned: Int, headTest: Int, numTests: Int, gamma: Double, delta: Double
     )(glom: Types.GlomType): (Types.GlomResultType, Double) = {
@@ -174,14 +174,14 @@ object Learner extends Comparison {
             var (cb, bestSplit) = findBest(nodeId, candid)
             var newBoard: List[Types.BoardElem] = List(cb)
 
-            // if (node.depth + 1 < maxDepth) {
+            if (node.depth + 1 < maxDepth) {
                 val c = child.iterator
                 while (bestSplit._1 == 0 && c.hasNext) {
                     val (res, split) = travelTree(c.next, candid)
                     newBoard ++= res
                     bestSplit = split
                 }
-            // }
+            }
 
             (newBoard, bestSplit)
         }
@@ -205,11 +205,12 @@ object Learner extends Comparison {
     def partitionedGreedySplit(
             sc: SparkContext, train: Types.TrainRDDType, nodes: Types.ABrNode,
             featuresOffset: Int, featuresPerCore: Int,
-            prevScanned: Int, headTest: Int, numTests: Int, gamma: Double, delta: Double
+            prevScanned: Int, headTest: Int, numTests: Int, gamma: Double, delta: Double,
+            maxDepth: Int
     ): (RDD[Types.GlomResultType], Double) = {
         var tStart = System.currentTimeMillis()
 
-        val f = findBestSplit(nodes,
+        val f = findBestSplit(nodes, maxDepth,
                               featuresOffset, featuresPerCore,
                               prevScanned, headTest, numTests, gamma, delta) _
         val trainAndResult = train.map(f).cache()

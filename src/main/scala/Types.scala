@@ -38,7 +38,8 @@ object Types {
     type LossFunc = (Double, Double, Double) => Double
     type LearnerFunc = (SparkContext, TrainRDDType, ABrNode,
                         Int, Int,
-                        Int, Int, Int, Double, Double) => (ResultRDDType, Double)
+                        Int, Int, Int, Double, Double,
+                        Int) => (ResultRDDType, Double)
     type UpdateFunc = (TrainRDDType, ABrNode) => TrainRDDType
     type WeightFunc = (Int, Double, Double) => Double
 }
