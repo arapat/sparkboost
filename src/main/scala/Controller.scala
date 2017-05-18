@@ -26,6 +26,7 @@ class Controller(
     val sampleFunc: Types.SampleFunc,
     val learnerFunc: Types.LearnerFunc,
     val updateFunc: Types.UpdateFunc,
+    val clearCheckpoints: () => Unit,
     val minImproveFact: Double,
     val rawImproveWindow: Int,
     val modelWritePath: String,
@@ -66,7 +67,9 @@ class Controller(
         this.train = train
         // TODO: weights are not corrected for pre-loaded models
         // TODO: hard coded the number of partitions
-        println("We will be using $numCores cores.")
+        println(s"We will be using $numCores cores.")
+        train.checkpoint()
+        train.count()
         glomTrain = train.repartition(numCores).glom()
                          .zipWithIndex()
                          .map { case (array, idx) => {
@@ -167,6 +170,7 @@ class Controller(
         val featureSize = train.first._2.size
         val nparts = glomTrain.count
         val featuresPerCore = (featureSize / nparts).ceil.toInt
+        println(s"Feature size: $featureSize")
         println(s"Number of partitions: $nparts")
         println(s"Number of features per partition: $featuresPerCore")
 
@@ -178,13 +182,6 @@ class Controller(
             val timerStart = System.currentTimeMillis()
 
             curIter += 1
-            checkpoint += 1
-            if (checkpoint % 20 == 0) {
-                glomTrain.checkpoint()
-                println()
-                println(s"Checkpoint $checkpoint")
-                println()
-            }
             println("Node " + localNodes.size)
 
             // 1. Find a good weak rule
@@ -214,6 +211,19 @@ class Controller(
                     )
                     glomResults.setName(s"glomResults $curIter $scanned")
                     glomResults.cache()
+                    checkpoint += 1
+                    if (checkpoint % 20 == 0) {
+                        if (checkpoint % 100 == 0) {
+                            clearCheckpoints()
+                        }
+                        glomResults.checkpoint()
+                        glomTrain.checkpoint()
+                        glomResults.count()
+                        glomTrain.count()
+                        println()
+                        println(s"Checkpoint $checkpoint")
+                        println()
+                    }
                     nextGamma = max(nextGamma, bestGamma)
                     val results = glomResults.map(t => (t._6, t._4)).filter(_._1._1 != 0).cache()
                     if (results.count > 0) {
@@ -265,7 +275,7 @@ class Controller(
 
             val splitVal = 0.5  // TODO: fix this
             val g = gamma1 * wsum / wsum1 - EPS
-            val pred = if (val1 > 0) (0.5 * log((1.0 + g) / (1.0 - g)))
+            var pred = if (val1 > 0) (0.5 * log((1.0 + g) / (1.0 - g)))
                        else           (0.5 * log((1.0 - g) / (1.0 + g)))
 
             val eff1 = (wsum1 * wsum1) / wsq1 / cnt1
@@ -274,7 +284,7 @@ class Controller(
                     s"g $g, gamma $gamma1\n" +
                     s"Node effective ratio is $nodeEffectRatio")
 
-            println("Depth: " + localNodes(nodeIndex).depth + 1)
+            println("Depth: " + (localNodes(nodeIndex).depth + 1))
             println(s"Predicts $pred. Father $nodeIndex. " +
                     s"Feature $dimIndex, split at $splitVal, eval $splitEval")
 
@@ -311,8 +321,8 @@ class Controller(
                 println("Actual prediction should be " + 0.5 * log(pos / neg) + " (gamma=" +
                         abs(pos - neg) / (pos + neg) + ")")
                 if (actualPred > 0 && pred < 0 || actualPred < 0 && pred > 0 || abs(actualPred) < abs(pred)) {
-                    redflag = true
                     println("=== ERROR: overweightted/overfitted tree node detected ===")
+                    pred = actualPred
                 }
             }
 

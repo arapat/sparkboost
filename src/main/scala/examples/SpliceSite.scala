@@ -128,6 +128,20 @@ object SpliceSite extends Comparison {
                .toMap
     }
 
+    def clearCheckpoints(checkpointPath: String, url: String)() {
+        val hadoopConf = new org.apache.hadoop.conf.Configuration()
+        val hdfs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI(s"hdfs://$url"), hadoopConf)
+        try {
+            hdfs.delete(new org.apache.hadoop.fs.Path(checkpointPath), true)
+            println("Checkpoint dir deleted.")
+        } catch {
+            case e : Throwable => {
+                println("Failed to delete checkpoint dir")
+                println("Error: " + e)
+            }
+        }
+    }
+
     def sampleData(trainInstance: RDD[BaseInstance], sampleFrac: Double, numCores: Int,
                    getWeight: (Int, Double, Double) => Double,
                    url: String, trainSavePath: String, testSavePath: String)
@@ -209,7 +223,8 @@ object SpliceSite extends Comparison {
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .set("spark.kryoserializer.buffer.mb","24")
         val sc = new SparkContext(conf)
-        sc.setCheckpointDir("/checkpoint/")
+        val checkpointPath = "/checkpoint/"
+        sc.setCheckpointDir(checkpointPath)
 
         // Parse and read options
         val options = parseOptions(args)
@@ -287,6 +302,7 @@ object SpliceSite extends Comparison {
                     curSampleFunc,
                     Learner.partitionedGreedySplit,
                     UpdateFunc.adaboostUpdate,
+                    clearCheckpoints(checkpointPath, hdfsURL),
                     improveFact,
                     improveWindow,
                     modelWritePath,
