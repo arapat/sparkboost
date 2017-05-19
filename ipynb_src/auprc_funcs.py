@@ -23,7 +23,7 @@ def extractTestInfo(filename):
     return ret
 
 def plot(data):
-    plt.figure(dpi=150)
+    plt.figure(dpi=250)
     for node, au, pr in data:
         x = list(map(itemgetter(0), pr))
         y = list(map(itemgetter(1), pr))

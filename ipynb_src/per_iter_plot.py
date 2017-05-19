@@ -12,7 +12,7 @@ realLabel = {
 
 
 def plot(zipLabels, nums, vlines=None, xlim=None, ylim=None, title=None, xlabel=None, ylabel=None):
-    plt.figure(dpi=150)
+    plt.figure(dpi=250)
     for idx, label in zipLabels:
         label = realLabel.get(label, label)
         plt.plot(range(1, len(nums[idx]) + 1)[:L], nums[idx][:L], label=label)

@@ -1,6 +1,6 @@
 ## Author: Saket Choudhar [saketkc\\gmail]
 ## License: GPL v3
-## Copyright © 2017 Saket Choudhary<saketkc__AT__gmail>
+## Copyright (c) 2017 Saket Choudhary<saketkc__AT__gmail>
 ## Modification: Julaiti Alafate [jalafate\\gmail]
 
 from operator import itemgetter
@@ -194,6 +194,14 @@ def getScores(filepath, leftBound=None, rightBound=None):
                 for c in ["A", "C", "G", "T"]:
                     if c != base:
                         scoresMap[pos][c] = scoresMap[pos].get(c, 0.0) + abs(float(score)) / 3.0
+
+    for pos in posScoresMap:
+        for c in ["A", "C", "G", "T"]:
+            if pos in posScoresMap and c in posScoresMap[pos] and \
+                    pos in negScoresMap and c in negScoresMap[pos]:
+                s = posScoresMap[pos][c] - negScoresMap[pos][c]
+                posScoresMap[pos][c] = max(s, 0.0)
+                negScoresMap[pos][c] = max(-s, 0.0)
 
     posScores, negScores = [], []
 
