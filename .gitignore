@@ -6,3 +6,8 @@ result/
 .ipynb_checkpoints
 .env
 analysis/
+*.txt
+archive/
+.ipynb_checkpoints/
+rw.pkl
+backup/
