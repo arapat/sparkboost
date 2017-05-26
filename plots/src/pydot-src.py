@@ -56,7 +56,7 @@ def addNode(idx, added, graph):
     label2 = "%.2f" % pred
     if idx == 325:
         label2 = "-1.09"
-    if pred > 0:
+    elif pred > 0:
         label2 = '+' + label2
 
     node1 = pydot.Node(shape="box", color=bgc)

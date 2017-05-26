@@ -37,8 +37,12 @@ class Scale(matplotlib.patheffects.RendererBase):
 
 def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
     def xtick(k):
-        if k >= 59:
-            return '+' + str(k - 58)
+        if k == 59:
+            return 'A'
+        elif k == 60:
+            return 'G'
+        elif k >= 61:
+            return '+' + str(k - 60)
         return k - 59
     # mpl.rcParams['font.family'] = fontfamily
 
@@ -65,7 +69,7 @@ def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
     scale_fact = 2.0 / max_scores
 
     ax.axhline(2, lw=3.0, c="black")
-    ax.axvline(59.5-xrange[0], lw=3.0, c="black")
+    ax.axvline(60.5-xrange[0], lw=3.0, c="black")
 
     # print("line 64")
     # Positive scores
@@ -164,7 +168,7 @@ def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
             y=0,
             units='points'
         )
-    print("line 159")
+    # print("line 159")
 
     # plt.xlim(xrange[0], xrange[-1])
     plt.title("Sequence logo of the informative bases around the splice site\n\n", fontsize=40)
