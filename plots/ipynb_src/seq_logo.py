@@ -67,7 +67,7 @@ def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
     ax.axhline(2, lw=3.0, c="black")
     ax.axvline(59.5-xrange[0], lw=3.0, c="black")
 
-    print("line 64")
+    # print("line 64")
     # Positive scores
     trans_offset = transforms.offset_copy(
         ax.transData,
@@ -76,7 +76,7 @@ def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
         y=0,
         units='points'
     )
-    print("line 72")
+    # print("line 72")
     for index, scores in enumerate(all_scores):
         # if index not in xrange:
         #     continue
@@ -113,7 +113,7 @@ def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
             units='points'
         )
 
-    print("line 109")
+    # print("line 109")
     # Positive examples
     trans_offset = transforms.offset_copy(
         ax.transData,
@@ -122,7 +122,7 @@ def draw_logo(all_scores, xrange, fontfamily='Arial', size=80):
         y=0,
         units='points'
     )
-    print("line 118")
+    # print("line 118")
     for index, scores in enumerate(all_scores):
         # if index not in xrange:
         #     continue

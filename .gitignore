@@ -11,3 +11,4 @@ archive/
 .ipynb_checkpoints/
 rw.pkl
 backup/
+__pycache__/

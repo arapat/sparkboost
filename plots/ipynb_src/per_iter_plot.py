@@ -1,4 +1,3 @@
-# from per_iter_funcs import *
 from matplotlib import pyplot as plt
 
 L = 4000
@@ -16,7 +15,7 @@ def plot(zipLabels, nums, vlines=None, xlim=None, ylim=None, title=None, xlabel=
     for idx, label in zipLabels:
         label = realLabel.get(label, label)
         plt.plot(range(1, len(nums[idx]) + 1)[:L], nums[idx][:L], label=label)
-    plt.grid()
+    # plt.grid()
     if ylabel == "average score":
         plt.legend(loc="upper right")
     else:
@@ -36,6 +35,16 @@ def plot(zipLabels, nums, vlines=None, xlim=None, ylim=None, title=None, xlabel=
     if ylabel:
         plt.ylabel(ylabel)
 
+    depth = [407, 878, 1441, 1760, 2363, 3007, 3186, 3378, 3478,
+         3578, 3678, 3778, 3878, 3978, 4078]
+
+    last = 0
+    curSum = 0
+    for d in depth[:-8]:
+        if d != 1343:
+            plt.axvline(d-1, c="black")
+
+
 
 def plotSample(labels, joint, vlines, sampleRatio, zoom):
     if zoom:
@@ -51,12 +60,12 @@ def plotSample(labels, joint, vlines, sampleRatio, zoom):
         #      xlim=[0, 5000], ylim=[0.0, 1.0])
     else:
         plot(zip(range(3), labels[:3]), joint, vlines=vlines,
-             title="auPRC measured every 100 iterations", xlabel="Iteration", ylabel="auPRC")  # auPRC
+             title="auPRC", xlabel="Iteration", ylabel="auPRC")  # auPRC
         plot(zip(range(-3, -2), labels[-3:-2]), joint, vlines=vlines,
-             title="Effective number of examples measured every 100 iterations",
+             title="Global effective number of examples",
              xlabel="Iteration", ylabel="effective number of examples")  # auPRC
         plot(zip(range(3, len(labels), 3), labels[3:-3:3]), joint, vlines=vlines,
-             title="Average score measured every 100 iterations",
+             title="Average score",
              xlabel="Iteration", ylabel="average score")  # scores
         # plot(zip(range(4, len(labels), 3), labels[4:-3:3]), joint, vlines=vlines)  # scores (pos)
         # plot(zip(range(5, len(labels), 3), labels[5:-3:3]), joint, vlines=vlines)  # scores (neg)
