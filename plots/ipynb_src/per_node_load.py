@@ -37,11 +37,14 @@ for d in data:
     pNonzero.append(sumw_nonzero / sumw_all)
 
 
-def plot(y, x=None):
+def plot(y, x=None, color=None):
     if x == None:
         x = list(range(1, len(y) + 1))
     
-    plt.plot(x, y)
+    if color:
+        plt.plot(x, y, c=color)
+    else:
+        plt.plot(x, y)
 
     depth = [407, 878, 1441, 1760, 2363, 3007, 3186, 3378, 3478,
              3578, 3678, 3778, 3878, 3978, 4078]
