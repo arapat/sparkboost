@@ -227,3 +227,4 @@ def getScores(filepath, leftBound=None, rightBound=None):
                 ir = scores[idx][j]
                 scores[idx][j] = (ir[0], ir[1], ir[2] / maxRsum)
     return posScores, negScores
+
