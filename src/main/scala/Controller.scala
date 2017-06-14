@@ -73,6 +73,8 @@ class Controller(
     val trainAvgScores = new Queue[(Int, Double)]()
     val testAvgScores = new Queue[(Int, Double)]()
 
+    println(s"Improve window is $improveWindow, min improve factor is $minImproveFact")
+
     def setDatasets(baseTrain: Type.BaseRDD, train: Type.ColRDD, y: Type.BrAI,
                     test: Type.BaseRDD, testRef: Type.BaseRDD = null) {
         if (this.baseTrain != null) {
